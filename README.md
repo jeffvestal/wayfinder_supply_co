@@ -15,30 +15,32 @@ This workshop showcases how to build an intelligent, conversational shopping exp
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Frontend (React)                          │
-│                    Modern UI with Trip Planner                   │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-┌─────────────────────────▼───────────────────────────────────────┐
-│                    Backend Proxy (FastAPI)                       │
-│              Handles auth, streaming, user context               │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-┌─────────────────────────▼───────────────────────────────────────┐
-│                     Elastic Stack                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │ Elasticsearch│  │Agent Builder│  │      Workflows          │  │
-│  │  - Products  │  │ Trip Planner│  │  - check_trip_safety    │  │
-│  │  - Clickstream│ │             │  │  - get_customer_profile │  │
-│  └─────────────┘  └─────────────┘  └───────────┬─────────────┘  │
-└─────────────────────────────────────────────────┼───────────────┘
-                                                  │
-┌─────────────────────────────────────────────────▼───────────────┐
-│                    MCP Server (FastMCP)                          │
-│           Simulates external APIs (Weather, CRM)                 │
-│           30 locations with seasonal weather patterns            │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                      Frontend (React)                         │
+│                  Modern UI with Trip Planner                  │
+└──────────────────────────────┬────────────────────────────────┘
+                               │
+┌──────────────────────────────▼────────────────────────────────┐
+│                   Backend Proxy (FastAPI)                     │
+│             Handles auth, streaming, user context             │
+└──────────────────────────────┬────────────────────────────────┘
+                               │
+┌──────────────────────────────▼────────────────────────────────┐
+│                        Elastic Stack                          │
+│                                                               │
+│  ┌─────────────────┐ ┌───────────────┐ ┌───────────────────┐  │
+│  │  Elasticsearch  │ │ Agent Builder │ │     Workflows     │  │
+│  │  - Products     │ │ Trip Planner  │ │ check_trip_safety │  │
+│  │  - Clickstream  │ │               │ │ get_customer_prof │  │
+│  └─────────────────┘ └───────────────┘ └─────────┬─────────┘  │
+│                                                  │            │
+└──────────────────────────────────────────────────┼────────────┘
+                                                   │
+┌──────────────────────────────────────────────────▼────────────┐
+│                     MCP Server (FastMCP)                      │
+│            Simulates external APIs (Weather, CRM)             │
+│          30 locations with seasonal weather patterns          │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ## Covered Adventure Destinations (30 locations)
