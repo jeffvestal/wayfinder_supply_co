@@ -26,6 +26,7 @@ HEADERS = {
     "Authorization": f"ApiKey {ES_APIKEY}",
     "Content-Type": "application/json",
     "kbn-xsrf": "true",
+    "x-elastic-internal-origin": "kibana",  # Required for internal Kibana APIs
 }
 
 
@@ -173,7 +174,11 @@ def create_esql_tool(name: str, query: str, description: str) -> Optional[str]:
     """Create an ES|QL tool and return its ID."""
     url = f"{KIBANA_URL}/api/agent_builder/tools"
     
+    # Generate a unique ID for the tool
+    tool_id = f"tool-esql-{name.replace('_', '-')}"
+    
     tool_config = {
+        "id": tool_id,
         "name": name,
         "type": "esql",
         "query": query,
@@ -208,7 +213,11 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
     """Create a workflow tool and return its ID."""
     url = f"{KIBANA_URL}/api/agent_builder/tools"
     
+    # Generate a unique ID for the tool
+    tool_id = f"tool-workflow-{name.replace('_', '-')}"
+    
     tool_config = {
+        "id": tool_id,
         "name": name,
         "type": "workflow",
         "workflow_id": workflow_id,
@@ -243,7 +252,11 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
     """Create an index search tool and return its ID."""
     url = f"{KIBANA_URL}/api/agent_builder/tools"
     
+    # Generate a unique ID for the tool
+    tool_id = f"tool-search-{name.replace('_', '-')}"
+    
     tool_config = {
+        "id": tool_id,
         "name": name,
         "type": "index_search",
         "index": index,
@@ -309,9 +322,33 @@ def main():
     print("Creating Wayfinder Supply Co. Agents and Workflows...")
     print("=" * 60)
     
+    # Determine the correct path to config/workflows
+    # Works whether run from repo root or from scripts directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)  # Go up one level from scripts/
+    
+    # Check multiple possible locations for workflow config
+    possible_paths = [
+        os.path.join(repo_root, "config", "workflows"),  # ../config/workflows (from scripts/)
+        os.path.join(script_dir, "..", "config", "workflows"),  # Same, relative
+        "config/workflows",  # From repo root
+        "/opt/workshop-assets/config/workflows",  # Instruqt absolute path
+    ]
+    
+    workflow_dir = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            workflow_dir = path
+            print(f"Found workflow config at: {workflow_dir}")
+            break
+    
+    if not workflow_dir:
+        print("ERROR: Could not find workflow config directory!")
+        print(f"Searched: {possible_paths}")
+        return
+    
     # Step 1: Deploy workflows first (get workflow IDs)
     print("\n1. Deploying Workflows...")
-    workflow_dir = "config/workflows"
     
     workflows = {
         "check_trip_safety": f"{workflow_dir}/check_trip_safety.yaml",

@@ -8,30 +8,37 @@ interface CartViewProps {
   loyaltyTier: string
 }
 
-// Import actual generated products for demo cart
-import generatedProducts from '../../../generated_products/products.json'
-
-// Mock cart using real product data
+// Inline mock cart for demo mode
 const MOCK_CART: Cart = {
-  items: generatedProducts.slice(0, 2).map((p: any) => ({
-    product_id: p.id,
-    title: p.title,
-    price: p.price,
-    quantity: 1,
-    subtotal: p.price,
-    image_url: p.image_url
-  })),
-  subtotal: generatedProducts.slice(0, 2).reduce((sum: number, p: any) => sum + p.price, 0),
+  items: [
+    {
+      product_id: 'WF-CAM-TEN-001',
+      title: 'Wayfinder Basecamp 4-Season Tent',
+      price: 549.99,
+      quantity: 1,
+      subtotal: 549.99,
+      image_url: '/images/products/tent-placeholder.jpg'
+    },
+    {
+      product_id: 'WF-CAM-SLE-002',
+      title: 'Summit Pro Arctic Sleeping Bag',
+      price: 399.99,
+      quantity: 1,
+      subtotal: 399.99,
+      image_url: '/images/products/bag-placeholder.jpg'
+    }
+  ],
+  subtotal: 949.98,
   discount: 0,
-  total: generatedProducts.slice(0, 2).reduce((sum: number, p: any) => sum + p.price, 0),
+  total: 949.98,
   loyalty_perks: []
 }
 
 const MOCK_CART_PLATINUM: Cart = {
   ...MOCK_CART,
-  discount: Math.round(MOCK_CART.subtotal * 0.1 * 100) / 100,
-  total: Math.round(MOCK_CART.subtotal * 0.9 * 100) / 100,
-  loyalty_perks: ['10% member discount applied', 'Free expedited shipping', `Bonus reward points: ${Math.floor(MOCK_CART.subtotal * 0.9)}`]
+  discount: 95.00,
+  total: 854.98,
+  loyalty_perks: ['10% member discount applied', 'Free expedited shipping', 'Bonus reward points: 854']
 }
 
 export function CartView({ userId, loyaltyTier }: CartViewProps) {

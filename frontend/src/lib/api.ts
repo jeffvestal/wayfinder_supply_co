@@ -1,4 +1,34 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Dynamically determine API URL based on where frontend is loaded from
+function getApiUrl(): string {
+  // Check for explicit env var first
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // In browser, determine URL dynamically
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    
+    // Instruqt URLs look like: https://host-1-3000-{sandbox}.env.play.instruqt.com
+    // We need to change port 3000 to 8000
+    if (hostname.includes('-3000-')) {
+      return `${protocol}//${hostname.replace('-3000-', '-8000-')}`;
+    }
+    
+    // Local development: frontend on 3000, backend on 8000
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${protocol}//${hostname}:8000`;
+    }
+    
+    // Same host, different port
+    return `${protocol}//${hostname}:8000`;
+  }
+  
+  // Fallback for SSR or other environments
+  return 'http://localhost:8000';
+}
+
+const API_URL = getApiUrl();
 
 export interface StreamEvent {
   event: string;

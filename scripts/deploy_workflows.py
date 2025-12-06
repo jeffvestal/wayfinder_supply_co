@@ -26,6 +26,7 @@ HEADERS = {
     "Authorization": f"ApiKey {ES_APIKEY}",
     "Content-Type": "application/json",
     "kbn-xsrf": "true",
+    "x-elastic-internal-origin": "kibana",  # Required for workflows API
 }
 
 

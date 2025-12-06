@@ -6,17 +6,103 @@ import { api } from '../lib/api'
 import { Loader2, Filter } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-// Import actual generated products for demo mode
-import generatedProducts from '../../../generated_products/products.json'
-
 interface StorefrontProps {
   userId: UserId
 }
 
 const categories = ['All', 'Camping', 'Hiking', 'Climbing', 'Water Sports', 'Winter']
 
-// Use real generated products as fallback when backend is unavailable
-const MOCK_PRODUCTS: Product[] = generatedProducts as Product[]
+// Inline mock products for demo mode (used when backend is unavailable)
+const MOCK_PRODUCTS: Product[] = [
+  {
+    id: 'WF-CAM-TEN-001',
+    title: 'Wayfinder Basecamp 4-Season Tent',
+    description: 'A rugged 4-season tent designed for extreme conditions. Features reinforced poles, waterproof fabric, and excellent ventilation.',
+    category: 'camping',
+    subcategory: 'tents',
+    price: 549.99,
+    brand: 'Wayfinder Supply',
+    tags: ['expedition', '4-season'],
+    image_url: '/images/products/tent-placeholder.jpg'
+  },
+  {
+    id: 'WF-CAM-SLE-002',
+    title: 'Summit Pro Arctic Sleeping Bag',
+    description: 'Rated to -20°F, this mummy-style sleeping bag keeps you warm in the harshest conditions with premium down insulation.',
+    category: 'camping',
+    subcategory: 'sleeping_bags',
+    price: 399.99,
+    brand: 'Summit Pro',
+    tags: ['expedition', 'cold-weather'],
+    image_url: '/images/products/bag-placeholder.jpg'
+  },
+  {
+    id: 'WF-HIK-BAC-003',
+    title: 'TrailBlazer 65L Expedition Pack',
+    description: 'Built for multi-day adventures, featuring adjustable torso, hip belt pockets, and integrated rain cover.',
+    category: 'hiking',
+    subcategory: 'backpacks',
+    price: 279.99,
+    brand: 'TrailBlazer',
+    tags: ['ultralight', 'backpacking'],
+    image_url: '/images/products/pack-placeholder.jpg'
+  },
+  {
+    id: 'WF-HIK-FOO-004',
+    title: 'Alpine Edge Mountaineer Boots',
+    description: 'Waterproof leather boots with Vibram soles, perfect for rocky terrain and long-distance hiking.',
+    category: 'hiking',
+    subcategory: 'footwear',
+    price: 229.99,
+    brand: 'Alpine Edge',
+    tags: ['professional', 'waterproof'],
+    image_url: '/images/products/boots-placeholder.jpg'
+  },
+  {
+    id: 'WF-CLM-HAR-005',
+    title: 'Summit Pro Ascent Harness',
+    description: 'Lightweight yet durable climbing harness with gear loops and adjustable leg loops for all-day comfort.',
+    category: 'climbing',
+    subcategory: 'harnesses',
+    price: 89.99,
+    brand: 'Summit Pro',
+    tags: ['professional', 'lightweight'],
+    image_url: '/images/products/harness-placeholder.jpg'
+  },
+  {
+    id: 'WF-WAT-KAY-006',
+    title: 'Pacific Tide Touring Kayak',
+    description: 'Stable and fast sea kayak perfect for coastal exploration and multi-day paddling trips.',
+    category: 'water sports',
+    subcategory: 'kayaks',
+    price: 1299.99,
+    brand: 'Pacific Tide',
+    tags: ['professional', 'touring'],
+    image_url: '/images/products/kayak-placeholder.jpg'
+  },
+  {
+    id: 'WF-WIN-SKI-007',
+    title: 'Alpine Edge All-Mountain Skis',
+    description: 'Versatile skis for groomed runs and powder days, featuring rocker-camber-rocker profile.',
+    category: 'winter',
+    subcategory: 'skis',
+    price: 699.99,
+    brand: 'Alpine Edge',
+    tags: ['all-mountain', 'intermediate'],
+    image_url: '/images/products/skis-placeholder.jpg'
+  },
+  {
+    id: 'WF-WIN-SNO-008',
+    title: 'Wayfinder Backcountry Snowshoes',
+    description: 'Lightweight aluminum snowshoes with aggressive crampons for steep terrain.',
+    category: 'winter',
+    subcategory: 'snowshoes',
+    price: 199.99,
+    brand: 'Wayfinder Supply',
+    tags: ['backcountry', 'lightweight'],
+    image_url: '/images/products/snowshoes-placeholder.jpg'
+  }
+]
 
 export function Storefront({ userId }: StorefrontProps) {
   const [products, setProducts] = useState<Product[]>([])
