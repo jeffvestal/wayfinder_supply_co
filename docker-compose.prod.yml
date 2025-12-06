@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wayfinder-backend-prod
+    ports:
+      - "8000:8000"
+    environment:
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - KIBANA_URL=${KIBANA_URL}
+      - ELASTICSEARCH_APIKEY=${ELASTICSEARCH_APIKEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - wayfinder-network
+
+  mcp-server:
+    build:
+      context: ./mcp_server
+      dockerfile: Dockerfile
+    container_name: wayfinder-mcp-server-prod
+    ports:
+      - "8001:8001"
+    environment:
+      - MCP_SERVER_PORT=8001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - wayfinder-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: wayfinder-frontend-prod
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - wayfinder-network
+
+networks:
+  wayfinder-network:
+    driver: bridge
+
+

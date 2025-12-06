@@ -1,0 +1,319 @@
+#!/bin/bash
+
+####################################################################### WAIT
+
+echo "Wait for the Instruqt host bootstrap to finish"
+# Wait for the Instruqt host bootstrap to finish
+while [ ! -f /opt/instruqt/bootstrap/host-bootstrap-completed ]
+do
+    echo "Waiting for Instruqt to finish booting the virtual machine"
+    sleep 1
+done
+
+# explicitly source env vars
+source /etc/profile.d/instruqt-env.sh
+
+####################################################################### ENV CHECK
+
+export _SANDBOX_ID=$_SANDBOX_ID
+export INSTRUQT=$INSTRUQT
+export LLM_KEY_DURATION=$LLM_KEY_DURATION
+export LLM_KEY_MAX_BUDGET=$LLM_KEY_MAX_BUDGET
+export LLM_MODELS=$LLM_MODELS
+export LLM_PROXY_URL=$LLM_PROXY_URL
+export SA_LLM_PROXY_BEARER_TOKEN=$SA_LLM_PROXY_BEARER_TOKEN
+export GCSKEY_ELASTIC_SA=$GCSKEY_ELASTIC_SA
+export GCSKEY_EDEN_WORKSHOP=$GCSKEY_EDEN_WORKSHOP
+export GCS_KEY_EDUCATION=$GCS_KEY_EDUCATION
+export GCSKEY=$GCSKEY
+
+if [[ -z "$_SANDBOX_ID" ]]; then
+    echo "_SANDBOX_ID is null"
+    exit 1
+else
+    echo "_SANDBOX_ID=$_SANDBOX_ID"
+fi
+
+if [[ -z "$INSTRUQT" ]]; then
+    echo "INSTRUQT is null"
+    exit 1
+else
+    echo "INSTRUQT=$INSTRUQT"
+fi
+
+if [[ -z "$LLM_KEY_DURATION" ]]; then
+    echo "LLM_KEY_DURATION is null"
+    exit 1
+else
+    echo "LLM_KEY_DURATION=$LLM_KEY_DURATION"
+fi
+
+if [[ -z "$LLM_KEY_MAX_BUDGET" ]]; then
+    echo "LLM_KEY_MAX_BUDGET is null"
+    exit 1
+else
+    echo "LLM_KEY_MAX_BUDGET=$LLM_KEY_MAX_BUDGET"
+fi
+
+if [[ -z "$LLM_MODELS" ]]; then
+    echo "LLM_MODELS is null"
+    exit 1
+else
+    echo "LLM_MODELS=$LLM_MODELS"
+fi
+
+if [[ -z "$LLM_PROXY_URL" ]]; then
+    echo "LLM_PROXY_URL is null"
+    exit 1
+else
+    echo "LLM_PROXY_URL=$LLM_PROXY_URL"
+fi
+
+if [[ -z "$SA_LLM_PROXY_BEARER_TOKEN" ]]; then
+    echo "SA_LLM_PROXY_BEARER_TOKEN is null"
+    exit 1
+fi
+if [[ -z "$GCSKEY_ELASTIC_SA" ]]; then
+    echo "GCSKEY_ELASTIC_SA is null"
+    exit 1
+fi
+if [[ -z "$GCSKEY_EDEN_WORKSHOP" ]]; then
+    echo "GCSKEY_EDEN_WORKSHOP is null"
+    exit 1
+fi
+if [[ -z "$GCSKEY" ]]; then
+    echo "GCSKEY is null"
+    exit 1
+fi
+
+####################################################################### STARTUP
+
+# finish elastic install
+source /opt/workshops/elastic-start.sh
+
+# Restore snapshot with product and clickstream data
+echo "[Workshop] Restoring Elasticsearch snapshot..."
+/opt/workshops/elastic-snapshot.sh \
+    -p wayfinder_supply_co \
+    -b instruqt-workshop-snapshot-public \
+    -c sa \
+    -n repo1 \
+    -s product_and_clicks \
+    -g false || {
+    echo "[Workshop] ⚠️  Could not restore snapshot, continuing..."
+}
+
+# setup openai
+source /opt/workshops/llm-key.sh
+
+####################################################################### WAIT FOR K3S API
+
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+wait_for_api() {
+  local timeout="$1"
+  echo "[k3s] Waiting for API server readiness (timeout ${timeout}s)..."
+  for i in $(seq 1 "$timeout"); do
+    if kubectl get --raw='/readyz' >/dev/null 2>&1; then
+      echo "[k3s] API server is responding"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+if ! wait_for_api 300; then
+  echo "[k3s] API not ready after first wait; restarting k3s once..."
+  sudo systemctl restart k3s || true
+  sleep 5
+  if ! wait_for_api 180; then
+    echo "[k3s] ERROR: API server not ready after restart"
+    exit 1
+  fi
+fi
+
+echo "[k3s] Waiting for nodes to become Ready..."
+kubectl wait --for=condition=Ready node --all --timeout=300s
+
+####################################################################### CONFIGURE KIBANA
+
+echo "[Workshop] Configuring Kibana publicBaseUrl..."
+kubectl patch kibana kibana -n default --type=merge -p '{
+  "spec": {
+    "config": {
+      "server.publicBaseUrl": "http://kubernetes-vm:30001"
+    }
+  }
+}' 2>/dev/null || echo "[Workshop] ⚠️  Could not patch Kibana config"
+
+####################################################################### WAIT FOR KIBANA AND ENABLE WORKFLOWS FEATURE FLAG
+
+echo "[Workshop] Waiting for Kibana to be ready..."
+MAX_RETRIES=60
+RETRY_COUNT=0
+
+KIBANA_URL_UI="${KIBANA_URL_UI:-${KIBANA_URL:-http://localhost:30001}}"
+ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
+
+until curl -fsS -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" "${KIBANA_URL_UI}/api/status" >/dev/null 2>&1; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+    echo "[Workshop] ERROR: Kibana did not become ready in time"
+    exit 1
+  fi
+  echo "  ... waiting for Kibana (attempt ${RETRY_COUNT}/${MAX_RETRIES})"
+  sleep 5
+done
+
+echo "[Workshop] ✓ Kibana is ready"
+
+# Enable workflows feature flag and dark mode
+echo "[Workshop] Enabling workflows feature flag and dark mode..."
+FEATURE_FLAG_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${KIBANA_URL_UI}/api/kibana/settings" \
+  -H "Content-Type: application/json" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: featureflag" \
+  -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
+  -d '{
+    "changes": {
+      "workflows:ui:enabled": true,
+      "theme:darkMode": true
+    }
+  }')
+
+HTTP_CODE=$(echo "$FEATURE_FLAG_RESPONSE" | tail -n1)
+if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+  echo "[Workshop] ✓ Workflows feature flag and dark mode enabled"
+else
+  echo "[Workshop] ⚠️  Warning: Feature flag API returned HTTP $HTTP_CODE"
+fi
+
+export KIBANA_URL="${KIBANA_URL_UI}"
+export ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-http://localhost:30920}"
+export ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}"
+
+####################################################################### DOWNLOAD WORKSHOP ASSETS
+
+echo "[Workshop] Downloading workshop assets..."
+cd /opt
+rm -rf workshop-assets
+
+git clone --depth 1 --filter=blob:none --no-checkout \
+  https://github.com/jeffvestal/wayfinder_supply_co.git temp-repo || {
+  echo "[Workshop] ⚠️  Could not clone repo, continuing with manual setup"
+  mkdir -p workshop-assets
+}
+
+if [ -d "temp-repo" ]; then
+  cd temp-repo
+  git sparse-checkout set scripts config
+  git checkout
+  mv scripts /opt/workshop-assets/ 2>/dev/null || true
+  mv config /opt/workshop-assets/ 2>/dev/null || true
+  cd /opt
+  rm -rf temp-repo
+fi
+
+####################################################################### SETUP ELASTICSEARCH INDICES
+
+# Indices are restored from snapshot, no need to create them
+echo "[Workshop] Elasticsearch indices restored from snapshot"
+
+####################################################################### CREATE LLM CONNECTOR
+
+echo "[Workshop] Creating LLM connector..."
+
+kibana_post() {
+  local endpoint="$1"
+  local body="$2"
+  curl -s -w "\n%{http_code}" -X POST "${KIBANA_URL_UI}${endpoint}" \
+    -H "Content-Type: application/json" \
+    -H "kbn-xsrf: true" \
+    -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
+    -d "$body"
+}
+
+CONNECTOR_ID=""
+MAX_RETRIES=5
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  echo "[Workshop] Attempting to create LLM connector (attempt ${RETRY_COUNT}/${MAX_RETRIES})..."
+  
+  RESPONSE=$(kibana_post "/api/actions/connector" '{
+    "name": "Elastic Proxy LLM",
+    "config": {
+      "apiProvider": "OpenAI",
+      "apiUrl": "https://'"${LLM_PROXY_URL}"'/v1/chat/completions",
+      "defaultModel": "gpt-4.1"
+    },
+    "secrets": {
+      "apiKey": "'"${LLM_APIKEY}"'"
+    },
+    "connector_type_id": ".gen-ai"
+  }')
+  
+  HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+  BODY=$(echo "$RESPONSE" | sed '$d')
+  
+  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+    CONNECTOR_ID=$(echo "$BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ -n "$CONNECTOR_ID" ]; then
+      echo "[Workshop] ✓ LLM connector created (ID: ${CONNECTOR_ID})"
+      break
+    fi
+  elif [ "$HTTP_CODE" = "409" ]; then
+    echo "[Workshop] Connector already exists, discovering..."
+    LIST_RESPONSE=$(curl -s -X GET "${KIBANA_URL_UI}/api/actions/connectors" \
+      -H "kbn-xsrf: true" \
+      -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}")
+    CONNECTOR_ID=$(echo "$LIST_RESPONSE" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for conn in data.get('data', []):
+        if conn.get('name') == 'Elastic Proxy LLM':
+            print(conn.get('id', ''))
+            break
+except:
+    pass
+" 2>/dev/null)
+    if [ -n "$CONNECTOR_ID" ]; then
+      echo "[Workshop] ✓ Found existing connector (ID: ${CONNECTOR_ID})"
+      break
+    fi
+  else
+    if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+      echo "[Workshop] Retrying in 2 seconds..."
+      sleep 2
+    fi
+  fi
+done
+
+if [ -n "$CONNECTOR_ID" ]; then
+  echo "[Workshop] Setting connector as default..."
+  curl -s -X POST "${KIBANA_URL_UI}/internal/kibana/settings" \
+    -H "Content-Type: application/json" \
+    -H "kbn-xsrf: true" \
+    -H "x-elastic-internal-origin: featureflag" \
+    -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
+    -d '{
+      "changes": {
+        "genAiSettings:defaultAIConnector": "'"${CONNECTOR_ID}"'"
+      }
+    }' >/dev/null 2>&1
+fi
+
+####################################################################### COMPLETE
+
+echo "========================================="
+echo "[Workshop] kubernetes-vm setup complete"
+echo "========================================="
+echo "Services:"
+echo "  - Elasticsearch: ${ELASTICSEARCH_URL}"
+echo "  - Kibana: ${KIBANA_URL}"
+echo "========================================="
+
+

@@ -1,0 +1,53 @@
+version: "1"
+name: check_trip_safety
+enabled: true
+
+inputs:
+  - name: location
+    type: string
+    required: true
+    description: "The destination location (e.g., 'Rockies', 'Denver', 'Yosemite')"
+  - name: dates
+    type: string
+    required: true
+    description: "Date range or specific date (e.g., '2024-01-15', 'January 15-20, 2024')"
+
+triggers:
+  - type: manual
+
+steps:
+  - name: call_weather_mcp
+    type: http
+    with:
+      url: "http://host-1:8001/mcp"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        method: "tools/call"
+        params:
+          name: "get_trip_conditions_tool"
+          arguments:
+            location: "{{ inputs.location }}"
+            dates: "{{ inputs.dates }}"
+        id: "{{ execution.id }}"
+    on-failure:
+      retry:
+        max-attempts: 2
+        delay: 1s
+
+  - name: parse_response
+    type: console
+    with:
+      message: |
+        Trip Conditions for {{ inputs.location }}:
+        Weather: {{ steps.call_weather_mcp.output.data.result.weather }}
+        Temperature: {{ steps.call_weather_mcp.output.data.result.min_temp_f }}°F - {{ steps.call_weather_mcp.output.data.result.max_temp_f }}°F
+        Road Alert: {{ steps.call_weather_mcp.output.data.result.road_alert }}
+        Recommendations:
+        {% for rec in steps.call_weather_mcp.output.data.result.recommendations %}
+        - {{ rec }}
+        {% endfor %}
+
+

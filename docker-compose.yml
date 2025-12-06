@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wayfinder-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://kubernetes-vm:30920}
+      - KIBANA_URL=${KIBANA_URL:-http://kubernetes-vm:30001}
+      - ELASTICSEARCH_APIKEY=${ELASTICSEARCH_APIKEY}
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - wayfinder-network
+
+  mcp-server:
+    build:
+      context: ./mcp_server
+      dockerfile: Dockerfile
+    container_name: wayfinder-mcp-server
+    ports:
+      - "8001:8001"
+    environment:
+      - MCP_SERVER_PORT=8001
+    volumes:
+      - ./mcp_server:/app
+      - ./mcp_server/data:/app/data
+    command: python main.py
+    networks:
+      - wayfinder-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wayfinder-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - wayfinder-network
+    depends_on:
+      - backend
+
+networks:
+  wayfinder-network:
+    driver: bridge
+
+

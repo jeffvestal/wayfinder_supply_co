@@ -1,0 +1,15 @@
+# Core dependencies for scripts
+pyyaml>=6.0.1
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Image generation (optional - only needed for placeholder images)
+Pillow>=10.0.0
+
+# Google AI (optional - only needed for AI generation)
+google-generativeai>=0.3.0
+google-cloud-aiplatform>=1.38.0
+
+# Elasticsearch (optional - only needed for seeding/indexing)
+elasticsearch>=9.0.0
+

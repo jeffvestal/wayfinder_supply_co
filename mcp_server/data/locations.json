@@ -1,0 +1,655 @@
+{
+  "locations": [
+    {
+      "id": "yosemite",
+      "name": "Yosemite National Park",
+      "region": "North America",
+      "country": "USA",
+      "state": "California",
+      "aliases": ["yosemite", "yosemite valley", "yosemite np"],
+      "coordinates": {"lat": 37.8651, "lon": -119.5383},
+      "terrain": "alpine",
+      "activities": {
+        "winter": ["snowshoeing", "cross-country skiing", "ice climbing"],
+        "summer": ["rock climbing", "hiking", "backpacking", "swimming"],
+        "year_round": ["photography", "wildlife viewing"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-5, 10], "conditions": ["snow", "cold", "clear"], "precipitation_chance": 0.4},
+        "spring": {"temp_range": [5, 20], "conditions": ["rain", "mild", "variable"], "precipitation_chance": 0.3},
+        "summer": {"temp_range": [15, 35], "conditions": ["hot", "dry", "sunny"], "precipitation_chance": 0.1},
+        "fall": {"temp_range": [5, 25], "conditions": ["cool", "clear", "crisp"], "precipitation_chance": 0.2}
+      },
+      "similar_locations": ["rocky-mountain", "banff", "swiss-alps"]
+    },
+    {
+      "id": "rocky-mountain",
+      "name": "Rocky Mountain National Park",
+      "region": "North America",
+      "country": "USA",
+      "state": "Colorado",
+      "aliases": ["rocky mountain", "rocky mountains", "rmnp", "rockies colorado"],
+      "coordinates": {"lat": 40.3428, "lon": -105.6836},
+      "terrain": "alpine",
+      "activities": {
+        "winter": ["skiing", "snowshoeing", "ice fishing"],
+        "summer": ["hiking", "climbing", "camping", "wildlife viewing"],
+        "year_round": ["photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-15, 5], "conditions": ["snow", "cold", "windy"], "precipitation_chance": 0.5},
+        "spring": {"temp_range": [0, 15], "conditions": ["variable", "snow", "rain"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [10, 25], "conditions": ["mild", "afternoon storms", "sunny"], "precipitation_chance": 0.3},
+        "fall": {"temp_range": [0, 20], "conditions": ["cool", "clear", "dry"], "precipitation_chance": 0.2}
+      },
+      "similar_locations": ["yosemite", "banff", "yellowstone"]
+    },
+    {
+      "id": "yellowstone",
+      "name": "Yellowstone National Park",
+      "region": "North America",
+      "country": "USA",
+      "state": "Wyoming",
+      "aliases": ["yellowstone", "yellowstone np"],
+      "coordinates": {"lat": 44.4280, "lon": -110.5885},
+      "terrain": "volcanic plateau",
+      "activities": {
+        "winter": ["cross-country skiing", "snowmobiling", "wildlife tours"],
+        "summer": ["hiking", "camping", "fishing", "kayaking"],
+        "year_round": ["wildlife viewing", "geyser viewing", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-20, 0], "conditions": ["snow", "extreme cold", "clear"], "precipitation_chance": 0.4},
+        "spring": {"temp_range": [-5, 15], "conditions": ["variable", "snow", "rain"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [10, 28], "conditions": ["warm", "afternoon storms", "sunny"], "precipitation_chance": 0.25},
+        "fall": {"temp_range": [-5, 18], "conditions": ["cool", "clear", "frost"], "precipitation_chance": 0.2}
+      },
+      "similar_locations": ["rocky-mountain", "banff", "iceland"]
+    },
+    {
+      "id": "boundary-waters",
+      "name": "Boundary Waters Canoe Area",
+      "region": "North America",
+      "country": "USA",
+      "state": "Minnesota",
+      "aliases": ["boundary waters", "bwca", "bwcaw"],
+      "coordinates": {"lat": 48.0000, "lon": -91.5000},
+      "terrain": "lake country",
+      "activities": {
+        "winter": ["ice fishing", "cross-country skiing", "dog sledding"],
+        "summer": ["canoeing", "kayaking", "fishing", "camping"],
+        "year_round": ["wildlife viewing"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-25, -5], "conditions": ["snow", "extreme cold", "ice"], "precipitation_chance": 0.3},
+        "spring": {"temp_range": [0, 15], "conditions": ["thaw", "rain", "mud"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [15, 28], "conditions": ["warm", "humid", "thunderstorms"], "precipitation_chance": 0.35},
+        "fall": {"temp_range": [0, 18], "conditions": ["cool", "colorful", "clear"], "precipitation_chance": 0.25}
+      },
+      "similar_locations": ["algonquin", "norwegian-fjords"]
+    },
+    {
+      "id": "moab",
+      "name": "Moab",
+      "region": "North America",
+      "country": "USA",
+      "state": "Utah",
+      "aliases": ["moab", "moab utah", "arches", "canyonlands"],
+      "coordinates": {"lat": 38.5733, "lon": -109.5498},
+      "terrain": "desert canyon",
+      "activities": {
+        "winter": ["mountain biking", "hiking"],
+        "summer": ["rock climbing", "canyoneering", "mountain biking"],
+        "year_round": ["off-roading", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-5, 12], "conditions": ["cold nights", "mild days", "dry"], "precipitation_chance": 0.15},
+        "spring": {"temp_range": [8, 25], "conditions": ["warm", "windy", "perfect"], "precipitation_chance": 0.1},
+        "summer": {"temp_range": [20, 42], "conditions": ["extreme heat", "dry", "monsoon storms"], "precipitation_chance": 0.2},
+        "fall": {"temp_range": [5, 25], "conditions": ["warm", "dry", "ideal"], "precipitation_chance": 0.1}
+      },
+      "similar_locations": ["wadi-rum", "hatta"]
+    },
+    {
+      "id": "pacific-crest-trail",
+      "name": "Pacific Crest Trail",
+      "region": "North America",
+      "country": "USA",
+      "state": "CA/OR/WA",
+      "aliases": ["pct", "pacific crest", "pacific crest trail"],
+      "coordinates": {"lat": 40.0000, "lon": -121.0000},
+      "terrain": "varied mountain",
+      "activities": {
+        "winter": ["closed - snow"],
+        "summer": ["thru-hiking", "backpacking", "trail running"],
+        "year_round": []
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-10, 5], "conditions": ["snow", "impassable", "avalanche risk"], "precipitation_chance": 0.6},
+        "spring": {"temp_range": [0, 20], "conditions": ["snow melt", "variable", "muddy"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [10, 35], "conditions": ["hot desert", "mild mountains", "dry"], "precipitation_chance": 0.1},
+        "fall": {"temp_range": [0, 25], "conditions": ["cooling", "fire season", "clear"], "precipitation_chance": 0.15}
+      },
+      "similar_locations": ["yosemite", "rocky-mountain"]
+    },
+    {
+      "id": "banff",
+      "name": "Banff National Park",
+      "region": "North America",
+      "country": "Canada",
+      "state": "Alberta",
+      "aliases": ["banff", "banff np", "lake louise", "canadian rockies"],
+      "coordinates": {"lat": 51.4968, "lon": -115.9281},
+      "terrain": "alpine",
+      "activities": {
+        "winter": ["skiing", "snowboarding", "ice skating", "dog sledding"],
+        "summer": ["hiking", "climbing", "kayaking", "mountain biking"],
+        "year_round": ["hot springs", "wildlife viewing", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-20, -5], "conditions": ["snow", "cold", "chinook winds"], "precipitation_chance": 0.4},
+        "spring": {"temp_range": [-5, 15], "conditions": ["variable", "snow", "rain"], "precipitation_chance": 0.35},
+        "summer": {"temp_range": [10, 25], "conditions": ["warm", "sunny", "afternoon storms"], "precipitation_chance": 0.25},
+        "fall": {"temp_range": [-5, 18], "conditions": ["cool", "clear", "golden larches"], "precipitation_chance": 0.2}
+      },
+      "similar_locations": ["rocky-mountain", "whistler", "swiss-alps"]
+    },
+    {
+      "id": "whistler",
+      "name": "Whistler",
+      "region": "North America",
+      "country": "Canada",
+      "state": "British Columbia",
+      "aliases": ["whistler", "whistler blackcomb", "whistler bc"],
+      "coordinates": {"lat": 50.1163, "lon": -122.9574},
+      "terrain": "coastal mountains",
+      "activities": {
+        "winter": ["skiing", "snowboarding", "snowshoeing"],
+        "summer": ["mountain biking", "hiking", "zip-lining", "water sports"],
+        "year_round": ["spa", "dining"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-8, 2], "conditions": ["heavy snow", "mild", "wet"], "precipitation_chance": 0.6},
+        "spring": {"temp_range": [2, 15], "conditions": ["rain", "snow melt", "variable"], "precipitation_chance": 0.5},
+        "summer": {"temp_range": [12, 28], "conditions": ["warm", "sunny", "dry"], "precipitation_chance": 0.15},
+        "fall": {"temp_range": [5, 18], "conditions": ["rain", "colorful", "cooling"], "precipitation_chance": 0.45}
+      },
+      "similar_locations": ["banff", "japanese-alps", "swiss-alps"]
+    },
+    {
+      "id": "algonquin",
+      "name": "Algonquin Provincial Park",
+      "region": "North America",
+      "country": "Canada",
+      "state": "Ontario",
+      "aliases": ["algonquin", "algonquin park", "algonquin provincial"],
+      "coordinates": {"lat": 45.5000, "lon": -78.5000},
+      "terrain": "boreal forest",
+      "activities": {
+        "winter": ["cross-country skiing", "snowshoeing", "ice fishing"],
+        "summer": ["canoeing", "kayaking", "camping", "fishing"],
+        "year_round": ["wildlife viewing", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-25, -8], "conditions": ["snow", "cold", "ice"], "precipitation_chance": 0.35},
+        "spring": {"temp_range": [0, 15], "conditions": ["thaw", "black flies", "rain"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [15, 28], "conditions": ["warm", "humid", "bugs"], "precipitation_chance": 0.3},
+        "fall": {"temp_range": [0, 18], "conditions": ["spectacular foliage", "cool", "clear"], "precipitation_chance": 0.25}
+      },
+      "similar_locations": ["boundary-waters", "norwegian-fjords"]
+    },
+    {
+      "id": "patagonia",
+      "name": "Patagonia",
+      "region": "South America",
+      "country": "Argentina/Chile",
+      "state": null,
+      "aliases": ["patagonia", "torres del paine", "fitz roy", "el chalten"],
+      "coordinates": {"lat": -50.0000, "lon": -73.0000},
+      "terrain": "glacial mountains",
+      "activities": {
+        "winter": ["skiing", "ice trekking"],
+        "summer": ["hiking", "climbing", "kayaking"],
+        "year_round": ["glacier viewing", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-5, 5], "conditions": ["snow", "wind", "limited access"], "precipitation_chance": 0.5},
+        "spring": {"temp_range": [2, 12], "conditions": ["windy", "variable", "improving"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [8, 20], "conditions": ["windy", "long days", "variable"], "precipitation_chance": 0.3},
+        "fall": {"temp_range": [0, 12], "conditions": ["colorful", "windy", "cooling"], "precipitation_chance": 0.35}
+      },
+      "similar_locations": ["nz-south-island", "iceland", "swiss-alps"]
+    },
+    {
+      "id": "costa-rica",
+      "name": "Costa Rica Rainforests",
+      "region": "Central America",
+      "country": "Costa Rica",
+      "state": null,
+      "aliases": ["costa rica", "monteverde", "arenal", "manuel antonio"],
+      "coordinates": {"lat": 10.0000, "lon": -84.0000},
+      "terrain": "tropical rainforest",
+      "activities": {
+        "winter": ["surfing", "hiking", "wildlife tours", "zip-lining"],
+        "summer": ["surfing", "hiking", "wildlife tours"],
+        "year_round": ["wildlife viewing", "zip-lining", "hot springs"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [22, 32], "conditions": ["dry season", "sunny", "perfect"], "precipitation_chance": 0.15},
+        "spring": {"temp_range": [23, 33], "conditions": ["transition", "some rain", "warm"], "precipitation_chance": 0.3},
+        "summer": {"temp_range": [22, 30], "conditions": ["rainy season", "green", "afternoon storms"], "precipitation_chance": 0.7},
+        "fall": {"temp_range": [22, 30], "conditions": ["rainy", "lush", "humid"], "precipitation_chance": 0.65}
+      },
+      "similar_locations": ["bali", "chapada-diamantina"]
+    },
+    {
+      "id": "chapada-diamantina",
+      "name": "Chapada Diamantina",
+      "region": "South America",
+      "country": "Brazil",
+      "state": "Bahia",
+      "aliases": ["chapada diamantina", "chapada", "lencois"],
+      "coordinates": {"lat": -12.5000, "lon": -41.5000},
+      "terrain": "plateau canyons",
+      "activities": {
+        "winter": ["hiking", "waterfall swimming", "caving"],
+        "summer": ["hiking", "waterfall viewing"],
+        "year_round": ["caving", "photography", "swimming"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [18, 28], "conditions": ["dry season", "clear", "perfect hiking"], "precipitation_chance": 0.1},
+        "spring": {"temp_range": [20, 32], "conditions": ["warming", "some rain", "humid"], "precipitation_chance": 0.3},
+        "summer": {"temp_range": [22, 35], "conditions": ["wet season", "full waterfalls", "hot"], "precipitation_chance": 0.6},
+        "fall": {"temp_range": [20, 30], "conditions": ["drying", "pleasant", "green"], "precipitation_chance": 0.25}
+      },
+      "similar_locations": ["costa-rica", "moab"]
+    },
+    {
+      "id": "swiss-alps",
+      "name": "Swiss Alps",
+      "region": "Europe",
+      "country": "Switzerland",
+      "state": null,
+      "aliases": ["swiss alps", "switzerland", "zermatt", "jungfrau", "interlaken", "matterhorn"],
+      "coordinates": {"lat": 46.5000, "lon": 8.0000},
+      "terrain": "alpine",
+      "activities": {
+        "winter": ["skiing", "snowboarding", "ice climbing", "snowshoeing"],
+        "summer": ["hiking", "climbing", "mountain biking", "paragliding"],
+        "year_round": ["scenic trains", "cable cars", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-15, 0], "conditions": ["snow", "cold", "clear high pressure"], "precipitation_chance": 0.35},
+        "spring": {"temp_range": [0, 15], "conditions": ["variable", "avalanche season", "thaw"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [10, 25], "conditions": ["warm", "afternoon storms", "sunny mornings"], "precipitation_chance": 0.35},
+        "fall": {"temp_range": [0, 18], "conditions": ["clear", "colorful", "cooling"], "precipitation_chance": 0.25}
+      },
+      "similar_locations": ["banff", "japanese-alps", "patagonia"]
+    },
+    {
+      "id": "scottish-highlands",
+      "name": "Scottish Highlands",
+      "region": "Europe",
+      "country": "United Kingdom",
+      "state": "Scotland",
+      "aliases": ["scottish highlands", "scotland", "highlands", "ben nevis", "cairngorms"],
+      "coordinates": {"lat": 57.0000, "lon": -5.0000},
+      "terrain": "rugged highlands",
+      "activities": {
+        "winter": ["winter hiking", "ice climbing", "skiing"],
+        "summer": ["hiking", "camping", "kayaking", "wild swimming"],
+        "year_round": ["whisky tours", "photography", "wildlife"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-5, 8], "conditions": ["rain", "snow", "wind", "unpredictable"], "precipitation_chance": 0.7},
+        "spring": {"temp_range": [2, 14], "conditions": ["variable", "rain", "midges emerging"], "precipitation_chance": 0.55},
+        "summer": {"temp_range": [10, 20], "conditions": ["mild", "long days", "midges", "rain possible"], "precipitation_chance": 0.45},
+        "fall": {"temp_range": [5, 15], "conditions": ["colorful", "rain", "dramatic"], "precipitation_chance": 0.6}
+      },
+      "similar_locations": ["iceland", "norwegian-fjords"]
+    },
+    {
+      "id": "norwegian-fjords",
+      "name": "Norwegian Fjords",
+      "region": "Europe",
+      "country": "Norway",
+      "state": null,
+      "aliases": ["norwegian fjords", "norway", "fjords", "geirangerfjord", "trolltunga"],
+      "coordinates": {"lat": 61.0000, "lon": 7.0000},
+      "terrain": "fjord coastline",
+      "activities": {
+        "winter": ["northern lights", "cross-country skiing"],
+        "summer": ["kayaking", "hiking", "fjord cruises", "fishing"],
+        "year_round": ["photography", "scenic drives"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-10, 3], "conditions": ["dark", "snow", "northern lights possible"], "precipitation_chance": 0.5},
+        "spring": {"temp_range": [2, 12], "conditions": ["thaw", "rain", "waterfalls peak"], "precipitation_chance": 0.45},
+        "summer": {"temp_range": [12, 22], "conditions": ["midnight sun", "mild", "some rain"], "precipitation_chance": 0.35},
+        "fall": {"temp_range": [5, 14], "conditions": ["colorful", "rain", "cooling"], "precipitation_chance": 0.5}
+      },
+      "similar_locations": ["scottish-highlands", "nz-south-island", "algonquin"]
+    },
+    {
+      "id": "iceland",
+      "name": "Iceland Highlands",
+      "region": "Europe",
+      "country": "Iceland",
+      "state": null,
+      "aliases": ["iceland", "icelandic highlands", "reykjavik", "landmannalaugar"],
+      "coordinates": {"lat": 64.5000, "lon": -19.0000},
+      "terrain": "volcanic",
+      "activities": {
+        "winter": ["ice caving", "glacier hiking", "northern lights"],
+        "summer": ["hiking", "camping", "river crossing treks"],
+        "year_round": ["hot springs", "photography", "glacier tours"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-5, 5], "conditions": ["dark", "storms", "aurora season"], "precipitation_chance": 0.55},
+        "spring": {"temp_range": [0, 10], "conditions": ["variable", "wind", "improving"], "precipitation_chance": 0.45},
+        "summer": {"temp_range": [8, 18], "conditions": ["midnight sun", "mild", "windy"], "precipitation_chance": 0.35},
+        "fall": {"temp_range": [2, 12], "conditions": ["storms", "aurora returning", "dramatic"], "precipitation_chance": 0.5}
+      },
+      "similar_locations": ["scottish-highlands", "yellowstone", "patagonia"]
+    },
+    {
+      "id": "kilimanjaro",
+      "name": "Mount Kilimanjaro",
+      "region": "Africa",
+      "country": "Tanzania",
+      "state": null,
+      "aliases": ["kilimanjaro", "mount kilimanjaro", "kili"],
+      "coordinates": {"lat": -3.0674, "lon": 37.3556},
+      "terrain": "volcanic mountain",
+      "activities": {
+        "winter": ["climbing", "summit attempts"],
+        "summer": ["climbing", "summit attempts"],
+        "year_round": ["acclimatization hikes"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [20, 30], "conditions": ["dry season", "clear", "ideal climbing"], "precipitation_chance": 0.15},
+        "spring": {"temp_range": [18, 28], "conditions": ["short rains", "cloudy", "less crowded"], "precipitation_chance": 0.5},
+        "summer": {"temp_range": [18, 28], "conditions": ["dry season", "cold summit", "good visibility"], "precipitation_chance": 0.2},
+        "fall": {"temp_range": [18, 28], "conditions": ["long rains", "challenging", "lush"], "precipitation_chance": 0.6}
+      },
+      "similar_locations": ["nepal-himalayas", "atlas-mountains"]
+    },
+    {
+      "id": "kruger",
+      "name": "Kruger National Park",
+      "region": "Africa",
+      "country": "South Africa",
+      "state": null,
+      "aliases": ["kruger", "kruger national park", "kruger np"],
+      "coordinates": {"lat": -24.0000, "lon": 31.5000},
+      "terrain": "savanna",
+      "activities": {
+        "winter": ["safari", "camping"],
+        "summer": ["safari", "bird watching"],
+        "year_round": ["wildlife viewing", "photography", "bush walks"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [10, 28], "conditions": ["dry", "clear", "best wildlife viewing"], "precipitation_chance": 0.05},
+        "spring": {"temp_range": [18, 35], "conditions": ["hot", "building humidity", "baby animals"], "precipitation_chance": 0.25},
+        "summer": {"temp_range": [22, 38], "conditions": ["hot", "wet", "lush", "afternoon storms"], "precipitation_chance": 0.55},
+        "fall": {"temp_range": [15, 32], "conditions": ["cooling", "drying", "green"], "precipitation_chance": 0.2}
+      },
+      "similar_locations": ["australian-outback"]
+    },
+    {
+      "id": "atlas-mountains",
+      "name": "Atlas Mountains",
+      "region": "Africa",
+      "country": "Morocco",
+      "state": null,
+      "aliases": ["atlas mountains", "atlas", "toubkal", "morocco mountains"],
+      "coordinates": {"lat": 31.0000, "lon": -8.0000},
+      "terrain": "mountain range",
+      "activities": {
+        "winter": ["skiing", "snowshoeing", "trekking"],
+        "summer": ["hiking", "climbing", "mountain biking"],
+        "year_round": ["cultural tours", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-5, 15], "conditions": ["snow at altitude", "cold nights", "clear days"], "precipitation_chance": 0.35},
+        "spring": {"temp_range": [8, 25], "conditions": ["perfect", "wildflowers", "mild"], "precipitation_chance": 0.2},
+        "summer": {"temp_range": [18, 38], "conditions": ["hot", "dry", "early starts needed"], "precipitation_chance": 0.05},
+        "fall": {"temp_range": [10, 28], "conditions": ["pleasant", "clear", "ideal"], "precipitation_chance": 0.15}
+      },
+      "similar_locations": ["swiss-alps", "kilimanjaro"]
+    },
+    {
+      "id": "nepal-himalayas",
+      "name": "Nepal Himalayas",
+      "region": "Asia",
+      "country": "Nepal",
+      "state": null,
+      "aliases": ["nepal", "himalayas", "everest", "everest base camp", "annapurna", "ebc"],
+      "coordinates": {"lat": 28.0000, "lon": 85.0000},
+      "terrain": "high mountains",
+      "activities": {
+        "winter": ["trekking lower elevations", "cultural tours"],
+        "summer": ["monsoon - limited trekking"],
+        "year_round": ["acclimatization", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-15, 10], "conditions": ["cold", "clear", "snow at altitude"], "precipitation_chance": 0.15},
+        "spring": {"temp_range": [5, 20], "conditions": ["pre-monsoon", "rhododendrons", "clearing"], "precipitation_chance": 0.25},
+        "summer": {"temp_range": [10, 25], "conditions": ["monsoon", "rain", "leeches", "difficult"], "precipitation_chance": 0.8},
+        "fall": {"temp_range": [0, 20], "conditions": ["post-monsoon", "clear", "peak season"], "precipitation_chance": 0.1}
+      },
+      "similar_locations": ["kilimanjaro", "swiss-alps", "patagonia"]
+    },
+    {
+      "id": "japanese-alps",
+      "name": "Japanese Alps",
+      "region": "Asia",
+      "country": "Japan",
+      "state": "Nagano/Gifu",
+      "aliases": ["japanese alps", "japan alps", "kamikochi", "hakuba", "tateyama"],
+      "coordinates": {"lat": 36.3000, "lon": 137.6000},
+      "terrain": "alpine",
+      "activities": {
+        "winter": ["skiing", "snowboarding", "onsen visits"],
+        "summer": ["hiking", "climbing", "trail running"],
+        "year_round": ["hot springs", "cultural sites"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-10, 2], "conditions": ["heavy snow", "powder", "cold"], "precipitation_chance": 0.55},
+        "spring": {"temp_range": [5, 18], "conditions": ["cherry blossoms", "rain", "thaw"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [18, 28], "conditions": ["humid", "afternoon storms", "lush"], "precipitation_chance": 0.45},
+        "fall": {"temp_range": [5, 20], "conditions": ["colorful", "clear", "ideal"], "precipitation_chance": 0.25}
+      },
+      "similar_locations": ["swiss-alps", "whistler", "banff"]
+    },
+    {
+      "id": "bali",
+      "name": "Bali",
+      "region": "Asia",
+      "country": "Indonesia",
+      "state": null,
+      "aliases": ["bali", "indonesia", "ubud", "uluwatu"],
+      "coordinates": {"lat": -8.4095, "lon": 115.1889},
+      "terrain": "tropical island",
+      "activities": {
+        "winter": ["surfing", "diving", "hiking"],
+        "summer": ["surfing", "diving", "temple visits"],
+        "year_round": ["yoga", "rice terrace walks", "water temples"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [24, 32], "conditions": ["dry season", "sunny", "perfect"], "precipitation_chance": 0.15},
+        "spring": {"temp_range": [25, 33], "conditions": ["transition", "humid", "occasional rain"], "precipitation_chance": 0.35},
+        "summer": {"temp_range": [24, 31], "conditions": ["wet season", "afternoon storms", "lush"], "precipitation_chance": 0.6},
+        "fall": {"temp_range": [24, 31], "conditions": ["wet season ending", "humid", "green"], "precipitation_chance": 0.45}
+      },
+      "similar_locations": ["costa-rica", "great-barrier-reef"]
+    },
+    {
+      "id": "macritchie",
+      "name": "MacRitchie Reservoir",
+      "region": "Asia",
+      "country": "Singapore",
+      "state": null,
+      "aliases": ["macritchie", "macritchie reservoir", "singapore trails", "treetop walk"],
+      "coordinates": {"lat": 1.3444, "lon": 103.8198},
+      "terrain": "tropical rainforest",
+      "activities": {
+        "winter": ["hiking", "trail running"],
+        "summer": ["hiking", "trail running"],
+        "year_round": ["kayaking", "wildlife viewing", "treetop walk"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [24, 31], "conditions": ["monsoon", "rain", "humid"], "precipitation_chance": 0.5},
+        "spring": {"temp_range": [25, 33], "conditions": ["hot", "humid", "inter-monsoon"], "precipitation_chance": 0.4},
+        "summer": {"temp_range": [25, 33], "conditions": ["hot", "humid", "inter-monsoon"], "precipitation_chance": 0.35},
+        "fall": {"temp_range": [24, 32], "conditions": ["monsoon starting", "humid", "afternoon storms"], "precipitation_chance": 0.45}
+      },
+      "similar_locations": ["costa-rica", "bali"]
+    },
+    {
+      "id": "nz-south-island",
+      "name": "New Zealand South Island",
+      "region": "Oceania",
+      "country": "New Zealand",
+      "state": null,
+      "aliases": ["new zealand", "south island", "queenstown", "milford sound", "nz"],
+      "coordinates": {"lat": -44.0000, "lon": 170.0000},
+      "terrain": "alpine and fjords",
+      "activities": {
+        "winter": ["skiing", "snowboarding", "ice climbing"],
+        "summer": ["hiking", "climbing", "kayaking", "bungee"],
+        "year_round": ["scenic flights", "photography", "adventure sports"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [-2, 10], "conditions": ["snow mountains", "rain coast", "variable"], "precipitation_chance": 0.5},
+        "spring": {"temp_range": [5, 16], "conditions": ["variable", "lambing season", "wildflowers"], "precipitation_chance": 0.45},
+        "summer": {"temp_range": [12, 25], "conditions": ["warm", "long days", "dry east"], "precipitation_chance": 0.3},
+        "fall": {"temp_range": [5, 18], "conditions": ["colorful", "stable", "cooling"], "precipitation_chance": 0.35}
+      },
+      "similar_locations": ["patagonia", "swiss-alps", "norwegian-fjords"]
+    },
+    {
+      "id": "australian-outback",
+      "name": "Australian Outback",
+      "region": "Oceania",
+      "country": "Australia",
+      "state": "Northern Territory",
+      "aliases": ["outback", "australian outback", "uluru", "ayers rock", "red centre"],
+      "coordinates": {"lat": -25.0000, "lon": 133.0000},
+      "terrain": "desert",
+      "activities": {
+        "winter": ["hiking", "camping"],
+        "summer": ["limited - extreme heat"],
+        "year_round": ["stargazing", "cultural tours", "photography"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [5, 22], "conditions": ["cool nights", "perfect days", "dry"], "precipitation_chance": 0.05},
+        "spring": {"temp_range": [15, 32], "conditions": ["warming", "dry", "wildflowers"], "precipitation_chance": 0.1},
+        "summer": {"temp_range": [25, 45], "conditions": ["extreme heat", "dangerous", "avoid midday"], "precipitation_chance": 0.15},
+        "fall": {"temp_range": [15, 32], "conditions": ["cooling", "dry", "pleasant"], "precipitation_chance": 0.1}
+      },
+      "similar_locations": ["moab", "wadi-rum", "hatta"]
+    },
+    {
+      "id": "great-barrier-reef",
+      "name": "Great Barrier Reef",
+      "region": "Oceania",
+      "country": "Australia",
+      "state": "Queensland",
+      "aliases": ["great barrier reef", "gbr", "cairns", "whitsundays"],
+      "coordinates": {"lat": -18.0000, "lon": 147.0000},
+      "terrain": "coral reef",
+      "activities": {
+        "winter": ["diving", "snorkeling"],
+        "summer": ["diving", "snorkeling"],
+        "year_round": ["boat tours", "island hopping", "marine life viewing"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [20, 28], "conditions": ["dry season", "clear water", "perfect"], "precipitation_chance": 0.15},
+        "spring": {"temp_range": [23, 30], "conditions": ["warming", "clear", "coral spawning"], "precipitation_chance": 0.2},
+        "summer": {"temp_range": [25, 32], "conditions": ["wet season", "storms", "stinger season"], "precipitation_chance": 0.5},
+        "fall": {"temp_range": [23, 30], "conditions": ["wet ending", "humid", "green islands"], "precipitation_chance": 0.35}
+      },
+      "similar_locations": ["bali", "costa-rica"]
+    },
+    {
+      "id": "wadi-rum",
+      "name": "Wadi Rum",
+      "region": "Middle East",
+      "country": "Jordan",
+      "state": null,
+      "aliases": ["wadi rum", "jordan desert", "valley of the moon"],
+      "coordinates": {"lat": 29.5833, "lon": 35.4167},
+      "terrain": "desert canyon",
+      "activities": {
+        "winter": ["camping", "hiking", "rock climbing"],
+        "summer": ["dawn/dusk activities only"],
+        "year_round": ["stargazing", "jeep tours", "camel trekking"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [5, 18], "conditions": ["cool", "clear", "perfect camping"], "precipitation_chance": 0.15},
+        "spring": {"temp_range": [15, 30], "conditions": ["warming", "dry", "ideal"], "precipitation_chance": 0.1},
+        "summer": {"temp_range": [25, 42], "conditions": ["extreme heat", "dry", "early/late activities"], "precipitation_chance": 0.02},
+        "fall": {"temp_range": [15, 32], "conditions": ["cooling", "pleasant", "clear"], "precipitation_chance": 0.08}
+      },
+      "similar_locations": ["moab", "australian-outback", "hatta"]
+    },
+    {
+      "id": "hatta",
+      "name": "Hatta",
+      "region": "Middle East",
+      "country": "UAE",
+      "state": "Dubai",
+      "aliases": ["hatta", "hatta dubai", "dubai mountains", "hajar mountains"],
+      "coordinates": {"lat": 24.8000, "lon": 56.1000},
+      "terrain": "mountain desert",
+      "activities": {
+        "winter": ["hiking", "mountain biking", "kayaking"],
+        "summer": ["limited - extreme heat"],
+        "year_round": ["dam visits", "heritage village", "glamping"]
+      },
+      "weather_patterns": {
+        "winter": {"temp_range": [12, 26], "conditions": ["perfect", "cool", "dry"], "precipitation_chance": 0.1},
+        "spring": {"temp_range": [20, 35], "conditions": ["warming", "dry", "sandstorms possible"], "precipitation_chance": 0.05},
+        "summer": {"temp_range": [30, 45], "conditions": ["extreme heat", "avoid outdoor activities"], "precipitation_chance": 0.02},
+        "fall": {"temp_range": [22, 38], "conditions": ["cooling", "pleasant evenings", "dry"], "precipitation_chance": 0.05}
+      },
+      "similar_locations": ["wadi-rum", "moab", "atlas-mountains"]
+    }
+  ],
+  "regions": {
+    "North America": {
+      "description": "Diverse terrain from arctic to desert, four distinct seasons in most areas",
+      "countries": ["USA", "Canada"]
+    },
+    "South America": {
+      "description": "Reversed seasons from Northern Hemisphere, dramatic landscapes",
+      "countries": ["Argentina", "Chile", "Brazil"]
+    },
+    "Central America": {
+      "description": "Tropical climate, dry and wet seasons, biodiversity hotspot",
+      "countries": ["Costa Rica"]
+    },
+    "Europe": {
+      "description": "Varied climates from Mediterranean to Arctic, rich cultural heritage",
+      "countries": ["Switzerland", "United Kingdom", "Norway", "Iceland"]
+    },
+    "Africa": {
+      "description": "Diverse from Sahara to savanna, unique wildlife experiences",
+      "countries": ["Tanzania", "South Africa", "Morocco"]
+    },
+    "Asia": {
+      "description": "Monsoon seasons, highest peaks, tropical islands to frozen tundra",
+      "countries": ["Nepal", "Japan", "Indonesia", "Singapore"]
+    },
+    "Oceania": {
+      "description": "Southern Hemisphere seasons, unique ecosystems, adventure capital",
+      "countries": ["New Zealand", "Australia"]
+    },
+    "Middle East": {
+      "description": "Desert climate, extreme summer heat, cultural heritage sites",
+      "countries": ["Jordan", "UAE"]
+    }
+  }
+}
+

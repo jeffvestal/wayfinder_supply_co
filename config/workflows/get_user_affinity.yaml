@@ -1,0 +1,41 @@
+version: "1"
+name: get_user_affinity
+enabled: true
+
+inputs:
+  - name: user_id
+    type: string
+    required: true
+    description: "The user identifier"
+
+triggers:
+  - type: manual
+
+steps:
+  - name: query_affinity
+    type: elasticsearch.esql.query
+    with:
+      query: >
+        FROM user-clickstream
+        | WHERE user_id == "{{ inputs.user_id }}"
+        | WHERE meta_tags IS NOT NULL
+        | EVAL tag = TO_STRING(meta_tags)
+        | STATS count = COUNT(*) BY tag
+        | SORT count DESC
+        | LIMIT 3
+
+  - name: log_affinity
+    type: console
+    with:
+      message: |
+        User Affinity Analysis for {{ inputs.user_id }}:
+        Top preferences:
+        {% if steps.query_affinity.output.values %}
+        {% for row in steps.query_affinity.output.values %}
+        - {{ row.0 }}: {{ row.1 }} views
+        {% endfor %}
+        {% else %}
+        No preference data available
+        {% endif %}
+
+

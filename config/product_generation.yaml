@@ -1,0 +1,456 @@
+output_dir: "./generated_products"
+image_provider: "vertex_ai"  # or "openai_dalle"
+
+# Product generation modes
+generation_modes:
+  test:
+    products_per_subcategory: 1
+    total_target: 10
+  demo:
+    products_per_subcategory: 2
+    total_target: 50
+  full:
+    products_per_subcategory: 3
+    total_target: 150
+
+# Categories aligned with 30 global adventure destinations
+# Covers activities for all seasons across all regions
+categories:
+  # =====================================
+  # CAMPING - Core category for most destinations
+  # =====================================
+  - name: "Camping"
+    subcategories:
+      - name: "Tents - 3 Season"
+        count: 3
+        description: "Lightweight tents for spring through fall camping"
+        activities: ["camping", "backpacking", "hiking"]
+      - name: "Tents - 4 Season"
+        count: 2
+        description: "Expedition tents for winter and high altitude"
+        activities: ["winter camping", "mountaineering", "expedition"]
+      - name: "Sleeping Bags - Warm Weather"
+        count: 2
+        description: "30°F+ bags for mild conditions"
+        activities: ["camping", "backpacking"]
+      - name: "Sleeping Bags - Cold Weather"
+        count: 2
+        description: "0°F and below for winter adventures"
+        activities: ["winter camping", "mountaineering"]
+      - name: "Sleeping Pads"
+        count: 3
+        description: "Insulated and ultralight options"
+        activities: ["camping", "backpacking"]
+      - name: "Camp Kitchen"
+        count: 4
+        description: "Stoves, cookware, and utensils"
+        activities: ["camping", "backpacking"]
+      - name: "Camp Furniture"
+        count: 2
+        description: "Chairs, tables, and hammocks"
+        activities: ["camping", "car camping"]
+      - name: "Lighting & Power"
+        count: 2
+        description: "Headlamps, lanterns, and solar chargers"
+        activities: ["camping", "hiking", "backpacking"]
+
+  # =====================================
+  # HIKING - Essential for most destinations
+  # =====================================
+  - name: "Hiking"
+    subcategories:
+      - name: "Day Packs"
+        count: 3
+        description: "15-35L packs for day hikes"
+        activities: ["hiking", "day trips"]
+      - name: "Backpacking Packs"
+        count: 3
+        description: "40-80L packs for multi-day trips"
+        activities: ["backpacking", "thru-hiking", "trekking"]
+      - name: "Hiking Boots"
+        count: 3
+        description: "Trail to mountaineering boots"
+        activities: ["hiking", "trekking", "mountaineering"]
+      - name: "Trail Running Shoes"
+        count: 2
+        description: "Lightweight trail footwear"
+        activities: ["trail running", "hiking"]
+      - name: "Trekking Poles"
+        count: 2
+        description: "Adjustable and ultralight poles"
+        activities: ["hiking", "trekking", "snowshoeing"]
+      - name: "Hydration"
+        count: 3
+        description: "Bladders, bottles, and filters"
+        activities: ["hiking", "backpacking", "camping"]
+      - name: "Navigation"
+        count: 2
+        description: "GPS devices, compasses, maps"
+        activities: ["hiking", "backpacking", "mountaineering"]
+
+  # =====================================
+  # CLIMBING - For alpine destinations
+  # =====================================
+  - name: "Climbing"
+    subcategories:
+      - name: "Harnesses"
+        count: 2
+        description: "Sport, trad, and alpine harnesses"
+        activities: ["rock climbing", "mountaineering", "ice climbing"]
+      - name: "Ropes"
+        count: 2
+        description: "Dynamic ropes for climbing"
+        activities: ["rock climbing", "mountaineering"]
+      - name: "Protection & Hardware"
+        count: 3
+        description: "Carabiners, cams, nuts, quickdraws"
+        activities: ["rock climbing", "trad climbing"]
+      - name: "Climbing Shoes"
+        count: 2
+        description: "Performance climbing footwear"
+        activities: ["rock climbing", "bouldering"]
+      - name: "Helmets"
+        count: 2
+        description: "Climbing and mountaineering helmets"
+        activities: ["rock climbing", "mountaineering", "ice climbing"]
+      - name: "Ice & Snow Gear"
+        count: 3
+        description: "Crampons, ice axes, glacier gear"
+        activities: ["ice climbing", "mountaineering", "glacier hiking"]
+
+  # =====================================
+  # WINTER SPORTS - For alpine/cold destinations
+  # =====================================
+  - name: "Winter Sports"
+    subcategories:
+      - name: "Skis - Downhill"
+        count: 2
+        description: "Alpine skis for resort and backcountry"
+        activities: ["skiing", "backcountry skiing"]
+      - name: "Skis - Cross Country"
+        count: 2
+        description: "Nordic skis for touring"
+        activities: ["cross-country skiing", "nordic skiing"]
+      - name: "Snowboards"
+        count: 2
+        description: "All-mountain and powder boards"
+        activities: ["snowboarding"]
+      - name: "Ski Boots"
+        count: 2
+        description: "Alpine and touring boots"
+        activities: ["skiing", "backcountry skiing"]
+      - name: "Snowshoes"
+        count: 2
+        description: "Recreational to mountaineering"
+        activities: ["snowshoeing", "winter hiking"]
+      - name: "Goggles & Eyewear"
+        count: 2
+        description: "Ski goggles and glacier glasses"
+        activities: ["skiing", "snowboarding", "glacier hiking"]
+      - name: "Avalanche Safety"
+        count: 2
+        description: "Beacons, probes, shovels"
+        activities: ["backcountry skiing", "mountaineering"]
+
+  # =====================================
+  # WATER SPORTS - For coastal/lake destinations
+  # =====================================
+  - name: "Water Sports"
+    subcategories:
+      - name: "Kayaks"
+        count: 2
+        description: "Sea kayaks and recreational kayaks"
+        activities: ["kayaking", "sea kayaking"]
+      - name: "Canoes"
+        count: 1
+        description: "Expedition and recreational canoes"
+        activities: ["canoeing", "fishing"]
+      - name: "Paddles"
+        count: 2
+        description: "Kayak and canoe paddles"
+        activities: ["kayaking", "canoeing"]
+      - name: "Life Vests & PFDs"
+        count: 2
+        description: "Personal flotation devices"
+        activities: ["kayaking", "canoeing", "water sports"]
+      - name: "Dry Bags"
+        count: 2
+        description: "Waterproof storage"
+        activities: ["kayaking", "canoeing", "water sports"]
+      - name: "Wetsuits"
+        count: 2
+        description: "Full suits and spring suits"
+        activities: ["surfing", "diving", "water sports"]
+      - name: "Snorkel & Dive Gear"
+        count: 3
+        description: "Masks, fins, snorkels"
+        activities: ["snorkeling", "diving"]
+      - name: "Stand-Up Paddleboards"
+        count: 2
+        description: "Inflatable and rigid SUPs"
+        activities: ["paddleboarding", "water sports"]
+
+  # =====================================
+  # CYCLING - For mountain biking destinations
+  # =====================================
+  - name: "Cycling"
+    subcategories:
+      - name: "Mountain Bikes"
+        count: 2
+        description: "Trail and enduro bikes"
+        activities: ["mountain biking"]
+      - name: "Bike Helmets"
+        count: 2
+        description: "Trail and full-face helmets"
+        activities: ["mountain biking", "cycling"]
+      - name: "Cycling Apparel"
+        count: 3
+        description: "Jerseys, shorts, gloves"
+        activities: ["mountain biking", "cycling"]
+      - name: "Bike Accessories"
+        count: 2
+        description: "Lights, tools, hydration packs"
+        activities: ["mountain biking", "cycling"]
+
+  # =====================================
+  # FISHING - For lake/river destinations
+  # =====================================
+  - name: "Fishing"
+    subcategories:
+      - name: "Rods & Reels"
+        count: 2
+        description: "Fly fishing and spinning gear"
+        activities: ["fishing", "fly fishing"]
+      - name: "Tackle & Accessories"
+        count: 2
+        description: "Lures, lines, tackle boxes"
+        activities: ["fishing"]
+      - name: "Waders"
+        count: 2
+        description: "Chest and hip waders"
+        activities: ["fly fishing", "fishing"]
+      - name: "Ice Fishing Gear"
+        count: 2
+        description: "Augers, shelters, tip-ups"
+        activities: ["ice fishing"]
+
+  # =====================================
+  # APPAREL - Universal across all destinations
+  # =====================================
+  - name: "Apparel"
+    subcategories:
+      - name: "Base Layers"
+        count: 3
+        description: "Moisture-wicking underlayers"
+        activities: ["all"]
+      - name: "Mid Layers"
+        count: 3
+        description: "Fleece and down insulation"
+        activities: ["all"]
+      - name: "Rain Gear"
+        count: 3
+        description: "Waterproof jackets and pants"
+        activities: ["hiking", "camping", "backpacking"]
+      - name: "Insulated Jackets"
+        count: 3
+        description: "Down and synthetic puffies"
+        activities: ["winter sports", "mountaineering", "camping"]
+      - name: "Softshell Jackets"
+        count: 2
+        description: "Breathable wind protection"
+        activities: ["hiking", "climbing", "skiing"]
+      - name: "Hiking Pants"
+        count: 2
+        description: "Stretch pants and convertibles"
+        activities: ["hiking", "climbing", "camping"]
+      - name: "Shorts"
+        count: 2
+        description: "Hiking and water shorts"
+        activities: ["hiking", "water sports"]
+      - name: "Sun Protection"
+        count: 3
+        description: "Hats, shirts, arm sleeves"
+        activities: ["hiking", "water sports", "tropical"]
+
+  # =====================================
+  # TROPICAL & HOT CLIMATE - For warm destinations
+  # =====================================
+  - name: "Tropical & Safari"
+    subcategories:
+      - name: "Insect Protection"
+        count: 2
+        description: "Repellents, nets, treated clothing"
+        activities: ["jungle trekking", "safari", "tropical"]
+      - name: "Cooling Gear"
+        count: 2
+        description: "Cooling towels, neck wraps"
+        activities: ["desert hiking", "tropical", "hot climate"]
+      - name: "Safari Essentials"
+        count: 2
+        description: "Binoculars, field guides, photography"
+        activities: ["safari", "wildlife viewing"]
+      - name: "Travel Accessories"
+        count: 2
+        description: "Packing cubes, quick-dry towels"
+        activities: ["travel", "backpacking"]
+
+  # =====================================
+  # ACCESSORIES - Universal
+  # =====================================
+  - name: "Accessories"
+    subcategories:
+      - name: "First Aid & Safety"
+        count: 2
+        description: "First aid kits, emergency gear"
+        activities: ["all"]
+      - name: "Multi-Tools & Knives"
+        count: 2
+        description: "Pocket knives, multi-tools"
+        activities: ["camping", "hiking", "backpacking"]
+      - name: "Gloves"
+        count: 3
+        description: "Liner to expedition gloves"
+        activities: ["winter sports", "climbing", "hiking"]
+      - name: "Gaiters"
+        count: 2
+        description: "Ankle to knee gaiters"
+        activities: ["hiking", "snowshoeing", "mountaineering"]
+      - name: "Bags & Storage"
+        count: 2
+        description: "Duffels, stuff sacks, compression bags"
+        activities: ["travel", "camping", "expedition"]
+
+# Price ranges by category
+price_ranges:
+  Camping:
+    min: 29.99
+    max: 799.99
+  Hiking:
+    min: 19.99
+    max: 549.99
+  Climbing:
+    min: 29.99
+    max: 699.99
+  "Winter Sports":
+    min: 49.99
+    max: 1299.99
+  "Water Sports":
+    min: 24.99
+    max: 1499.99
+  Cycling:
+    min: 29.99
+    max: 4999.99
+  Fishing:
+    min: 19.99
+    max: 599.99
+  Apparel:
+    min: 24.99
+    max: 449.99
+  "Tropical & Safari":
+    min: 14.99
+    max: 299.99
+  Accessories:
+    min: 9.99
+    max: 199.99
+
+# Tag distribution weights (applied across all products)
+tags:
+  ultralight:
+    weight: 0.25
+    price_modifier: 1.4  # 40% premium
+    description: "Minimalist designs prioritizing weight savings"
+  budget:
+    weight: 0.20
+    price_modifier: 0.7  # 30% discount
+    description: "Value-focused without sacrificing quality"
+  expedition:
+    weight: 0.15
+    price_modifier: 1.5  # 50% premium
+    description: "Professional-grade for extreme conditions"
+  family:
+    weight: 0.15
+    price_modifier: 1.0
+    description: "Designed for group use and durability"
+  sustainable:
+    weight: 0.15
+    price_modifier: 1.2  # 20% premium
+    description: "Eco-friendly materials and processes"
+  professional:
+    weight: 0.10
+    price_modifier: 1.3
+    description: "Guide and instructor grade gear"
+
+# Brand configuration
+brands:
+  - name: "Wayfinder Supply"
+    weight: 0.45
+    style: "Premium house brand with modern designs"
+  - name: "Summit Pro"
+    weight: 0.20
+    style: "Technical alpine and mountaineering focus"
+  - name: "TrailBlazer"
+    weight: 0.15
+    style: "Budget-friendly trail essentials"
+  - name: "Alpine Edge"
+    weight: 0.10
+    style: "European-inspired expedition gear"
+  - name: "Pacific Tide"
+    weight: 0.05
+    style: "Water sports and coastal adventures"
+  - name: "Desert Fox"
+    weight: 0.05
+    style: "Hot climate and desert specialists"
+
+# Seasonal availability (for filtering)
+seasons:
+  - "3-season"    # Spring, summer, fall
+  - "4-season"    # All year including winter
+  - "summer"      # Warm weather only
+  - "winter"      # Cold weather specific
+  - "tropical"    # Hot/humid climates
+  - "all-season"  # Versatile year-round
+
+# Temperature ratings (for sleeping bags, apparel)
+temp_ratings:
+  - name: "warm_weather"
+    range: "35°F and above"
+    celsius: "2°C+"
+  - name: "three_season"
+    range: "15°F to 35°F"
+    celsius: "-10°C to 2°C"
+  - name: "cold_weather"
+    range: "0°F to 15°F"
+    celsius: "-18°C to -10°C"
+  - name: "extreme_cold"
+    range: "-20°F and below"
+    celsius: "-29°C and below"
+
+# Activity mapping (links products to destination activities)
+activity_mapping:
+  hiking:
+    primary_categories: ["Hiking", "Apparel", "Accessories"]
+    destinations: ["yosemite", "rocky-mountain", "banff", "swiss-alps", "nepal-himalayas"]
+  camping:
+    primary_categories: ["Camping", "Apparel", "Accessories"]
+    destinations: ["yellowstone", "boundary-waters", "algonquin", "kruger"]
+  rock_climbing:
+    primary_categories: ["Climbing", "Apparel"]
+    destinations: ["yosemite", "moab", "wadi-rum"]
+  skiing:
+    primary_categories: ["Winter Sports", "Apparel"]
+    destinations: ["banff", "whistler", "japanese-alps", "swiss-alps"]
+  kayaking:
+    primary_categories: ["Water Sports", "Apparel"]
+    destinations: ["boundary-waters", "norwegian-fjords", "nz-south-island"]
+  surfing:
+    primary_categories: ["Water Sports", "Apparel"]
+    destinations: ["bali", "costa-rica", "great-barrier-reef"]
+  safari:
+    primary_categories: ["Tropical & Safari", "Accessories"]
+    destinations: ["kruger", "australian-outback"]
+  desert:
+    primary_categories: ["Tropical & Safari", "Apparel", "Accessories"]
+    destinations: ["moab", "wadi-rum", "hatta", "australian-outback"]
+  tropical:
+    primary_categories: ["Tropical & Safari", "Water Sports", "Apparel"]
+    destinations: ["costa-rica", "bali", "macritchie", "chapada-diamantina"]

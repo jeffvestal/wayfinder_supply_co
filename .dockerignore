@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Node
+node_modules/
+npm-debug.log*
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Generated
+generated_products/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Docs
+docs/
+*.md
+
+# Scripts (not needed in containers)
+scripts/
+
+

@@ -1,0 +1,45 @@
+version: "1"
+name: get_customer_profile
+enabled: true
+
+inputs:
+  - name: user_id
+    type: string
+    required: true
+    description: "The user identifier (e.g., 'user_new', 'user_member', 'user_business')"
+
+triggers:
+  - type: manual
+
+steps:
+  - name: call_crm_mcp
+    type: http
+    with:
+      url: "http://host-1:8001/mcp"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        method: "tools/call"
+        params:
+          name: "get_customer_profile_tool"
+          arguments:
+            user_id: "{{ inputs.user_id }}"
+        id: "{{ execution.id }}"
+    on-failure:
+      retry:
+        max-attempts: 2
+        delay: 1s
+
+  - name: log_profile
+    type: console
+    with:
+      message: |
+        Customer Profile for {{ inputs.user_id }}:
+        Name: {{ steps.call_crm_mcp.output.data.result.name }}
+        Loyalty Tier: {{ steps.call_crm_mcp.output.data.result.loyalty_tier }}
+        Lifetime Value: ${{ steps.call_crm_mcp.output.data.result.lifetime_value }}
+        Purchase History: {{ steps.call_crm_mcp.output.data.result.purchase_history | size }} items
+
+

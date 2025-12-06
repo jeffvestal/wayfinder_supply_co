@@ -1,0 +1,64 @@
+output_dir: "./generated_products"
+image_provider: "vertex_ai"  # or "openai_dalle"
+
+categories:
+  - name: "camping"
+    subcategories:
+      - name: "tents"
+        count: 1
+      - name: "sleeping_bags"
+        count: 1
+  
+  - name: "hiking"
+    subcategories:
+      - name: "backpacks"
+        count: 1
+      - name: "footwear"
+        count: 1
+  
+
+# Price ranges by category
+price_ranges:
+  camping:
+    min: 29.99
+    max: 599.99
+  hiking:
+    min: 19.99
+    max: 449.99
+
+# Tag distribution weights
+tags:
+  ultralight:
+    weight: 0.3
+    price_modifier: 1.4  # 40% premium
+  budget:
+    weight: 0.25
+    price_modifier: 0.7  # 30% discount
+  expedition:
+    weight: 0.2
+    price_modifier: 1.3
+  family:
+    weight: 0.15
+    price_modifier: 1.0
+  sustainable:
+    weight: 0.1
+    price_modifier: 1.2
+
+# Brand configuration
+brands:
+  - name: "Wayfinder Supply"
+    weight: 0.6
+  - name: "Summit Pro"
+    weight: 0.2
+  - name: "TrailBlazer"
+    weight: 0.1
+  - name: "Alpine Edge"
+    weight: 0.1
+
+# Seasonal availability
+seasons:
+  - "3-season"
+  - "4-season"
+  - "summer"
+  - "winter"
+

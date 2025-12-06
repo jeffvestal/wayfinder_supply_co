@@ -1,0 +1,10 @@
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+httpx>=0.25.1
+elasticsearch>=9.0.0
+python-dotenv>=1.0.0
+sse-starlette>=1.8.2
+pydantic>=2.5.0
+pyyaml>=6.0.1
+requests>=2.31.0
+

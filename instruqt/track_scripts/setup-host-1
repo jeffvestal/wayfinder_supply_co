@@ -1,0 +1,119 @@
+#!/bin/bash
+
+####################################################################### WAIT
+
+echo "Wait for the Instruqt host bootstrap to finish"
+while [ ! -f /opt/instruqt/bootstrap/host-bootstrap-completed ]
+do
+    echo "Waiting for Instruqt to finish booting the virtual machine"
+    sleep 1
+done
+
+source /etc/profile.d/instruqt-env.sh
+
+####################################################################### ENV CHECK
+
+export GCSKEY_CE_INFRA_CONTAINERS=$GCSKEY_CE_INFRA_CONTAINERS
+
+if [[ -z "$GCSKEY_CE_INFRA_CONTAINERS" ]]; then
+    echo "GCSKEY_CE_INFRA_CONTAINERS is null"
+    exit 1
+fi
+
+####################################################################### INSTALL NODE.JS AND PM2
+
+echo "[Workshop] Installing Node.js and pm2..."
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+apt-get install -y nodejs
+npm install -g pm2
+
+####################################################################### INSTALL PYTHON DEPENDENCIES
+
+echo "[Workshop] Installing Python dependencies..."
+apt-get update
+apt-get install -y python3-pip python3-venv
+
+####################################################################### DOWNLOAD WORKSHOP ASSETS
+
+echo "[Workshop] Downloading workshop assets..."
+cd /opt
+rm -rf workshop-assets
+
+git clone --depth 1 --filter=blob:none --no-checkout \
+  https://github.com/jeffvestal/wayfinder_supply_co.git temp-repo || {
+  echo "[Workshop] ⚠️  Could not clone repo, creating directory structure"
+  mkdir -p workshop-assets/{backend,mcp_server,frontend}
+}
+
+if [ -d "temp-repo" ]; then
+  cd temp-repo
+  git sparse-checkout set backend mcp_server frontend scripts
+  git checkout
+  cp -r backend /opt/workshop-assets/ 2>/dev/null || true
+  cp -r mcp_server /opt/workshop-assets/ 2>/dev/null || true
+  cp -r frontend /opt/workshop-assets/ 2>/dev/null || true
+  cp -r scripts /opt/workshop-assets/ 2>/dev/null || true
+  cd /opt
+  rm -rf temp-repo
+fi
+
+####################################################################### SETUP MCP SERVER
+
+echo "[Workshop] Setting up MCP server..."
+cd /opt/workshop-assets/mcp_server
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Start MCP server with pm2
+pm2 start python3 --name "mcp-server" -- main.py
+pm2 save
+
+####################################################################### SETUP BACKEND PROXY
+
+echo "[Workshop] Setting up backend proxy..."
+cd /opt/workshop-assets/backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Set environment variables
+export ELASTICSEARCH_URL="http://kubernetes-vm:30920"
+export KIBANA_URL="http://kubernetes-vm:30001"
+export ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
+
+# Start backend with pm2
+pm2 start python3 --name "backend" -- main.py
+pm2 save
+
+####################################################################### SETUP FRONTEND
+
+echo "[Workshop] Setting up frontend..."
+cd /opt/workshop-assets/frontend
+npm install
+
+# Build frontend
+npm run build
+
+# Serve with pm2 (using serve or similar)
+npm install -g serve
+pm2 start serve --name "frontend" -- -s dist -l 3000
+pm2 save
+
+####################################################################### CONFIGURE PM2 TO START ON BOOT
+
+pm2 startup systemd -u root --hp /root
+pm2 save --force
+
+####################################################################### COMPLETE
+
+echo "========================================="
+echo "[Workshop] host-1 setup complete"
+echo "========================================="
+echo "Services:"
+echo "  - MCP Server: http://host-1:8001"
+echo "  - Backend API: http://host-1:8000"
+echo "  - Frontend: http://host-1:3000"
+echo "========================================="
+
+
