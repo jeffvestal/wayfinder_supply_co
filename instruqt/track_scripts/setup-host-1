@@ -20,12 +20,29 @@ if [[ -z "$GCSKEY_CE_INFRA_CONTAINERS" ]]; then
     exit 1
 fi
 
-####################################################################### INSTALL NODE.JS AND PM2
+####################################################################### WAIT FOR KUBERNETES-VM ELASTIC STACK
 
-echo "[Workshop] Installing Node.js and pm2..."
+echo "[Workshop] Waiting for Elasticsearch on kubernetes-vm..."
+MAX_RETRIES=60
+RETRY_COUNT=0
+
+until curl -fsS "http://kubernetes-vm:30920/_cluster/health" >/dev/null 2>&1; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+    echo "[Workshop] WARNING: Elasticsearch not ready, continuing anyway..."
+    break
+  fi
+  echo "  ... waiting for Elasticsearch (attempt ${RETRY_COUNT}/${MAX_RETRIES})"
+  sleep 5
+done
+
+echo "[Workshop] ✓ Elasticsearch is reachable"
+
+####################################################################### INSTALL NODE.JS
+
+echo "[Workshop] Installing Node.js..."
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 apt-get install -y nodejs
-npm install -g pm2
 
 ####################################################################### INSTALL PYTHON DEPENDENCIES
 
@@ -35,75 +52,179 @@ apt-get install -y python3-pip python3-venv
 
 ####################################################################### DOWNLOAD WORKSHOP ASSETS
 
-echo "[Workshop] Downloading workshop assets..."
+echo "[Workshop] Downloading workshop assets from GitHub..."
 cd /opt
-rm -rf workshop-assets
+rm -rf workshop-assets temp-repo
+mkdir -p workshop-assets
 
-git clone --depth 1 --filter=blob:none --no-checkout \
-  https://github.com/jeffvestal/wayfinder_supply_co.git temp-repo || {
-  echo "[Workshop] ⚠️  Could not clone repo, creating directory structure"
-  mkdir -p workshop-assets/{backend,mcp_server,frontend}
-}
-
-if [ -d "temp-repo" ]; then
-  cd temp-repo
-  git sparse-checkout set backend mcp_server frontend scripts
-  git checkout
-  cp -r backend /opt/workshop-assets/ 2>/dev/null || true
-  cp -r mcp_server /opt/workshop-assets/ 2>/dev/null || true
-  cp -r frontend /opt/workshop-assets/ 2>/dev/null || true
-  cp -r scripts /opt/workshop-assets/ 2>/dev/null || true
-  cd /opt
+echo "[Workshop] Cloning repository..."
+if git clone --depth 1 https://github.com/jeffvestal/wayfinder_supply_co.git temp-repo; then
+  echo "[Workshop] ✓ Repository cloned successfully"
+  echo "[Workshop] Repo contents:"
+  ls -la temp-repo/
+  
+  echo "[Workshop] Copying directories to workshop-assets..."
+  
+  if [ -d "temp-repo/backend" ]; then
+    cp -r temp-repo/backend /opt/workshop-assets/
+    echo "[Workshop] ✓ Copied backend directory"
+  else
+    echo "[Workshop] ✗ backend directory not found!"
+  fi
+  
+  if [ -d "temp-repo/mcp_server" ]; then
+    cp -r temp-repo/mcp_server /opt/workshop-assets/
+    echo "[Workshop] ✓ Copied mcp_server directory"
+  else
+    echo "[Workshop] ✗ mcp_server directory not found!"
+  fi
+  
+  if [ -d "temp-repo/frontend" ]; then
+    cp -r temp-repo/frontend /opt/workshop-assets/
+    echo "[Workshop] ✓ Copied frontend directory"
+  else
+    echo "[Workshop] ✗ frontend directory not found!"
+  fi
+  
+  if [ -d "temp-repo/generated_products" ]; then
+    cp -r temp-repo/generated_products /opt/workshop-assets/
+    echo "[Workshop] ✓ Copied generated_products directory"
+  else
+    echo "[Workshop] ℹ️  generated_products directory not found (optional)"
+    # Create empty products file for frontend build
+    mkdir -p /opt/workshop-assets/generated_products
+    echo '[]' > /opt/workshop-assets/generated_products/products.json
+  fi
+  
   rm -rf temp-repo
+  echo "[Workshop] ✓ Cleaned up temp-repo"
+else
+  echo "[Workshop] ✗ ERROR: Could not clone repository!"
+  exit 1
 fi
+
+echo "[Workshop] Workshop assets directory:"
+ls -la /opt/workshop-assets/
+
+####################################################################### SET ENVIRONMENT VARIABLES
+
+export ELASTICSEARCH_URL="http://kubernetes-vm:30920"
+export KIBANA_URL="http://kubernetes-vm:30001"
+export MCP_SERVER_URL="http://localhost:8001"
+
+# Get API key from kubernetes-vm's environment (passed via instruqt)
+export ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
+
+# Write environment file for services
+cat > /opt/workshop-assets/.env << EOF
+ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+KIBANA_URL=${KIBANA_URL}
+MCP_SERVER_URL=${MCP_SERVER_URL}
+ELASTICSEARCH_APIKEY=${ELASTICSEARCH_APIKEY}
+EOF
 
 ####################################################################### SETUP MCP SERVER
 
 echo "[Workshop] Setting up MCP server..."
 cd /opt/workshop-assets/mcp_server
+
 python3 -m venv venv
 source venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
 
-# Start MCP server with pm2
-pm2 start python3 --name "mcp-server" -- main.py
-pm2 save
+# Start MCP server in background
+echo "[Workshop] Starting MCP server on port 8001..."
+nohup /opt/workshop-assets/mcp_server/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8001 > /var/log/mcp-server.log 2>&1 &
+MCP_PID=$!
+echo "[Workshop] MCP server started (PID: $MCP_PID)"
+
+deactivate
 
 ####################################################################### SETUP BACKEND PROXY
 
 echo "[Workshop] Setting up backend proxy..."
 cd /opt/workshop-assets/backend
+
 python3 -m venv venv
 source venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
 
-# Set environment variables
-export ELASTICSEARCH_URL="http://kubernetes-vm:30920"
-export KIBANA_URL="http://kubernetes-vm:30001"
-export ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
+# Start backend in background with environment variables
+echo "[Workshop] Starting backend server on port 8000..."
+ELASTICSEARCH_URL="${ELASTICSEARCH_URL}" \
+KIBANA_URL="${KIBANA_URL}" \
+MCP_SERVER_URL="${MCP_SERVER_URL}" \
+ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
+nohup /opt/workshop-assets/backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /var/log/backend.log 2>&1 &
+BACKEND_PID=$!
+echo "[Workshop] Backend server started (PID: $BACKEND_PID)"
 
-# Start backend with pm2
-pm2 start python3 --name "backend" -- main.py
-pm2 save
+deactivate
 
 ####################################################################### SETUP FRONTEND
 
 echo "[Workshop] Setting up frontend..."
 cd /opt/workshop-assets/frontend
+
+echo "[Workshop] Frontend directory contents:"
+ls -la
+
+echo "[Workshop] Installing npm dependencies..."
 npm install
 
-# Build frontend
-npm run build
+echo "[Workshop] Building frontend for production..."
+if npm run build; then
+  echo "[Workshop] ✓ Frontend build successful"
+else
+  echo "[Workshop] ✗ Frontend build FAILED!"
+  echo "[Workshop] Check if dist/ directory exists:"
+  ls -la dist/ 2>/dev/null || echo "[Workshop] dist/ does not exist"
+fi
 
-# Serve with pm2 (using serve or similar)
+# Verify build output
+if [ -d "dist" ] && [ -f "dist/index.html" ]; then
+  echo "[Workshop] ✓ Build output verified (dist/index.html exists)"
+  ls -la dist/
+else
+  echo "[Workshop] ⚠️  WARNING: dist/index.html not found, frontend may not work"
+fi
+
+# Install and start serve for static files
 npm install -g serve
-pm2 start serve --name "frontend" -- -s dist -l 3000
-pm2 save
+echo "[Workshop] Starting frontend on port 3000..."
+nohup serve -s dist -l 3000 > /var/log/frontend.log 2>&1 &
+FRONTEND_PID=$!
+echo "[Workshop] Frontend server started (PID: $FRONTEND_PID)"
 
-####################################################################### CONFIGURE PM2 TO START ON BOOT
+####################################################################### VERIFY SERVICES
 
-pm2 startup systemd -u root --hp /root
-pm2 save --force
+echo "[Workshop] Waiting for services to start..."
+sleep 5
+
+echo "[Workshop] Checking service health..."
+
+# Check MCP server
+if curl -fsS http://localhost:8001/health >/dev/null 2>&1 || curl -fsS http://localhost:8001/ >/dev/null 2>&1; then
+  echo "[Workshop] ✓ MCP server is running"
+else
+  echo "[Workshop] ⚠️  MCP server may not be responding yet"
+fi
+
+# Check backend
+if curl -fsS http://localhost:8000/health >/dev/null 2>&1 || curl -fsS http://localhost:8000/ >/dev/null 2>&1; then
+  echo "[Workshop] ✓ Backend is running"
+else
+  echo "[Workshop] ⚠️  Backend may not be responding yet"
+fi
+
+# Check frontend
+if curl -fsS http://localhost:3000/ >/dev/null 2>&1; then
+  echo "[Workshop] ✓ Frontend is running"
+else
+  echo "[Workshop] ⚠️  Frontend may not be responding yet"
+fi
 
 ####################################################################### COMPLETE
 
@@ -114,6 +235,9 @@ echo "Services:"
 echo "  - MCP Server: http://host-1:8001"
 echo "  - Backend API: http://host-1:8000"
 echo "  - Frontend: http://host-1:3000"
+echo ""
+echo "Logs:"
+echo "  - MCP Server: /var/log/mcp-server.log"
+echo "  - Backend: /var/log/backend.log"
+echo "  - Frontend: /var/log/frontend.log"
 echo "========================================="
-
-

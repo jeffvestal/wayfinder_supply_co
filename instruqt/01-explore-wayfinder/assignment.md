@@ -1,30 +1,30 @@
 ---
 slug: explore-wayfinder
-id: wayfinder-explore-001
+id: fcvl6itrtygc
 type: challenge
 title: Explore Wayfinder Supply Co.
 teaser: Get familiar with the AI-powered outdoor gear store and trip planning assistant
 tabs:
-  - id: wayfinder-ui-tab
-    title: Wayfinder UI
-    type: service
-    hostname: host-1
-    path: /
-    port: 3000
-  - id: kibana-tab
-    title: Kibana
-    type: service
-    hostname: kubernetes-vm
-    path: /
-    port: 30001
-  - id: host-1-terminal
-    title: Host-1 Terminal
-    type: terminal
-    hostname: host-1
-  - id: kubernetes-vm-terminal
-    title: Kubernetes VM Terminal
-    type: terminal
-    hostname: kubernetes-vm
+- id: cjygovddb1id
+  title: Wayfinder UI
+  type: service
+  hostname: host-1
+  path: /
+  port: 3000
+- id: wdzfceiayicy
+  title: Kibana
+  type: service
+  hostname: kubernetes-vm
+  path: /
+  port: 30001
+- id: ecubvuno5dj6
+  title: Host-1 Terminal
+  type: terminal
+  hostname: host-1
+- id: 3ma0vzwdlavt
+  title: Kubernetes VM Terminal
+  type: terminal
+  hostname: kubernetes-vm
 difficulty: basic
 timelimit: 3600
 enhanced_loading: null

@@ -195,24 +195,48 @@ export ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}"
 
 ####################################################################### DOWNLOAD WORKSHOP ASSETS
 
-echo "[Workshop] Downloading workshop assets..."
+echo "[Workshop] Downloading workshop assets from GitHub..."
 cd /opt
-rm -rf workshop-assets
+rm -rf workshop-assets temp-repo
+mkdir -p workshop-assets
 
-git clone --depth 1 --filter=blob:none --no-checkout \
-  https://github.com/jeffvestal/wayfinder_supply_co.git temp-repo || {
-  echo "[Workshop] ⚠️  Could not clone repo, continuing with manual setup"
-  mkdir -p workshop-assets
-}
-
-if [ -d "temp-repo" ]; then
-  cd temp-repo
-  git sparse-checkout set scripts config
-  git checkout
-  mv scripts /opt/workshop-assets/ 2>/dev/null || true
-  mv config /opt/workshop-assets/ 2>/dev/null || true
-  cd /opt
+echo "[Workshop] Cloning repository..."
+if git clone --depth 1 https://github.com/jeffvestal/wayfinder_supply_co.git temp-repo; then
+  echo "[Workshop] ✓ Repository cloned successfully"
+  
+  echo "[Workshop] Copying scripts and config directories..."
+  if [ -d "temp-repo/scripts" ]; then
+    cp -r temp-repo/scripts /opt/workshop-assets/
+    echo "[Workshop] ✓ Copied scripts directory"
+  else
+    echo "[Workshop] ✗ ERROR: scripts directory not found in repo!"
+    ls -la temp-repo/
+  fi
+  
+  if [ -d "temp-repo/config" ]; then
+    cp -r temp-repo/config /opt/workshop-assets/
+    echo "[Workshop] ✓ Copied config directory"
+  else
+    echo "[Workshop] ✗ ERROR: config directory not found in repo!"
+  fi
+  
   rm -rf temp-repo
+  echo "[Workshop] ✓ Cleaned up temp-repo"
+else
+  echo "[Workshop] ✗ ERROR: Could not clone repository!"
+fi
+
+echo "[Workshop] Workshop assets directory contents:"
+ls -la /opt/workshop-assets/
+
+if [ -d "/opt/workshop-assets/scripts" ]; then
+  echo "[Workshop] Scripts directory contents:"
+  ls -la /opt/workshop-assets/scripts/
+fi
+
+if [ -d "/opt/workshop-assets/config" ]; then
+  echo "[Workshop] Config directory contents:"
+  ls -la /opt/workshop-assets/config/
 fi
 
 ####################################################################### SETUP ELASTICSEARCH INDICES
@@ -306,6 +330,98 @@ if [ -n "$CONNECTOR_ID" ]; then
     }' >/dev/null 2>&1
 fi
 
+####################################################################### SETUP PYTHON FOR AGENT/WORKFLOW CREATION
+
+echo "[Workshop] Setting up Python environment for agent creation..."
+cd /opt/workshop-assets
+
+echo "[Workshop] Creating Python virtual environment..."
+python3 -m venv venv
+source venv/bin/activate
+
+echo "[Workshop] Python version: $(python3 --version)"
+echo "[Workshop] Installing Python dependencies..."
+pip install --upgrade pip
+pip install pyyaml requests python-dotenv elasticsearch
+
+# Write environment file
+echo "[Workshop] Writing environment file..."
+cat > /opt/workshop-assets/.env << EOF
+ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+KIBANA_URL=${KIBANA_URL}
+ELASTICSEARCH_APIKEY=${ELASTICSEARCH_APIKEY}
+EOF
+
+echo "[Workshop] Environment variables for scripts:"
+echo "  ELASTICSEARCH_URL=${ELASTICSEARCH_URL}"
+echo "  KIBANA_URL=${KIBANA_URL}"
+echo "  ELASTICSEARCH_APIKEY=<redacted>"
+
+####################################################################### DEPLOY WORKFLOWS
+
+echo "[Workshop] ========================================"
+echo "[Workshop] DEPLOYING WORKFLOWS"
+echo "[Workshop] ========================================"
+
+if [ -d "/opt/workshop-assets/scripts" ]; then
+  cd /opt/workshop-assets/scripts
+  echo "[Workshop] Current directory: $(pwd)"
+  
+  if [ -f "deploy_workflows.py" ]; then
+    echo "[Workshop] Found deploy_workflows.py, executing..."
+    
+    # Check if config/workflows exists
+    if [ -d "/opt/workshop-assets/config/workflows" ]; then
+      echo "[Workshop] Workflow config directory found:"
+      ls -la /opt/workshop-assets/config/workflows/
+    else
+      echo "[Workshop] ⚠️  WARNING: /opt/workshop-assets/config/workflows not found!"
+    fi
+    
+    ELASTICSEARCH_URL="${ELASTICSEARCH_URL}" \
+    KIBANA_URL="${KIBANA_URL}" \
+    ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
+    python3 deploy_workflows.py --workflows-dir /opt/workshop-assets/config/workflows 2>&1 || {
+      echo "[Workshop] ⚠️  Workflow deployment returned non-zero exit code"
+    }
+  else
+    echo "[Workshop] ✗ deploy_workflows.py not found at $(pwd)"
+    ls -la
+  fi
+else
+  echo "[Workshop] ✗ ERROR: /opt/workshop-assets/scripts directory does not exist!"
+fi
+
+####################################################################### CREATE AGENTS AND TOOLS
+
+echo "[Workshop] ========================================"
+echo "[Workshop] CREATING AGENTS AND TOOLS"
+echo "[Workshop] ========================================"
+
+if [ -d "/opt/workshop-assets/scripts" ]; then
+  cd /opt/workshop-assets/scripts
+  echo "[Workshop] Current directory: $(pwd)"
+  
+  if [ -f "create_agents.py" ]; then
+    echo "[Workshop] Found create_agents.py, executing..."
+    
+    ELASTICSEARCH_URL="${ELASTICSEARCH_URL}" \
+    KIBANA_URL="${KIBANA_URL}" \
+    ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
+    python3 create_agents.py 2>&1 || {
+      echo "[Workshop] ⚠️  Agent creation returned non-zero exit code"
+    }
+  else
+    echo "[Workshop] ✗ create_agents.py not found at $(pwd)"
+    ls -la
+  fi
+else
+  echo "[Workshop] ✗ ERROR: /opt/workshop-assets/scripts directory does not exist!"
+fi
+
+deactivate
+echo "[Workshop] Deactivated Python virtual environment"
+
 ####################################################################### COMPLETE
 
 echo "========================================="
@@ -314,6 +430,11 @@ echo "========================================="
 echo "Services:"
 echo "  - Elasticsearch: ${ELASTICSEARCH_URL}"
 echo "  - Kibana: ${KIBANA_URL}"
+echo ""
+echo "Created:"
+echo "  - Workflows (check_trip_safety, get_customer_profile)"
+echo "  - Agents (Trip Planner)"
+echo "  - Tools (product_search, ES|QL, workflow tools)"
 echo "========================================="
 
 
