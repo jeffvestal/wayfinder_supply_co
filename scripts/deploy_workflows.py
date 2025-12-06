@@ -38,8 +38,13 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
         print(f"✗ Workflow file not found: {workflow_yaml_path}")
         return None
     
+    # Read the raw YAML content as a string - API expects {"yaml": "..."}
     with open(workflow_path, 'r') as f:
-        workflow_data = yaml.safe_load(f)
+        yaml_content = f.read()
+    
+    # Also parse it to get the name for logging
+    workflow_data = yaml.safe_load(yaml_content)
+    workflow_name = workflow_data.get("name", workflow_path.stem)
     
     url = f"{KIBANA_URL}/api/workflows"
     
@@ -48,30 +53,30 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     if list_response.status_code == 200:
         workflows = list_response.json().get("data", [])
         for wf in workflows:
-            if wf.get("name") == workflow_data["name"]:
+            if wf.get("name") == workflow_name:
                 existing_id = wf.get("id")
-                print(f"⚠ Workflow '{workflow_data['name']}' already exists (ID: {existing_id}), updating...")
+                print(f"⚠ Workflow '{workflow_name}' already exists (ID: {existing_id}), updating...")
                 # Update existing workflow
                 update_url = f"{url}/{existing_id}"
-                response = requests.put(update_url, headers=HEADERS, json=workflow_data)
+                response = requests.put(update_url, headers=HEADERS, json={"yaml": yaml_content})
                 if response.status_code in [200, 201]:
-                    print(f"✓ Updated workflow: {workflow_data['name']} (ID: {existing_id})")
+                    print(f"✓ Updated workflow: {workflow_name} (ID: {existing_id})")
                     return existing_id
                 else:
                     print(f"✗ Failed to update workflow: {response.status_code}")
                     print(f"  Response: {response.text}")
                     return None
     
-    # Create new workflow
-    response = requests.post(url, headers=HEADERS, json=workflow_data)
+    # Create new workflow - API expects {"yaml": "<yaml_string>"}
+    response = requests.post(url, headers=HEADERS, json={"yaml": yaml_content})
     
     if response.status_code in [200, 201]:
         data = response.json()
         workflow_id = data.get("id") or data.get("workflow_id")
-        print(f"✓ Deployed workflow: {workflow_data['name']} (ID: {workflow_id})")
+        print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
         return workflow_id
     else:
-        print(f"✗ Failed to deploy workflow '{workflow_data['name']}': {response.status_code}")
+        print(f"✗ Failed to deploy workflow '{workflow_name}': {response.status_code}")
         print(f"  Response: {response.text}")
         return None
 

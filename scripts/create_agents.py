@@ -181,8 +181,10 @@ def create_esql_tool(name: str, query: str, description: str) -> Optional[str]:
         "id": tool_id,
         "name": name,
         "type": "esql",
-        "query": query,
-        "description": description
+        "description": description,
+        "configuration": {
+            "query": query
+        }
     }
     
     response = requests.post(url, headers=HEADERS, json=tool_config)
@@ -220,8 +222,10 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
         "id": tool_id,
         "name": name,
         "type": "workflow",
-        "workflow_id": workflow_id,
-        "description": description
+        "description": description,
+        "configuration": {
+            "workflow_id": workflow_id
+        }
     }
     
     response = requests.post(url, headers=HEADERS, json=tool_config)
@@ -259,8 +263,10 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
         "id": tool_id,
         "name": name,
         "type": "index_search",
-        "index": index,
-        "description": description
+        "description": description,
+        "configuration": {
+            "index": index
+        }
     }
     
     response = requests.post(url, headers=HEADERS, json=tool_config)
@@ -291,29 +297,35 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     """Deploy a workflow from YAML file."""
     import yaml
     
+    # Read the raw YAML content as a string - API expects {"yaml": "..."}
     with open(workflow_yaml_path, 'r') as f:
-        workflow_data = yaml.safe_load(f)
+        yaml_content = f.read()
+    
+    # Also parse it to get the name for logging
+    workflow_data = yaml.safe_load(yaml_content)
+    workflow_name = workflow_data.get("name", "unknown")
     
     url = f"{KIBANA_URL}/api/workflows"
     
-    response = requests.post(url, headers=HEADERS, json=workflow_data)
+    # API expects {"yaml": "<yaml_string>"}
+    response = requests.post(url, headers=HEADERS, json={"yaml": yaml_content})
     
     if response.status_code in [200, 201]:
         data = response.json()
         workflow_id = data.get("id") or data.get("workflow_id")
-        print(f"✓ Deployed workflow: {workflow_data['name']} (ID: {workflow_id})")
+        print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
         return workflow_id
     elif response.status_code == 409:
-        print(f"⚠ Workflow '{workflow_data['name']}' already exists")
+        print(f"⚠ Workflow '{workflow_name}' already exists")
         # Try to get existing workflow ID
         list_response = requests.get(url, headers=HEADERS)
         if list_response.status_code == 200:
             workflows = list_response.json().get("data", [])
             for wf in workflows:
-                if wf.get("name") == workflow_data["name"]:
+                if wf.get("name") == workflow_name:
                     return wf.get("id")
     else:
-        print(f"✗ Failed to deploy workflow '{workflow_data['name']}': {response.status_code}")
+        print(f"✗ Failed to deploy workflow '{workflow_name}': {response.status_code}")
         print(f"  Response: {response.text}")
         return None
 
