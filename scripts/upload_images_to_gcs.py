@@ -102,9 +102,15 @@ def upload_images(images_dir: Path, bucket_name: str, gcs_prefix: str) -> dict:
     return url_mapping
 
 
-def update_product_urls(products_path: Path, url_mapping: dict) -> int:
+def update_product_urls(products_path: Path, url_mapping: dict, bucket_name: str, gcs_prefix: str) -> int:
     """
     Update product JSON to use GCS URLs.
+    
+    Args:
+        products_path: Path to products.json file
+        url_mapping: Dict mapping filename to public URL
+        bucket_name: GCS bucket name for fallback URL generation
+        gcs_prefix: GCS prefix for fallback URL generation
     
     Returns:
         int: Number of products updated
@@ -132,7 +138,7 @@ def update_product_urls(products_path: Path, url_mapping: dict) -> int:
                 updated_count += 1
             else:
                 # Generate expected GCS URL even if we didn't upload
-                product[image_field] = f"https://storage.googleapis.com/{BUCKET_NAME}/{GCS_PREFIX}{filename}"
+                product[image_field] = f"https://storage.googleapis.com/{bucket_name}/{gcs_prefix}{filename}"
                 updated_count += 1
     
     with open(products_path, 'w') as f:
@@ -192,7 +198,7 @@ def main():
         url_mapping = upload_images(images_dir, args.bucket, args.prefix)
     
     if products_path.exists():
-        update_product_urls(products_path, url_mapping)
+        update_product_urls(products_path, url_mapping, args.bucket, args.prefix)
     
     print("\nDone!")
     print(f"Images available at: https://storage.googleapis.com/{args.bucket}/{args.prefix}")
@@ -200,4 +206,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
