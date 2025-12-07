@@ -10,6 +10,9 @@ Pillow>=10.0.0
 google-generativeai>=0.3.0
 google-cloud-aiplatform>=1.38.0
 
+# Google Cloud Storage (optional - only needed for image upload)
+google-cloud-storage>=2.10.0
+
 # Elasticsearch (optional - only needed for seeding/indexing)
 elasticsearch>=9.0.0
 
