@@ -179,7 +179,6 @@ def create_esql_tool(name: str, query: str, description: str) -> Optional[str]:
     
     tool_config = {
         "id": tool_id,
-        "name": name,
         "type": "esql",
         "description": description,
         "configuration": {
@@ -195,18 +194,11 @@ def create_esql_tool(name: str, query: str, description: str) -> Optional[str]:
         print(f"✓ Created ES|QL tool: {name} (ID: {tool_id})")
         return tool_id
     elif response.status_code == 409:
-        # Tool already exists, try to find it
-        print(f"⚠ ES|QL tool '{name}' already exists, discovering...")
-        list_response = requests.get(url, headers=HEADERS)
-        if list_response.status_code == 200:
-            tools = list_response.json().get("data", [])
-            for tool in tools:
-                if tool.get("name") == name:
-                    tool_id = tool.get("id")
-                    print(f"✓ Found existing ES|QL tool: {name} (ID: {tool_id})")
-                    return tool_id
+        # Tool already exists, return the ID we tried to create
+        print(f"⚠ ES|QL tool already exists (ID: {tool_id})")
+        return tool_id
     else:
-        print(f"✗ Failed to create ES|QL tool '{name}': {response.status_code}")
+        print(f"✗ Failed to create ES|QL tool (ID: {tool_id}): {response.status_code}")
         print(f"  Response: {response.text}")
         return None
 
@@ -220,7 +212,6 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
     
     tool_config = {
         "id": tool_id,
-        "name": name,
         "type": "workflow",
         "description": description,
         "configuration": {
@@ -236,18 +227,11 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
         print(f"✓ Created workflow tool: {name} (ID: {tool_id})")
         return tool_id
     elif response.status_code == 409:
-        # Tool already exists, try to find it
-        print(f"⚠ Workflow tool '{name}' already exists, discovering...")
-        list_response = requests.get(url, headers=HEADERS)
-        if list_response.status_code == 200:
-            tools = list_response.json().get("data", [])
-            for tool in tools:
-                if tool.get("name") == name:
-                    tool_id = tool.get("id")
-                    print(f"✓ Found existing workflow tool: {name} (ID: {tool_id})")
-                    return tool_id
+        # Tool already exists, return the ID we tried to create
+        print(f"⚠ Workflow tool already exists (ID: {tool_id})")
+        return tool_id
     else:
-        print(f"✗ Failed to create workflow tool '{name}': {response.status_code}")
+        print(f"✗ Failed to create workflow tool (ID: {tool_id}): {response.status_code}")
         print(f"  Response: {response.text}")
         return None
 
@@ -261,7 +245,6 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
     
     tool_config = {
         "id": tool_id,
-        "name": name,
         "type": "index_search",
         "description": description,
         "configuration": {
@@ -277,18 +260,11 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
         print(f"✓ Created index search tool: {name} (ID: {tool_id})")
         return tool_id
     elif response.status_code == 409:
-        # Tool already exists, try to find it
-        print(f"⚠ Index search tool '{name}' already exists, discovering...")
-        list_response = requests.get(url, headers=HEADERS)
-        if list_response.status_code == 200:
-            tools = list_response.json().get("data", [])
-            for tool in tools:
-                if tool.get("name") == name:
-                    tool_id = tool.get("id")
-                    print(f"✓ Found existing index search tool: {name} (ID: {tool_id})")
-                    return tool_id
+        # Tool already exists, return the ID we tried to create
+        print(f"⚠ Index search tool already exists (ID: {tool_id})")
+        return tool_id
     else:
-        print(f"✗ Failed to create index search tool '{name}': {response.status_code}")
+        print(f"✗ Failed to create index search tool (ID: {tool_id}): {response.status_code}")
         print(f"  Response: {response.text}")
         return None
 
