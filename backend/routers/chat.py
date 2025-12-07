@@ -8,8 +8,8 @@ from typing import Optional
 
 router = APIRouter()
 
-KIBANA_URL = os.getenv("KIBANA_URL", "http://kubernetes-vm:30001")
-ELASTICSEARCH_APIKEY = os.getenv("ELASTICSEARCH_APIKEY", "")
+KIBANA_URL = os.getenv("STANDALONE_KIBANA_URL", os.getenv("KIBANA_URL", "http://kubernetes-vm:30001"))
+ELASTICSEARCH_APIKEY = os.getenv("STANDALONE_ELASTICSEARCH_APIKEY", os.getenv("ELASTICSEARCH_APIKEY", ""))
 
 
 async def stream_agent_response(message: str, user_id: str, agent_id: str = "trip-planner-agent"):

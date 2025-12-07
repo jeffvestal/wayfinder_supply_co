@@ -26,10 +26,11 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 # Logging middleware
 app.add_middleware(LoggingMiddleware)
 
-# CORS middleware
+# CORS middleware - allow all origins for workshop/Instruqt environments
+# Instruqt URLs are dynamic: https://host-1-3000-{participant_id}.env.play.instruqt.com
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://host-1:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

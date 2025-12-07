@@ -116,6 +116,117 @@ The workshop runs on Instruqt with two VMs:
 
 Setup scripts in `instruqt/track_scripts/` handle all configuration.
 
+### Standalone Demo Setup
+
+Run the complete demo outside of Instruqt using Docker containers connected to your own Elasticsearch cluster.
+
+#### Prerequisites
+
+1. **Elasticsearch Cluster**
+   - **Standard clusters**: Cluster with snapshot restored (contains `product-catalog` and `user-clickstream` indices)
+   - **Serverless clusters**: Empty cluster (use `--load-data` flag to load data directly)
+   - API key with permissions for:
+     - Reading from indices
+     - Creating/updating indices (if using `--load-data`)
+     - Creating/updating workflows
+     - Creating/updating agents and tools
+   - LLM connector configured in Agent Builder (Azure OpenAI GPT-4.1 or compatible)
+
+2. **GCP Bucket Setup** (for product images)
+   
+   If you're using generated product images, set up a GCS bucket:
+   
+   ```bash
+   # Create bucket with uniform bucket-level access
+   gsutil mb -p YOUR_PROJECT_ID gs://wayfinder_supply_co
+   gsutil uniformbucketlevelaccess set on gs://wayfinder_supply_co
+   
+   # Create service account
+   gcloud iam service-accounts create wayfinder-supply-co-bucket \
+     --display-name="Wayfinder Supply Co Bucket Access"
+   
+   # Grant Storage Object Admin role (with bucket restriction)
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+     --member="serviceAccount:wayfinder-supply-co-bucket@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/storage.objectAdmin" \
+     --condition="expression=resource.name.startsWith('projects/_/buckets/wayfinder_supply_co'),title=wayfinder_supply_co bucket only"
+   
+   # Create and download key
+   gcloud iam service-accounts keys create ~/wayfinder_supply_co_bucket_key.json \
+     --iam-account=wayfinder-supply-co-bucket@YOUR_PROJECT_ID.iam.gserviceaccount.com
+   
+   # Make bucket publicly readable
+   gsutil iam ch allUsers:objectViewer gs://wayfinder_supply_co
+   ```
+
+3. **Environment Configuration**
+   
+   Create a `.env` file with your credentials:
+   
+   ```bash
+   # Snapshot Cluster (for data loading - optional if already done)
+   SNAPSHOT_ELASTICSEARCH_URL=https://source-cluster.es.cloud:443
+   SNAPSHOT_ELASTICSEARCH_APIKEY=your-snapshot-api-key
+   
+   # Standalone Demo Cluster
+   STANDALONE_ELASTICSEARCH_URL=https://demo-cluster.es.cloud:443
+   STANDALONE_ELASTICSEARCH_APIKEY=your-demo-api-key
+   STANDALONE_KIBANA_URL=https://demo-cluster.kb.cloud:443
+   
+   # GCS Configuration (if using images)
+   GCS_BUCKET_NAME=wayfinder_supply_co
+   GCS_SERVICE_ACCOUNT_KEY=~/wayfinder_supply_co_bucket_key.json
+   ```
+
+#### Running the Demo
+
+1. **Configure Agent Builder** (one-time setup):
+   
+   **For clusters with snapshot restored** (standard deployment):
+   ```bash
+   # Make sure STANDALONE_* env vars are set (from .env or exported)
+   ./scripts/standalone_setup.sh
+   ```
+   
+   **For serverless clusters** (cannot restore snapshots):
+   ```bash
+   # Make sure STANDALONE_* env vars are set and products.json exists
+   ./scripts/standalone_setup.sh --load-data
+   ```
+   
+   The `--load-data` flag will:
+   - Create indices and mappings
+   - Load product data from `generated_products/products.json`
+   - Load clickstream data
+   - Then deploy workflows and create agents/tools
+   
+   **Note:** Ensure `generated_products/products.json` exists before using `--load-data`.
+
+2. **Start all services**:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **Verify setup**:
+   ```bash
+   python scripts/validate_setup.py --mode standalone
+   ```
+
+4. **Access the application**:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+   - MCP Server: http://localhost:8001
+
+#### Understanding Credential Prefixes
+
+- **SNAPSHOT_*** - Used by data loading scripts (`setup_elastic.py`, `seed_products.py`, `seed_clickstream.py`). Connect to your source cluster where you load data and create snapshots.
+- **STANDALONE_*** - Used by runtime services (`deploy_workflows.py`, `create_agents.py`, backend services). Connect to your demo cluster where the snapshot is restored.
+
+These may be the same cluster, but separating them allows you to:
+- Load data on a development cluster
+- Run demos on a production-ready cluster
+- Test snapshot restore workflows
+
 ## Project Structure
 
 ```
@@ -190,11 +301,41 @@ The demo includes three user personas to showcase personalization:
 
 ## Environment Variables
 
+### Snapshot Cluster (Data Loading)
+
+These credentials are used when loading data and creating snapshots:
+
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `ELASTICSEARCH_URL` | Elasticsearch endpoint | Yes |
-| `ELASTICSEARCH_APIKEY` | API key for auth | Yes |
-| `KIBANA_URL` | Kibana endpoint | Yes |
+| `SNAPSHOT_ELASTICSEARCH_URL` | Source Elasticsearch endpoint | For data loading |
+| `SNAPSHOT_ELASTICSEARCH_APIKEY` | API key for source cluster | For data loading |
+
+**Note:** Falls back to `ELASTICSEARCH_URL` and `ELASTICSEARCH_APIKEY` if not set (for backward compatibility).
+
+### Standalone Demo Cluster (Runtime)
+
+These credentials are used when running the demo:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `STANDALONE_ELASTICSEARCH_URL` | Demo Elasticsearch endpoint | Yes (for demo) |
+| `STANDALONE_ELASTICSEARCH_APIKEY` | API key for demo cluster | Yes (for demo) |
+| `STANDALONE_KIBANA_URL` | Demo Kibana endpoint | Yes (for demo) |
+
+**Note:** Falls back to `ELASTICSEARCH_URL`, `ELASTICSEARCH_APIKEY`, and `KIBANA_URL` if not set (for backward compatibility).
+
+### GCS Configuration (Image Upload)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GCS_BUCKET_NAME` | GCS bucket name for product images | For image upload |
+| `GCS_PREFIX` | GCS prefix/folder path | For image upload |
+| `GCS_SERVICE_ACCOUNT_KEY` | Path to GCS service account JSON | For image upload |
+
+### Google AI (Product Generation)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
 | `GOOGLE_API_KEY` | Gemini API key (for product generation) | For generation |
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID | For generation |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account JSON | For generation |

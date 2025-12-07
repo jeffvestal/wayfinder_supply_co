@@ -17,11 +17,11 @@ try:
 except ImportError:
     pass  # python-dotenv not installed, skip
 
-ES_URL = os.getenv("ELASTICSEARCH_URL", "http://kubernetes-vm:30920")
-ES_APIKEY = os.getenv("ELASTICSEARCH_APIKEY", "")
+ES_URL = os.getenv("SNAPSHOT_ELASTICSEARCH_URL", os.getenv("ELASTICSEARCH_URL", "http://kubernetes-vm:30920"))
+ES_APIKEY = os.getenv("SNAPSHOT_ELASTICSEARCH_APIKEY", os.getenv("ELASTICSEARCH_APIKEY", ""))
 
 if not ES_APIKEY:
-    raise ValueError("ELASTICSEARCH_APIKEY environment variable is required")
+    raise ValueError("SNAPSHOT_ELASTICSEARCH_APIKEY (or ELASTICSEARCH_APIKEY) environment variable is required")
 
 es = Elasticsearch(
     [ES_URL],

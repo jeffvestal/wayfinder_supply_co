@@ -16,11 +16,11 @@ try:
 except ImportError:
     pass  # python-dotenv not installed, skip
 
-KIBANA_URL = os.getenv("KIBANA_URL", "http://kubernetes-vm:30001")
-ES_APIKEY = os.getenv("ELASTICSEARCH_APIKEY", "")
+KIBANA_URL = os.getenv("STANDALONE_KIBANA_URL", os.getenv("KIBANA_URL", "http://kubernetes-vm:30001"))
+ES_APIKEY = os.getenv("STANDALONE_ELASTICSEARCH_APIKEY", os.getenv("ELASTICSEARCH_APIKEY", ""))
 
 if not ES_APIKEY:
-    raise ValueError("ELASTICSEARCH_APIKEY environment variable is required")
+    raise ValueError("STANDALONE_ELASTICSEARCH_APIKEY (or ELASTICSEARCH_APIKEY) environment variable is required")
 
 HEADERS = {
     "Authorization": f"ApiKey {ES_APIKEY}",

@@ -15,28 +15,42 @@ try:
 except ImportError:
     pass  # python-dotenv not installed, skip
 
-ES_URL = os.getenv("ELASTICSEARCH_URL", "http://kubernetes-vm:30920")
-KIBANA_URL = os.getenv("KIBANA_URL", "http://kubernetes-vm:30001")
-ES_APIKEY = os.getenv("ELASTICSEARCH_APIKEY", "")
+def get_env_vars(mode: str = "standalone"):
+    """Get environment variables based on mode."""
+    if mode == "snapshot":
+        es_url = os.getenv("SNAPSHOT_ELASTICSEARCH_URL", os.getenv("ELASTICSEARCH_URL", "http://kubernetes-vm:30920"))
+        es_apikey = os.getenv("SNAPSHOT_ELASTICSEARCH_APIKEY", os.getenv("ELASTICSEARCH_APIKEY", ""))
+        kibana_url = None  # Not needed for snapshot mode
+    else:  # standalone
+        es_url = os.getenv("STANDALONE_ELASTICSEARCH_URL", os.getenv("ELASTICSEARCH_URL", "http://kubernetes-vm:30920"))
+        es_apikey = os.getenv("STANDALONE_ELASTICSEARCH_APIKEY", os.getenv("ELASTICSEARCH_APIKEY", ""))
+        kibana_url = os.getenv("STANDALONE_KIBANA_URL", os.getenv("KIBANA_URL", "http://kubernetes-vm:30001"))
+    
+    if not es_apikey:
+        prefix = "SNAPSHOT_" if mode == "snapshot" else "STANDALONE_"
+        raise ValueError(f"{prefix}ELASTICSEARCH_APIKEY (or ELASTICSEARCH_APIKEY) environment variable is required")
+    
+    headers = {
+        "Authorization": f"ApiKey {es_apikey}",
+        "Content-Type": "application/json",
+        "kbn-xsrf": "true",
+    }
+    
+    return es_url, es_apikey, kibana_url, headers
 
-if not ES_APIKEY:
-    raise ValueError("ELASTICSEARCH_APIKEY environment variable is required")
 
-HEADERS = {
-    "Authorization": f"ApiKey {ES_APIKEY}",
-    "Content-Type": "application/json",
-    "kbn-xsrf": "true",
-}
+# Default to standalone mode for backward compatibility
+ES_URL, ES_APIKEY, KIBANA_URL, HEADERS = get_env_vars("standalone")
 
 
-def check_elasticsearch() -> Tuple[bool, List[str]]:
+def check_elasticsearch(es_url: str, es_apikey: str) -> Tuple[bool, List[str]]:
     """Check Elasticsearch connectivity and indices."""
     issues = []
     
     try:
         es = Elasticsearch(
-            [ES_URL], 
-            api_key=ES_APIKEY, 
+            [es_url], 
+            api_key=es_apikey, 
             request_timeout=10
         )
         
@@ -63,14 +77,17 @@ def check_elasticsearch() -> Tuple[bool, List[str]]:
         return False, [f"Elasticsearch connection error: {str(e)}"]
 
 
-def check_kibana() -> Tuple[bool, List[str]]:
+def check_kibana(kibana_url: str, headers: dict) -> Tuple[bool, List[str]]:
     """Check Kibana connectivity."""
     issues = []
     
+    if not kibana_url:
+        return False, ["Kibana URL not configured for this mode"]
+    
     try:
         response = requests.get(
-            f"{KIBANA_URL}/api/status",
-            headers=HEADERS,
+            f"{kibana_url}/api/status",
+            headers=headers,
             timeout=10
         )
         
@@ -84,13 +101,16 @@ def check_kibana() -> Tuple[bool, List[str]]:
         return False, [f"Kibana connection error: {str(e)}"]
 
 
-def check_agents() -> Tuple[bool, List[str]]:
+def check_agents(kibana_url: str, headers: dict) -> Tuple[bool, List[str]]:
     """Check that required agents exist."""
     issues = []
     
+    if not kibana_url:
+        return False, ["Kibana URL not configured for this mode"]
+    
     try:
-        url = f"{KIBANA_URL}/api/agent_builder/agents"
-        response = requests.get(url, headers=HEADERS, timeout=10)
+        url = f"{kibana_url}/api/agent_builder/agents"
+        response = requests.get(url, headers=headers, timeout=10)
         
         if response.status_code != 200:
             issues.append(f"Failed to list agents: {response.status_code}")
@@ -112,13 +132,16 @@ def check_agents() -> Tuple[bool, List[str]]:
         return False, [f"Agent check error: {str(e)}"]
 
 
-def check_workflows() -> Tuple[bool, List[str]]:
+def check_workflows(kibana_url: str, headers: dict) -> Tuple[bool, List[str]]:
     """Check that required workflows exist."""
     issues = []
     
+    if not kibana_url:
+        return False, ["Kibana URL not configured for this mode"]
+    
     try:
-        url = f"{KIBANA_URL}/api/workflows"
-        response = requests.get(url, headers=HEADERS, timeout=10)
+        url = f"{kibana_url}/api/workflows"
+        response = requests.get(url, headers=headers, timeout=10)
         
         if response.status_code != 200:
             issues.append(f"Failed to list workflows: {response.status_code}")
@@ -167,14 +190,28 @@ def check_mcp_server() -> Tuple[bool, List[str]]:
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Validate Wayfinder Supply Co. setup")
+    parser.add_argument(
+        "--mode",
+        choices=["snapshot", "standalone"],
+        default="standalone",
+        help="Validation mode: 'snapshot' for data loading cluster, 'standalone' for demo cluster (default)"
+    )
+    args = parser.parse_args()
+    
     print("Validating Wayfinder Supply Co. Setup...")
+    print(f"Mode: {args.mode}")
     print("=" * 60)
     
+    # Get environment variables for the selected mode
+    es_url, es_apikey, kibana_url, headers = get_env_vars(args.mode)
+    
     checks = [
-        ("Elasticsearch", check_elasticsearch),
-        ("Kibana", check_kibana),
-        ("Agents", check_agents),
-        ("Workflows", check_workflows),
+        ("Elasticsearch", lambda: check_elasticsearch(es_url, es_apikey)),
+        ("Kibana", lambda: check_kibana(kibana_url, headers) if args.mode == "standalone" else (True, [])),
+        ("Agents", lambda: check_agents(kibana_url, headers) if args.mode == "standalone" else (True, [])),
+        ("Workflows", lambda: check_workflows(kibana_url, headers) if args.mode == "standalone" else (True, [])),
         ("MCP Server", check_mcp_server),
     ]
     

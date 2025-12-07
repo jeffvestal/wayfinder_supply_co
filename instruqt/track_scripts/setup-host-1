@@ -38,6 +38,11 @@ done
 
 echo "[Workshop] ✓ Elasticsearch is reachable"
 
+# Get environment variables from kubernetes-vm (includes ELASTICSEARCH_APIKEY)
+echo "[Workshop] Getting environment variables from kubernetes-vm..."
+export $(curl -s http://kubernetes-vm:9000/env | xargs)
+echo "[Workshop] ✓ Environment variables loaded"
+
 ####################################################################### INSTALL NODE.JS
 
 echo "[Workshop] Installing Node.js..."
