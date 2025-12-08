@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ProductCard } from './ProductCard'
+import { ProductDetailModal } from './ProductDetailModal'
 import { HeroSection } from './HeroSection'
 import { Product, UserId } from '../types'
 import { api } from '../lib/api'
@@ -8,6 +9,7 @@ import { motion } from 'framer-motion'
 
 interface StorefrontProps {
   userId: UserId
+  onStartChat?: (productName: string, tag: string) => void
 }
 
 const categories = ['All', 'Camping', 'Hiking', 'Climbing', 'Water Sports', 'Winter']
@@ -104,11 +106,17 @@ const MOCK_PRODUCTS: Product[] = [
   }
 ]
 
-export function Storefront({ userId }: StorefrontProps) {
+export function Storefront({ userId, onStartChat }: StorefrontProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [usingMockData, setUsingMockData] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+
+  const handleTagClick = (productName: string, tag: string) => {
+    setSelectedProduct(null) // Close the modal
+    onStartChat?.(productName, tag)
+  }
 
   useEffect(() => {
     loadProducts()
@@ -141,7 +149,7 @@ export function Storefront({ userId }: StorefrontProps) {
       <HeroSection />
 
       {/* Content Section - Dark theme */}
-      <div className="relative z-10">
+      <div id="products-section" className="relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           {/* Mock Data Banner */}
           {usingMockData && (
@@ -205,13 +213,27 @@ export function Storefront({ userId }: StorefrontProps) {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                 >
-                  <ProductCard product={product} userId={userId} />
+                  <ProductCard 
+                    product={product} 
+                    userId={userId} 
+                    onClick={() => setSelectedProduct(product)}
+                  />
                 </motion.div>
               ))}
             </motion.div>
           )}
         </div>
       </div>
+
+      {/* Product Detail Modal */}
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          userId={userId}
+          onClose={() => setSelectedProduct(null)}
+          onTagClick={handleTagClick}
+        />
+      )}
     </div>
   )
 }

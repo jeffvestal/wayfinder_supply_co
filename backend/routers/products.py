@@ -45,22 +45,6 @@ async def list_products(
         raise HTTPException(status_code=500, detail=f"Error fetching products: {str(e)}")
 
 
-@router.get("/products/{product_id}")
-async def get_product(product_id: str):
-    """
-    Get a single product by ID.
-    """
-    es = get_elastic_client()
-    
-    try:
-        response = es.get(index="product-catalog", id=product_id)
-        product = response["_source"]
-        product["id"] = response["_id"]
-        return product
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Product not found: {str(e)}")
-
-
 @router.get("/products/search")
 async def search_products(
     q: str,
@@ -68,6 +52,7 @@ async def search_products(
 ):
     """
     Semantic search for products.
+    NOTE: This route MUST come before /products/{product_id} to avoid matching "search" as a product_id
     """
     es = get_elastic_client()
     
@@ -77,8 +62,9 @@ async def search_products(
             query={
                 "multi_match": {
                     "query": q,
-                    "fields": ["title^2", "description", "description.semantic"],
-                    "type": "best_fields"
+                    "fields": ["title^3", "description", "category^2", "brand"],
+                    "type": "best_fields",
+                    "fuzziness": "AUTO"
                 }
             },
             size=limit
@@ -98,5 +84,21 @@ async def search_products(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+
+@router.get("/products/{product_id}")
+async def get_product(product_id: str):
+    """
+    Get a single product by ID.
+    """
+    es = get_elastic_client()
+    
+    try:
+        response = es.get(index="product-catalog", id=product_id)
+        product = response["_source"]
+        product["id"] = response["_id"]
+        return product
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Product not found: {str(e)}")
 
 

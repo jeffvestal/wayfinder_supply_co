@@ -33,6 +33,13 @@ function App() {
   const [currentView, setCurrentView] = useState<View>('storefront')
   const [chatModalOpen, setChatModalOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>()
+
+  // Handle opening chat with context from product tags
+  const handleStartChatWithContext = (productName: string, tag: string) => {
+    setChatInitialMessage(`I'm looking at the **${productName}** and I'm interested in other **${tag}** gear. What do you recommend?`)
+    setChatModalOpen(true)
+  }
 
   useEffect(() => {
     const handleNavigate = (e: CustomEvent) => {
@@ -112,10 +119,10 @@ function App() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setChatModalOpen(true)}
-                className="hidden lg:flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
+                className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
               >
                 <MessageSquare className="w-4 h-4" />
-                <span className="text-sm font-medium">Quick Chat</span>
+                <span className="hidden sm:inline text-sm font-medium">Quick Chat</span>
               </button>
               <UserSwitcher
                 currentUser={currentUser}
@@ -196,7 +203,7 @@ function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <Storefront userId={currentUser} />
+              <Storefront userId={currentUser} onStartChat={handleStartChatWithContext} />
             </motion.div>
           )}
           {currentView === 'trip-planner' && (
@@ -226,10 +233,10 @@ function App() {
         </AnimatePresence>
       </main>
 
-      {/* Floating Chat Button (mobile) */}
+      {/* Floating Chat Button (only on very small screens where header might be cramped) */}
       <button
         onClick={() => setChatModalOpen(true)}
-        className="fixed bottom-6 right-6 md:hidden w-14 h-14 bg-primary rounded-full shadow-lg shadow-primary/50 flex items-center justify-center text-white hover:scale-110 transition-transform z-40"
+        className="fixed bottom-6 right-6 sm:hidden w-14 h-14 bg-primary rounded-full shadow-lg shadow-primary/50 flex items-center justify-center text-white hover:scale-110 transition-transform z-40"
       >
         <MessageSquare className="w-6 h-6" />
       </button>
@@ -240,6 +247,8 @@ function App() {
         onClose={() => setChatModalOpen(false)}
         userId={currentUser}
         onOpenTripPlanner={() => setCurrentView('trip-planner')}
+        initialMessage={chatInitialMessage}
+        onInitialMessageSent={() => setChatInitialMessage(undefined)}
       />
     </div>
   )

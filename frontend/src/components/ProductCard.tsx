@@ -7,13 +7,15 @@ import { motion } from 'framer-motion'
 interface ProductCardProps {
   product: Product
   userId: UserId
+  onClick?: () => void
 }
 
-export function ProductCard({ product, userId }: ProductCardProps) {
+export function ProductCard({ product, userId, onClick }: ProductCardProps) {
   const [adding, setAdding] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
 
-  const handleAddToCart = async () => {
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent card click
     try {
       setAdding(true)
       await api.addToCart(userId, product.id, 1)
@@ -28,7 +30,8 @@ export function ProductCard({ product, userId }: ProductCardProps) {
   return (
     <motion.div
       whileHover={{ y: -4 }}
-      className="bg-slate-800/50 backdrop-blur-sm rounded-2xl overflow-hidden border border-slate-700 hover:border-primary/50 shadow-lg hover:shadow-primary/10 transition-all duration-300 group"
+      onClick={onClick}
+      className="bg-slate-800/50 backdrop-blur-sm rounded-2xl overflow-hidden border border-slate-700 hover:border-primary/50 shadow-lg hover:shadow-primary/10 transition-all duration-300 group cursor-pointer"
     >
       <div className="aspect-square bg-slate-800 overflow-hidden relative">
         {product.image_url ? (
@@ -82,7 +85,7 @@ export function ProductCard({ product, userId }: ProductCardProps) {
           ))}
         </div>
         <button
-          onClick={handleAddToCart}
+          onClick={(e) => handleAddToCart(e)}
           disabled={adding}
           className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-[1.02]"
         >

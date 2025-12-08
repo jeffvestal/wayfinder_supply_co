@@ -31,11 +31,56 @@ function getApiUrl(): string {
 const API_URL = getApiUrl();
 
 export interface StreamEvent {
-  event: string;
-  data: string;
+  type: string;
+  data: any;
+}
+
+export interface TripContext {
+  destination: string | null;
+  dates: string | null;
+  activity: string | null;
+}
+
+export interface ExtractedProduct {
+  name: string;
+  price: number;
+  category: string;
+  reason: string;
+}
+
+export interface ExtractedItinerary {
+  day: number;
+  title: string;
+  distance?: string;
+  activities: string[];
+}
+
+export interface TripEntities {
+  products: ExtractedProduct[];
+  itinerary: ExtractedItinerary[];
+  safety_notes: string[];
+  weather: { high: number; low: number; conditions: string } | null;
 }
 
 export const api = {
+  async parseTripContext(message: string): Promise<TripContext> {
+    const url = new URL(`${API_URL}/api/parse-trip-context`);
+    url.searchParams.set('message', message);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
   async streamChat(
     message: string,
     userId: string,
@@ -63,26 +108,26 @@ export const api = {
       throw new Error('No response body');
     }
 
+    let buffer = '';
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
+      buffer += decoder.decode(value, { stream: true });
+      
+      // Process complete lines
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {
-            const data = JSON.parse(line.slice(6));
-            onEvent({
-              event: data.event || 'message',
-              data: JSON.stringify(data.data || {}),
-            });
+            const eventData = JSON.parse(line.slice(6));
+            onEvent(eventData);
           } catch (e) {
             // Skip invalid JSON
           }
-        } else if (line.startsWith('event: ')) {
-          // Handle event type
         }
       }
     }
@@ -103,6 +148,19 @@ export const api = {
 
   async getProduct(id: string): Promise<any> {
     const response = await fetch(`${API_URL}/api/products/${id}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async searchProducts(query: string, limit = 5): Promise<{ products: any[]; total: number }> {
+    const url = new URL(`${API_URL}/api/products/search`);
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', limit.toString());
+
+    const response = await fetch(url.toString());
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -159,5 +217,28 @@ export const api = {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
   },
-};
 
+  async extractTripEntities(tripPlan: string): Promise<TripEntities> {
+    const url = new URL(`${API_URL}/api/extract-trip-entities`);
+    url.searchParams.set('trip_plan', tripPlan);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      // Return empty structure on error rather than throwing
+      return {
+        products: [],
+        itinerary: [],
+        safety_notes: [],
+        weather: null,
+      };
+    }
+
+    return response.json();
+  },
+};

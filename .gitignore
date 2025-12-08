@@ -32,8 +32,6 @@ build/
 
 # Generated files
 generated_products/
-public/images/products/*.jpg
-public/images/products/*.png
 frontend/public/images/products/*.jpg
 frontend/public/images/products/*.png
 

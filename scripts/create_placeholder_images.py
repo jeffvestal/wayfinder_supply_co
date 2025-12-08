@@ -59,7 +59,7 @@ def create_placeholder_image(product_id: str, title: str, output_path: Path):
 
 def main():
     products_file = Path("generated_products/products.json")
-    images_dir = Path("public/images/products")
+    images_dir = Path("frontend/public/images/products")
     images_dir.mkdir(parents=True, exist_ok=True)
     
     if not products_file.exists():

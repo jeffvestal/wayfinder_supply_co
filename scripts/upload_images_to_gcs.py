@@ -37,9 +37,10 @@ SERVICE_ACCOUNT_KEY = os.path.expanduser(
 )
 
 
-def upload_images(images_dir: Path, bucket_name: str, gcs_prefix: str) -> dict:
+def upload_images(images_dir: Path, bucket_name: str, gcs_prefix: str, force: bool = False) -> dict:
     """
     Upload all images to GCS and return mapping of filename to public URL.
+    Skips images that already exist in the bucket unless force=True.
     
     Returns:
         dict: Mapping of filename to public URL
@@ -66,15 +67,26 @@ def upload_images(images_dir: Path, bucket_name: str, gcs_prefix: str) -> dict:
         print(f"WARNING: No images found in {images_dir}")
         return {}
     
-    print(f"Found {len(image_files)} images to upload")
+    print(f"Found {len(image_files)} local images")
     print(f"Uploading to gs://{bucket_name}/{gcs_prefix}")
+    if not force:
+        print("(Skipping images that already exist in bucket)")
     print("=" * 60)
     
     url_mapping = {}
+    uploaded_count = 0
+    skipped_count = 0
     
     for image_file in sorted(image_files):
         blob_name = f"{gcs_prefix}{image_file.name}"
         blob = bucket.blob(blob_name)
+        public_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+        
+        # Check if blob already exists (skip if not forcing)
+        if not force and blob.exists():
+            url_mapping[image_file.name] = public_url
+            skipped_count += 1
+            continue
         
         print(f"Uploading {image_file.name}...", end=" ")
         
@@ -92,12 +104,14 @@ def upload_images(images_dir: Path, bucket_name: str, gcs_prefix: str) -> dict:
         # Note: For uniform bucket-level access, set bucket to public instead of per-object ACLs
         # gsutil iam ch allUsers:objectViewer gs://wayfinder_supply_co
         
-        public_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
         url_mapping[image_file.name] = public_url
+        uploaded_count += 1
         print(f"✓")
     
     print("=" * 60)
-    print(f"✓ Uploaded {len(url_mapping)} images")
+    print(f"✓ Uploaded {uploaded_count} new images")
+    if skipped_count > 0:
+        print(f"✓ Skipped {skipped_count} images (already in bucket)")
     
     return url_mapping
 
@@ -176,6 +190,11 @@ def main():
         action="store_true",
         help="Skip upload, just update product URLs"
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-upload of all images (even if they exist in bucket)"
+    )
     
     args = parser.parse_args()
     
@@ -195,7 +214,7 @@ def main():
         print("Skipping upload, updating URLs only...")
         url_mapping = {}
     else:
-        url_mapping = upload_images(images_dir, args.bucket, args.prefix)
+        url_mapping = upload_images(images_dir, args.bucket, args.prefix, force=args.force)
     
     if products_path.exists():
         update_product_urls(products_path, url_mapping, args.bucket, args.prefix)

@@ -2,10 +2,17 @@ import { motion } from 'framer-motion'
 import { ArrowRight, MapPin, Calendar, Mountain } from 'lucide-react'
 
 export function HeroSection() {
-  const navigate = () => {
+  const navigateToTripPlanner = () => {
     // Navigate to trip planner - will be handled by App state
     const event = new CustomEvent('navigate', { detail: 'trip-planner' })
     window.dispatchEvent(event)
+  }
+
+  const scrollToProducts = () => {
+    const productsSection = document.getElementById('products-section')
+    if (productsSection) {
+      productsSection.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   return (
@@ -55,13 +62,16 @@ export function HeroSection() {
             className="flex flex-wrap gap-4"
           >
             <button
-              onClick={navigate}
+              onClick={navigateToTripPlanner}
               className="group bg-primary hover:bg-primary-dark text-white font-semibold px-8 py-4 rounded-lg transition-all duration-300 flex items-center gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-105"
             >
               Plan Your Adventure
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
-            <button className="glass text-white font-semibold px-8 py-4 rounded-lg transition-all duration-300 hover:bg-slate-800/80">
+            <button 
+              onClick={scrollToProducts}
+              className="glass text-white font-semibold px-8 py-4 rounded-lg transition-all duration-300 hover:bg-slate-800/80"
+            >
               Browse Gear
             </button>
           </motion.div>

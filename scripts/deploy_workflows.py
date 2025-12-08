@@ -30,8 +30,20 @@ HEADERS = {
 }
 
 
+def delete_workflow(workflow_id: str, workflow_name: str) -> bool:
+    """Delete a workflow if it exists."""
+    url = f"{KIBANA_URL}/api/workflows/{workflow_id}"
+    response = requests.delete(url, headers=HEADERS)
+    if response.status_code in [200, 204]:
+        print(f"  ↻ Deleted existing workflow: {workflow_name}")
+        return True
+    elif response.status_code == 404:
+        return True  # Doesn't exist, that's fine
+    return False
+
+
 def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
-    """Deploy a workflow from YAML file and return its ID."""
+    """Deploy a workflow from YAML file and return its ID. Deletes existing workflow first."""
     workflow_path = Path(workflow_yaml_path)
     
     if not workflow_path.exists():
@@ -48,24 +60,15 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     
     url = f"{KIBANA_URL}/api/workflows"
     
-    # Check if workflow already exists
+    # Delete existing workflow first (script is source of truth)
     list_response = requests.get(url, headers=HEADERS)
     if list_response.status_code == 200:
         workflows = list_response.json().get("data", [])
         for wf in workflows:
             if wf.get("name") == workflow_name:
                 existing_id = wf.get("id")
-                print(f"⚠ Workflow '{workflow_name}' already exists (ID: {existing_id}), updating...")
-                # Update existing workflow
-                update_url = f"{url}/{existing_id}"
-                response = requests.put(update_url, headers=HEADERS, json={"yaml": yaml_content})
-                if response.status_code in [200, 201]:
-                    print(f"✓ Updated workflow: {workflow_name} (ID: {existing_id})")
-                    return existing_id
-                else:
-                    print(f"✗ Failed to update workflow: {response.status_code}")
-                    print(f"  Response: {response.text}")
-                    return None
+                delete_workflow(existing_id, workflow_name)
+                break
     
     # Create new workflow - API expects {"yaml": "<yaml_string>"}
     response = requests.post(url, headers=HEADERS, json={"yaml": yaml_content})
@@ -81,7 +84,8 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
         return None
 
 
-def main():
+def main() -> int:
+    """Main function. Returns number of failures (0 = success)."""
     import argparse
     parser = argparse.ArgumentParser(description="Deploy Elastic Workflows")
     parser.add_argument(
@@ -95,7 +99,7 @@ def main():
     
     if not workflows_dir.exists():
         print(f"✗ Workflows directory not found: {workflows_dir}")
-        return
+        return 1
     
     print("Deploying Elastic Workflows...")
     print("=" * 60)
@@ -104,7 +108,7 @@ def main():
     
     if not workflow_files:
         print(f"⚠ No workflow files found in {workflows_dir}")
-        return
+        return 1
     
     success_count = 0
     workflow_ids = {}
@@ -114,6 +118,8 @@ def main():
             success_count += 1
             workflow_ids[workflow_file.stem] = workflow_id
     
+    failures = len(workflow_files) - success_count
+    
     print("\n" + "=" * 60)
     print(f"Deployed {success_count}/{len(workflow_files)} workflows")
     if workflow_ids:
@@ -121,8 +127,12 @@ def main():
         for name, wf_id in workflow_ids.items():
             print(f"  {name}: {wf_id}")
     print("=" * 60)
+    
+    return failures
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    failures = main()
+    sys.exit(failures if failures else 0)
 

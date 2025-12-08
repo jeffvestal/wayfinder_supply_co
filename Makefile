@@ -60,8 +60,8 @@ test: validate
 clean:
 	@echo "Cleaning generated files..."
 	rm -rf generated_products/*.json
-	rm -rf public/images/products/*.jpg
-	rm -rf public/images/products/*.png
+	rm -rf frontend/public/images/products/*.jpg
+	rm -rf frontend/public/images/products/*.png
 	rm -rf backend/__pycache__ mcp_server/__pycache__ scripts/__pycache__
 	rm -rf backend/**/__pycache__ mcp_server/**/__pycache__
 	@echo "Clean complete!"

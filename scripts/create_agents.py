@@ -29,11 +29,54 @@ HEADERS = {
     "x-elastic-internal-origin": "kibana",  # Required for internal Kibana APIs
 }
 
+# Track failures for exit code
+FAILURES = 0
+
+
+def delete_agent(agent_id: str) -> bool:
+    """Delete an agent if it exists."""
+    url = f"{KIBANA_URL}/api/agent_builder/agents/{agent_id}"
+    response = requests.delete(url, headers=HEADERS)
+    if response.status_code in [200, 204]:
+        print(f"  ↻ Deleted existing agent: {agent_id}")
+        return True
+    elif response.status_code == 404:
+        return True  # Doesn't exist, that's fine
+    return False
+
+
+def delete_tool(tool_id: str) -> bool:
+    """Delete a tool if it exists."""
+    url = f"{KIBANA_URL}/api/agent_builder/tools/{tool_id}"
+    response = requests.delete(url, headers=HEADERS)
+    if response.status_code in [200, 204]:
+        print(f"  ↻ Deleted existing tool: {tool_id}")
+        return True
+    elif response.status_code == 404:
+        return True  # Doesn't exist, that's fine
+    return False
+
+
+def delete_workflow(workflow_id: str) -> bool:
+    """Delete a workflow if it exists."""
+    url = f"{KIBANA_URL}/api/workflows/{workflow_id}"
+    response = requests.delete(url, headers=HEADERS)
+    if response.status_code in [200, 204]:
+        print(f"  ↻ Deleted existing workflow: {workflow_id}")
+        return True
+    elif response.status_code == 404:
+        return True  # Doesn't exist, that's fine
+    return False
+
 
 def create_agent(agent_id: str, name: str, description: str, 
                  instructions: str, tool_ids: List[str]) -> Optional[str]:
-    """Create an agent with correct API structure."""
+    """Create an agent with correct API structure. Deletes existing agent first."""
+    global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/agents"
+    
+    # Delete existing agent first (script is source of truth)
+    delete_agent(agent_id)
     
     agent_config = {
         "id": agent_id,
@@ -54,26 +97,28 @@ def create_agent(agent_id: str, name: str, description: str,
         created_agent_id = data.get("id") or agent_id
         print(f"✓ Created agent: {name} (ID: {created_agent_id})")
         return created_agent_id
-    elif response.status_code == 409:
-        # Agent already exists, try to find it
-        print(f"⚠ Agent '{name}' already exists, discovering...")
-        list_response = requests.get(url, headers=HEADERS)
-        if list_response.status_code == 200:
-            agents = list_response.json().get("data", [])
-            for agent in agents:
-                if agent.get("name") == name or agent.get("id") == agent_id:
-                    found_id = agent.get("id")
-                    print(f"✓ Found existing agent: {name} (ID: {found_id})")
-                    return found_id
     else:
         print(f"✗ Failed to create agent '{name}': {response.status_code}")
         print(f"  Response: {response.text}")
+        FAILURES += 1
         return None
 
 
 def create_trip_planner_agent(tool_ids: List[str]) -> Optional[str]:
     """Create the main Trip Planner agent."""
-    instructions = """You are the Wayfinder Supply Co. Adventure Logistics Agent. Your role is to help customers plan their outdoor adventures and recommend appropriate gear.
+    instructions = """You are the Wayfinder Supply Co. Adventure Logistics Agent. Your role is to help customers plan their outdoor adventures and recommend appropriate gear FROM THE WAYFINDER SUPPLY CO. CATALOG ONLY.
+
+## CRITICAL RULE: CATALOG-ONLY RECOMMENDATIONS
+
+**NEVER recommend products from external brands like Mountain Hardwear, Big Agnes, Patagonia, North Face, REI, etc.**
+
+You MUST:
+1. ALWAYS use the product_search tool BEFORE making any gear recommendations
+2. ONLY recommend products that are returned by the product_search tool
+3. Include the EXACT product name and price from the search results
+4. If the catalog doesn't have a suitable product, say "We don't currently carry [item type] but recommend looking for one with [specs]"
+
+Wayfinder Supply Co. brands include: Wayfinder Supply, Summit Pro, TrailBlazer, and other house brands.
 
 ## LOCATION COVERAGE
 
@@ -90,43 +135,45 @@ Wayfinder has detailed trip coverage for 30 curated adventure destinations world
 When a customer asks about a trip, FIRST use the check_trip_safety tool to validate location coverage:
 
 - If `covered: true` → Proceed with full trip planning using the weather and activity data
-- If `covered: false` → Respond warmly:
-  "Great choice for adventure! Wayfinder doesn't have detailed coverage for [location] yet, but we're constantly expanding. Based on the region, you might enjoy [alternatives from response]. Would you like me to plan for one of those instead? Or I can still provide general guidance for [location] based on typical conditions for that region."
+- If `covered: false` → Respond warmly and suggest similar covered destinations
 
-## TRIP PLANNING STEPS (for covered locations)
+## TRIP PLANNING STEPS
 
-1. **Safety Check**: Use the check_trip_safety workflow tool to get weather conditions, seasonal activities, and road alerts.
+1. **Safety Check**: Use check_trip_safety workflow to get weather conditions and road alerts.
 
-2. **Customer Profile**: Use the get_customer_profile workflow tool to retrieve their purchase history and loyalty tier.
+2. **Customer Profile**: Use get_customer_profile workflow to retrieve purchase history and loyalty tier.
 
-3. **Personalization**: Use the get_user_affinity ES|QL tool to understand their gear preferences (e.g., ultralight, budget, expedition).
+3. **Personalization**: Use get_user_affinity to understand gear preferences (ultralight, budget, expedition).
 
-4. **Gear Requirements**: Based on the weather conditions, determine what gear is needed:
-   - If min_temp_f < 30: Recommend 0-degree or colder sleeping bags
-   - If road_alert includes "traction" or "chain": Recommend tire chains
-   - Match gear to the seasonal activities (e.g., skiing gear for winter, kayaking for summer)
-   - Consider the user's affinity (e.g., prefer ultralight gear if that's their style)
+4. **SEARCH CATALOG FIRST**: Before making ANY gear recommendations:
+   - Use product_search to find "sleeping bags" for the trip conditions
+   - Use product_search to find "tents" suitable for the season
+   - Use product_search to find "backpacks" matching user preferences
+   - Use product_search for any other needed categories
+   
+5. **Build Recommendations**: From the search results:
+   - Select products that match the trip requirements
+   - Include the exact product name and price from the catalog
+   - Note items the customer already owns (from purchase_history)
 
-5. **Check Ownership**: Compare required gear against the customer's purchase_history to see what they already own.
-
-6. **Search Products**: Use the product search tool to find products that match:
-   - Required temperature ratings
-   - User's preferred style (from affinity)
-   - Items not already owned
-
-7. **Synthesis**: Create a comprehensive trip plan that includes:
+6. **Synthesis**: Create a trip plan with:
    - Trip overview with location and dates
    - Weather summary and conditions
-   - Recommended activities for the season
-   - Gear checklist (split into "Already Owned" and "To Buy")
+   - **Recommended Gear from Wayfinder Catalog** - ONLY products from search results:
+     - Product Name - $XX.XX (include exact price)
+     - Brief explanation why this product fits
    - Day-by-day itinerary
-   - Special considerations and safety notes
-   - Loyalty perks (if applicable: Platinum gets free shipping, Business gets bulk pricing)
-   - Cart link in format: /cart?add=item1,item2,item3
+   - Safety notes
+   - Loyalty perks (Platinum: free shipping, Business: bulk pricing)
 
-Format your response as clean Markdown with proper headings and lists. Make it visually appealing and easy to scan.
+Format your response as clean Markdown. For each recommended product, use this format:
+- **[Product Name]** - $[Price] (why it fits)
 
-Always prioritize safety and provide clear explanations for your recommendations."""
+Example: **Summit Pro Apex Expedition 20 Sleeping Bag** - $865.72 (rated to 20°F, perfect for winter camping)
+
+If a product category has no matches in our catalog, say: "Note: We're expanding our [category] selection. Check back soon!"
+
+Always prioritize safety and use ONLY Wayfinder catalog products in recommendations."""
     
     return create_agent(
         agent_id="trip-planner-agent",
@@ -170,19 +217,95 @@ Format your response as clean Markdown with proper headings, lists, and emphasis
     )
 
 
-def create_esql_tool(name: str, query: str, description: str) -> Optional[str]:
-    """Create an ES|QL tool and return its ID."""
+def create_context_extractor_agent() -> Optional[str]:
+    """Create the Context Extractor agent that parses trip queries into structured JSON."""
+    instructions = """You extract trip information from user messages. Return ONLY valid JSON, no other text.
+
+Extract:
+- destination: The place/location name only (e.g., "Yosemite", "Rocky Mountains", "Patagonia")
+- dates: When they're going (e.g., "next weekend", "December 14-16", "3 days", "this summer")
+- activity: What they're doing (e.g., "backpacking", "camping", "hiking", "skiing")
+
+Rules:
+- destination: Extract only the location name, not surrounding words like "in" or "to"
+- dates: Keep the user's original phrasing (e.g., "next weekend", "3 days", "December 14-16")
+- activity: Use the primary activity mentioned (e.g., "backpacking", "camping", "hiking")
+
+If a field can't be determined from the message, use null for that field.
+
+Example input: "Planning a 3-day backpacking trip in Yosemite next weekend"
+Example output: {"destination": "Yosemite", "dates": "next weekend", "activity": "backpacking"}
+
+Example input: "Going camping"
+Example output: {"destination": null, "dates": null, "activity": "camping"}
+
+ONLY return the JSON object. No explanation, no markdown formatting, no code blocks, no extra text. Just the raw JSON."""
+    
+    return create_agent(
+        agent_id="context-extractor-agent",
+        name="Trip Context Extractor",
+        description="Extracts destination, dates, and activity from user trip queries. Returns structured JSON only.",
+        instructions=instructions,
+        tool_ids=[]  # No tools needed - just parsing
+    )
+
+
+def create_response_parser_agent() -> Optional[str]:
+    """Create the Response Parser agent that extracts structured data from trip plans."""
+    instructions = """You extract structured data from trip planning responses. Return ONLY valid JSON, no other text.
+
+Extract:
+- products: Array of recommended products with name, price, category, and reason
+- itinerary: Array of days with day number, title, distance, and activities
+- safety_notes: Array of safety warnings and tips
+- weather: Object with high, low, and conditions
+
+JSON Schema:
+{
+  "products": [
+    {"name": "Product Name", "price": 123.45, "category": "sleeping bag", "reason": "why recommended"}
+  ],
+  "itinerary": [
+    {"day": 1, "title": "Day title", "distance": "4.7 miles", "activities": ["activity 1", "activity 2"]}
+  ],
+  "safety_notes": ["note 1", "note 2"],
+  "weather": {"high": 45, "low": 28, "conditions": "Partly cloudy"}
+}
+
+Rules:
+- Extract ALL products mentioned with their exact names and prices
+- Parse prices as numbers (remove $ symbol)
+- Include brand names in product names (e.g., "Summit Pro Apex Expedition 20 Sleeping Bag")
+- If a field cannot be determined, use null or empty array
+- ONLY return the JSON object. No explanation, no markdown, no extra text."""
+    
+    return create_agent(
+        agent_id="response-parser-agent",
+        name="Trip Response Parser",
+        description="Extracts structured JSON from trip plan responses including products, itinerary, and safety info.",
+        instructions=instructions,
+        tool_ids=[]  # No tools needed - just parsing
+    )
+
+
+def create_esql_tool(name: str, query: str, description: str, params: Optional[Dict] = None) -> Optional[str]:
+    """Create an ES|QL tool and return its ID. Deletes existing tool first."""
+    global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
     
     # Generate a unique ID for the tool
     tool_id = f"tool-esql-{name.replace('_', '-')}"
+    
+    # Delete existing tool first (script is source of truth)
+    delete_tool(tool_id)
     
     tool_config = {
         "id": tool_id,
         "type": "esql",
         "description": description,
         "configuration": {
-            "query": query
+            "query": query,
+            "params": params or {}  # Required by API
         }
     }
     
@@ -190,25 +313,26 @@ def create_esql_tool(name: str, query: str, description: str) -> Optional[str]:
     
     if response.status_code in [200, 201]:
         data = response.json()
-        tool_id = data.get("id") or data.get("tool_id")
-        print(f"✓ Created ES|QL tool: {name} (ID: {tool_id})")
-        return tool_id
-    elif response.status_code == 409:
-        # Tool already exists, return the ID we tried to create
-        print(f"⚠ ES|QL tool already exists (ID: {tool_id})")
-        return tool_id
+        created_id = data.get("id") or data.get("tool_id") or tool_id
+        print(f"✓ Created ES|QL tool: {name} (ID: {created_id})")
+        return created_id
     else:
         print(f"✗ Failed to create ES|QL tool (ID: {tool_id}): {response.status_code}")
         print(f"  Response: {response.text}")
+        FAILURES += 1
         return None
 
 
 def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optional[str]:
-    """Create a workflow tool and return its ID."""
+    """Create a workflow tool and return its ID. Deletes existing tool first."""
+    global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
     
     # Generate a unique ID for the tool
     tool_id = f"tool-workflow-{name.replace('_', '-')}"
+    
+    # Delete existing tool first (script is source of truth)
+    delete_tool(tool_id)
     
     tool_config = {
         "id": tool_id,
@@ -223,32 +347,33 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
     
     if response.status_code in [200, 201]:
         data = response.json()
-        tool_id = data.get("id") or data.get("tool_id")
-        print(f"✓ Created workflow tool: {name} (ID: {tool_id})")
-        return tool_id
-    elif response.status_code == 409:
-        # Tool already exists, return the ID we tried to create
-        print(f"⚠ Workflow tool already exists (ID: {tool_id})")
-        return tool_id
+        created_id = data.get("id") or data.get("tool_id") or tool_id
+        print(f"✓ Created workflow tool: {name} (ID: {created_id})")
+        return created_id
     else:
         print(f"✗ Failed to create workflow tool (ID: {tool_id}): {response.status_code}")
         print(f"  Response: {response.text}")
+        FAILURES += 1
         return None
 
 
 def create_index_search_tool(name: str, index: str, description: str) -> Optional[str]:
-    """Create an index search tool and return its ID."""
+    """Create an index search tool and return its ID. Deletes existing tool first."""
+    global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
     
     # Generate a unique ID for the tool
     tool_id = f"tool-search-{name.replace('_', '-')}"
+    
+    # Delete existing tool first (script is source of truth)
+    delete_tool(tool_id)
     
     tool_config = {
         "id": tool_id,
         "type": "index_search",
         "description": description,
         "configuration": {
-            "index": index
+            "pattern": index  # API expects 'pattern', not 'index'
         }
     }
     
@@ -256,21 +381,31 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
     
     if response.status_code in [200, 201]:
         data = response.json()
-        tool_id = data.get("id") or data.get("tool_id")
-        print(f"✓ Created index search tool: {name} (ID: {tool_id})")
-        return tool_id
-    elif response.status_code == 409:
-        # Tool already exists, return the ID we tried to create
-        print(f"⚠ Index search tool already exists (ID: {tool_id})")
-        return tool_id
+        created_id = data.get("id") or data.get("tool_id") or tool_id
+        print(f"✓ Created index search tool: {name} (ID: {created_id})")
+        return created_id
     else:
         print(f"✗ Failed to create index search tool (ID: {tool_id}): {response.status_code}")
         print(f"  Response: {response.text}")
+        FAILURES += 1
         return None
 
 
+def get_workflow_id_by_name(workflow_name: str) -> Optional[str]:
+    """Get workflow ID by name from list of workflows."""
+    url = f"{KIBANA_URL}/api/workflows"
+    list_response = requests.get(url, headers=HEADERS)
+    if list_response.status_code == 200:
+        workflows = list_response.json().get("data", [])
+        for wf in workflows:
+            if wf.get("name") == workflow_name:
+                return wf.get("id")
+    return None
+
+
 def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
-    """Deploy a workflow from YAML file."""
+    """Deploy a workflow from YAML file. Deletes existing workflow first."""
+    global FAILURES
     import yaml
     
     # Read the raw YAML content as a string - API expects {"yaml": "..."}
@@ -280,6 +415,11 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     # Also parse it to get the name for logging
     workflow_data = yaml.safe_load(yaml_content)
     workflow_name = workflow_data.get("name", "unknown")
+    
+    # Delete existing workflow first (script is source of truth)
+    existing_id = get_workflow_id_by_name(workflow_name)
+    if existing_id:
+        delete_workflow(existing_id)
     
     url = f"{KIBANA_URL}/api/workflows"
     
@@ -291,22 +431,15 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
         workflow_id = data.get("id") or data.get("workflow_id")
         print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
         return workflow_id
-    elif response.status_code == 409:
-        print(f"⚠ Workflow '{workflow_name}' already exists")
-        # Try to get existing workflow ID
-        list_response = requests.get(url, headers=HEADERS)
-        if list_response.status_code == 200:
-            workflows = list_response.json().get("data", [])
-            for wf in workflows:
-                if wf.get("name") == workflow_name:
-                    return wf.get("id")
     else:
         print(f"✗ Failed to deploy workflow '{workflow_name}': {response.status_code}")
         print(f"  Response: {response.text}")
+        FAILURES += 1
         return None
 
 
-def main():
+def main() -> int:
+    """Main function. Returns number of failures (0 = success)."""
     print("Creating Wayfinder Supply Co. Agents and Workflows...")
     print("=" * 60)
     
@@ -358,20 +491,17 @@ def main():
     print("\n2. Creating Tools...")
     tool_ids = []
     
-    # Create ES|QL tool
-    esql_query = """
-FROM user-clickstream
-| WHERE user_id == ?
+    # Create ES|QL tool - query without parameters (agent provides user_id context)
+    # Note: This is a simple aggregation that the agent interprets
+    esql_query = """FROM user-clickstream
 | WHERE meta_tags IS NOT NULL
-| EVAL tag = TO_STRING(meta_tags)
-| STATS count = COUNT(*) BY tag
+| STATS count = COUNT(*) BY meta_tags
 | SORT count DESC
-| LIMIT 1
-"""
+| LIMIT 5"""
     esql_tool_id = create_esql_tool(
         name="get_user_affinity",
         query=esql_query,
-        description="Get user's gear preference affinity from browsing behavior"
+        description="Get top gear preference tags from user browsing behavior in clickstream data"
     )
     if esql_tool_id:
         tool_ids.append(esql_tool_id)
@@ -407,6 +537,12 @@ FROM user-clickstream
     
     # Step 3: Create agents (reference tool IDs)
     print("\n3. Creating Agents...")
+    context_extractor_id = create_context_extractor_agent()
+    time.sleep(1)
+    
+    response_parser_id = create_response_parser_agent()
+    time.sleep(1)
+    
     trip_planner_id = create_trip_planner_agent(tool_ids=tool_ids)
     time.sleep(1)
     
@@ -414,13 +550,23 @@ FROM user-clickstream
     time.sleep(1)
     
     print("\n" + "=" * 60)
-    print("Setup Complete!")
+    if FAILURES > 0:
+        print(f"Setup FAILED with {FAILURES} error(s)!")
+    else:
+        print("Setup Complete!")
+    print(f"Context Extractor Agent ID: {context_extractor_id}")
+    print(f"Response Parser Agent ID: {response_parser_id}")
     print(f"Trip Planner Agent ID: {trip_planner_id}")
     print(f"Trip Itinerary Agent ID: {trip_itinerary_id}")
     print(f"Created {len(tool_ids)} tools")
     print("=" * 60)
+    
+    # Return proper exit code
+    return FAILURES
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    failures = main()
+    sys.exit(failures if failures else 0)
 

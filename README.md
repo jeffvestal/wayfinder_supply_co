@@ -200,7 +200,12 @@ Run the complete demo outside of Instruqt using Docker containers connected to y
    - Load clickstream data
    - Then deploy workflows and create agents/tools
    
-   **Note:** Ensure `generated_products/products.json` exists before using `--load-data`.
+   **To update data only** (without reconfiguring workflows/agents):
+   ```bash
+   ./scripts/standalone_setup.sh --data-only
+   ```
+   
+   **Note:** Ensure `generated_products/products.json` exists before using `--load-data` or `--data-only`.
 
 2. **Start all services**:
    ```bash
@@ -339,6 +344,226 @@ These credentials are used when running the demo:
 | `GOOGLE_API_KEY` | Gemini API key (for product generation) | For generation |
 | `GOOGLE_CLOUD_PROJECT` | GCP project ID | For generation |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account JSON | For generation |
+
+## Product Generation & Data Loading
+
+This section covers the complete workflow for generating a new product catalog, creating product images, and loading data into Elasticsearch.
+
+### Overview
+
+The product generation pipeline consists of four steps:
+
+1. **Generate Products** — AI-generated product metadata (titles, descriptions, attributes)
+2. **Generate Images** — AI-generated product images using Vertex AI Imagen 3
+3. **Upload Images** — Upload images to GCS bucket for public access
+4. **Load to Elasticsearch** — Create indices and seed product/clickstream data
+
+### Prerequisites
+
+Before generating products, ensure you have:
+
+| Requirement | Purpose |
+|-------------|---------|
+| `GOOGLE_API_KEY` | Gemini API for product metadata generation |
+| `GOOGLE_CLOUD_PROJECT` | GCP project ID for Vertex AI |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Service account JSON for Vertex AI Imagen |
+| `GCS_BUCKET_NAME` | GCS bucket for product images |
+| `GCS_SERVICE_ACCOUNT_KEY` | Service account with bucket write access |
+| `SNAPSHOT_ELASTICSEARCH_URL` | Elasticsearch endpoint for data loading |
+| `SNAPSHOT_ELASTICSEARCH_APIKEY` | API key with index write permissions |
+
+Install required Python packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Step 1: Generate Products
+
+The `generate_products.py` script creates product metadata using Gemini and optionally generates images using Vertex AI Imagen 3.
+
+#### Configuration Files
+
+| Config File | Products | Use Case |
+|-------------|----------|----------|
+| `config/product_generation.yaml` | ~150 | Full catalog (10 categories, 80+ subcategories) |
+| `config/product_generation-tiny.yaml` | ~4 | Testing/development |
+
+#### Generate Full Catalog (with images)
+
+```bash
+# Full catalog with AI-generated images (~150 products)
+python scripts/generate_products.py --config config/product_generation.yaml
+```
+
+#### Generate Products Only (skip images)
+
+```bash
+# Skip image generation (faster, no Vertex AI costs)
+python scripts/generate_products.py --config config/product_generation.yaml --skip-images
+```
+
+#### Test with Tiny Config
+
+```bash
+# Quick test with minimal products
+python scripts/generate_products.py --config config/product_generation-tiny.yaml
+```
+
+**Output:**
+- Product data: `generated_products/products.json`
+- Images (if generated): `frontend/public/images/products/`
+
+### Step 2: Upload Images to GCS
+
+After generating images, upload them to GCS for public access:
+
+```bash
+# Upload images and update product URLs in products.json
+python scripts/upload_images_to_gcs.py
+
+# Or specify custom paths
+python scripts/upload_images_to_gcs.py \
+  --images-dir frontend/public/images/products \
+  --products generated_products/products.json \
+  --bucket wayfinder_supply_co \
+  --prefix products/
+```
+
+**What this does:**
+1. Uploads all images from the images directory to GCS
+2. Updates `products.json` with public GCS URLs (replaces `/images/products/` paths)
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--images-dir` | Directory containing product images (default: `frontend/public/images/products`) |
+| `--products` | Path to products.json (default: `generated_products/products.json`) |
+| `--bucket` | GCS bucket name (default: from `GCS_BUCKET_NAME` env var) |
+| `--prefix` | GCS prefix/folder (default: `products/`) |
+| `--skip-upload` | Skip upload, just update URLs in products.json |
+| `--force` | Force re-upload all images (even if they already exist in bucket) |
+
+**Note:** By default, images that already exist in the bucket are skipped to save time and bandwidth.
+
+### Step 3: Setup Elasticsearch Indices
+
+Create the required indices with proper mappings:
+
+```bash
+# Create indices (skips if they exist)
+python scripts/setup_elastic.py
+
+# Force recreate indices (WARNING: deletes existing data!)
+python scripts/setup_elastic.py --force
+```
+
+**Created Indices:**
+- `product-catalog` — Product data with semantic_text field for ELSER
+- `user-clickstream` — User behavior data for personalization
+
+### Step 4: Load Product Data
+
+Seed the product catalog into Elasticsearch:
+
+```bash
+# Load products from default path
+python scripts/seed_products.py
+
+# Or specify custom products file
+python scripts/seed_products.py --products generated_products/products.json
+```
+
+### Step 5: Generate Clickstream Data
+
+Generate synthetic user behavior data for personalization:
+
+```bash
+python scripts/seed_clickstream.py
+```
+
+**Generated User Personas:**
+- `user_member` — 50 events with "ultralight" preference
+- `user_business` — 30 events with "family/budget" preference  
+- `user_new` — 20 random events
+
+### Complete Workflow Example
+
+Here's the full workflow to generate a new product catalog from scratch:
+
+```bash
+# 1. Set up environment variables (or use .env file)
+export GOOGLE_API_KEY="your-gemini-api-key"
+export GOOGLE_CLOUD_PROJECT="your-gcp-project"
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/vertex-service-account.json"
+export GCS_BUCKET_NAME="wayfinder_supply_co"
+export GCS_SERVICE_ACCOUNT_KEY="/path/to/gcs-service-account.json"
+export SNAPSHOT_ELASTICSEARCH_URL="https://your-cluster.es.cloud:443"
+export SNAPSHOT_ELASTICSEARCH_APIKEY="your-api-key"
+
+# 2. Generate products and images
+python scripts/generate_products.py --config config/product_generation.yaml
+
+# 3. Upload images to GCS
+python scripts/upload_images_to_gcs.py
+
+# 4. Create Elasticsearch indices
+python scripts/setup_elastic.py --force
+
+# 5. Load products into Elasticsearch
+python scripts/seed_products.py
+
+# 6. Generate clickstream data
+python scripts/seed_clickstream.py
+
+# 7. Verify the data
+curl -X GET "${SNAPSHOT_ELASTICSEARCH_URL}/product-catalog/_count" \
+  -H "Authorization: ApiKey ${SNAPSHOT_ELASTICSEARCH_APIKEY}"
+```
+
+### Customizing the Product Catalog
+
+To customize the product catalog, edit `config/product_generation.yaml`:
+
+```yaml
+# Adjust product counts per subcategory
+categories:
+  - name: "Camping"
+    subcategories:
+      - name: "Tents - 3 Season"
+        count: 5  # Generate 5 tents instead of 3
+
+# Add new categories
+  - name: "New Category"
+    subcategories:
+      - name: "New Subcategory"
+        count: 3
+        description: "Description for AI generation"
+        activities: ["activity1", "activity2"]
+
+# Adjust price ranges
+price_ranges:
+  "New Category":
+    min: 29.99
+    max: 299.99
+
+# Modify brand weights
+brands:
+  - name: "Custom Brand"
+    weight: 0.15
+    style: "Brand style description"
+```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "GOOGLE_API_KEY not set" | Set `GOOGLE_API_KEY` environment variable |
+| "Vertex AI not available" | Install: `pip install google-cloud-aiplatform` |
+| "Service account key not found" | Check `GCS_SERVICE_ACCOUNT_KEY` path |
+| "No products found in index" | Run `seed_products.py` before `seed_clickstream.py` |
+| Image generation fails | Verify Vertex AI Imagen API is enabled in GCP |
 
 ## Tech Stack
 

@@ -41,10 +41,10 @@ export function ChatInterface({ userId }: ChatInterfaceProps) {
       let messageContent = ''
 
       await api.streamChat(input.trim(), userId, (event) => {
-        const data = JSON.parse(event.data)
+        const data = event.data
 
         // Handle different event types
-        if (event.event === 'reasoning') {
+        if (event.type === 'reasoning') {
           setThoughtTrace((prev) => [
             ...prev,
             {
@@ -53,7 +53,9 @@ export function ChatInterface({ userId }: ChatInterfaceProps) {
               timestamp: new Date(),
             },
           ])
-        } else if (event.event === 'tool_call') {
+        } else if (event.type === 'tool_call') {
+          // Skip empty tool calls
+          if (!data.tool_id || !data.params || Object.keys(data.params).length === 0) return
           setThoughtTrace((prev) => [
             ...prev,
             {
@@ -66,7 +68,7 @@ export function ChatInterface({ userId }: ChatInterfaceProps) {
               timestamp: new Date(),
             },
           ])
-        } else if (event.event === 'tool_result') {
+        } else if (event.type === 'tool_result') {
           setThoughtTrace((prev) => [
             ...prev,
             {
@@ -78,7 +80,7 @@ export function ChatInterface({ userId }: ChatInterfaceProps) {
               timestamp: new Date(),
             },
           ])
-        } else if (event.event === 'message_chunk') {
+        } else if (event.type === 'message_chunk') {
           messageContent += data.text_chunk || ''
           if (!currentAssistantMessage) {
             currentAssistantMessage = {
@@ -97,7 +99,7 @@ export function ChatInterface({ userId }: ChatInterfaceProps) {
               )
             )
           }
-        } else if (event.event === 'message_complete') {
+        } else if (event.type === 'message_complete') {
           messageContent = data.message_content || messageContent
           if (currentAssistantMessage) {
             setMessages((prev) =>

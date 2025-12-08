@@ -173,7 +173,7 @@ python scripts/create_placeholder_images.py
 
 Once images are generated:
 
-1. Images will be saved to `public/images/products/`
+1. Images will be saved to `frontend/public/images/products/`
 2. Product JSON will reference image paths
 3. Run `python scripts/seed_products.py` to index products
 4. Verify images display in frontend

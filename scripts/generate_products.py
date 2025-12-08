@@ -270,7 +270,7 @@ def main():
     output_dir = Path(config["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    images_dir = Path("public/images/products")
+    images_dir = Path("frontend/public/images/products")
     images_dir.mkdir(parents=True, exist_ok=True)
     
     products = []

@@ -28,7 +28,7 @@ es = Elasticsearch(
 )
 
 
-def create_product_catalog_index():
+def create_product_catalog_index(force: bool = False):
     """Create product-catalog index with semantic_text mapping."""
     mapping = {
         "properties": {
@@ -72,16 +72,20 @@ def create_product_catalog_index():
     
     try:
         if es.indices.exists(index="product-catalog"):
-            print("Index 'product-catalog' already exists, deleting...")
-            es.indices.delete(index="product-catalog")
+            if force:
+                print("Index 'product-catalog' already exists, deleting (--force)...")
+                es.indices.delete(index="product-catalog")
+            else:
+                print("✓ Index 'product-catalog' already exists, skipping")
+                return
     except Exception as e:
         print(f"Note: {e}")
     
     es.indices.create(index="product-catalog", mappings=mapping)
-    print("Created index: product-catalog")
+    print("✓ Created index: product-catalog")
 
 
-def create_clickstream_index():
+def create_clickstream_index(force: bool = False):
     """Create user-clickstream index."""
     mapping = {
         "properties": {
@@ -95,19 +99,34 @@ def create_clickstream_index():
     
     try:
         if es.indices.exists(index="user-clickstream"):
-            print("Index 'user-clickstream' already exists, deleting...")
-            es.indices.delete(index="user-clickstream")
+            if force:
+                print("Index 'user-clickstream' already exists, deleting (--force)...")
+                es.indices.delete(index="user-clickstream")
+            else:
+                print("✓ Index 'user-clickstream' already exists, skipping")
+                return
     except Exception as e:
         print(f"Note: {e}")
     
     es.indices.create(index="user-clickstream", mappings=mapping)
-    print("Created index: user-clickstream")
+    print("✓ Created index: user-clickstream")
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Setup Elasticsearch indices")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Delete and recreate indices if they already exist (WARNING: deletes data!)"
+    )
+    args = parser.parse_args()
+    
     print("Setting up Elasticsearch indices...")
-    create_product_catalog_index()
-    create_clickstream_index()
+    if args.force:
+        print("⚠ Force mode: existing indices will be deleted!")
+    create_product_catalog_index(force=args.force)
+    create_clickstream_index(force=args.force)
     print("Setup complete!")
 
 
