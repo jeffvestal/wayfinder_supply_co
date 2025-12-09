@@ -66,7 +66,9 @@ def create_product_catalog_index(force: bool = False):
                 }
             },
             "price": {"type": "float"},
-            "tags": {"type": "keyword"}
+            "tags": {"type": "keyword"},
+            "average_rating": {"type": "float"},
+            "review_count": {"type": "integer"}
         }
     }
     
@@ -83,6 +85,35 @@ def create_product_catalog_index(force: bool = False):
     
     es.indices.create(index="product-catalog", mappings=mapping)
     print("✓ Created index: product-catalog")
+
+
+def create_product_reviews_index(force: bool = False):
+    """Create product-reviews index."""
+    mapping = {
+        "properties": {
+            "product_id": {"type": "keyword"},
+            "user_id": {"type": "keyword"},
+            "rating": {"type": "integer"},
+            "title": {"type": "text"},
+            "text": {"type": "text"},
+            "timestamp": {"type": "date"},
+            "verified_purchase": {"type": "boolean"}
+        }
+    }
+    
+    try:
+        if es.indices.exists(index="product-reviews"):
+            if force:
+                print("Index 'product-reviews' already exists, deleting (--force)...")
+                es.indices.delete(index="product-reviews")
+            else:
+                print("✓ Index 'product-reviews' already exists, skipping")
+                return
+    except Exception as e:
+        print(f"Note: {e}")
+    
+    es.indices.create(index="product-reviews", mappings=mapping)
+    print("✓ Created index: product-reviews")
 
 
 def create_clickstream_index(force: bool = False):
@@ -126,6 +157,7 @@ def main():
     if args.force:
         print("⚠ Force mode: existing indices will be deleted!")
     create_product_catalog_index(force=args.force)
+    create_product_reviews_index(force=args.force)
     create_clickstream_index(force=args.force)
     print("Setup complete!")
 

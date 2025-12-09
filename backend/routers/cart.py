@@ -129,3 +129,28 @@ async def remove_from_cart(user_id: str, product_id: str):
     return {"message": "Item removed", "cart": carts[user_id]}
 
 
+@router.put("/cart/{product_id}")
+async def update_cart_quantity(user_id: str, product_id: str, quantity: int):
+    """
+    Update item quantity in cart.
+    """
+    if user_id not in carts:
+        raise HTTPException(status_code=404, detail="Cart not found")
+    
+    if quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+    
+    # Find and update item
+    found = False
+    for item in carts[user_id]:
+        if item["product_id"] == product_id:
+            item["quantity"] = quantity
+            found = True
+            break
+    
+    if not found:
+        raise HTTPException(status_code=404, detail="Item not found in cart")
+    
+    return {"message": "Quantity updated", "cart": carts[user_id]}
+
+

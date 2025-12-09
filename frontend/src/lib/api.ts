@@ -209,13 +209,93 @@ export const api = {
   },
 
   async removeFromCart(userId: string, productId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/cart/item/${productId}?user_id=${userId}`, {
+    const response = await fetch(`${API_URL}/api/cart/${productId}?user_id=${userId}`, {
       method: 'DELETE',
     });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
+  },
+
+  async updateCartQuantity(userId: string, productId: string, quantity: number): Promise<void> {
+    const response = await fetch(`${API_URL}/api/cart/${productId}?user_id=${userId}&quantity=${quantity}`, {
+      method: 'PUT',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  },
+
+  async getProductReviews(productId: string, limit = 20, offset = 0): Promise<{ reviews: any[]; total: number }> {
+    const url = new URL(`${API_URL}/api/products/${productId}/reviews`);
+    url.searchParams.set('limit', limit.toString());
+    url.searchParams.set('offset', offset.toString());
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async submitReview(productId: string, userId: string, rating: number, title: string, text: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/products/${productId}/reviews?user_id=${userId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        rating,
+        title,
+        text,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  },
+
+  async createOrder(userId: string, shippingAddress: any, paymentInfo: any): Promise<{ order_id: string; confirmation_number: string }> {
+    const response = await fetch(`${API_URL}/api/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        shipping_address: shippingAddress,
+        payment_info: paymentInfo,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async extractItinerary(tripPlan: string): Promise<{ days: Array<{ day: number; title: string; activities: string[] }> }> {
+    const url = new URL(`${API_URL}/api/extract-itinerary`);
+    url.searchParams.set('trip_plan', tripPlan);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      // Return empty structure on error rather than throwing
+      return { days: [] };
+    }
+
+    return response.json();
   },
 
   async extractTripEntities(tripPlan: string): Promise<TripEntities> {
@@ -237,6 +317,83 @@ export const api = {
         safety_notes: [],
         weather: null,
       };
+    }
+
+    return response.json();
+  },
+
+  async getUserPersonas(): Promise<{ personas: any[] }> {
+    const response = await fetch(`${API_URL}/api/users/personas`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async trackEvent(
+    userId: string,
+    action: 'view_item' | 'add_to_cart' | 'click_tag',
+    productId?: string,
+    tag?: string
+  ): Promise<void> {
+    // Fire and forget - don't await, don't throw errors
+    fetch(`${API_URL}/api/clickstream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        action,
+        product_id: productId,
+        tag,
+      }),
+    }).catch((err) => {
+      // Silently fail - tracking shouldn't break the app
+      console.error('Failed to track event:', err);
+    });
+  },
+
+  async clearUserHistory(userId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/clickstream/${userId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  },
+
+  async getUserStats(userId: string): Promise<{ total_views: number; total_cart_adds: number; total_events: number }> {
+    const response = await fetch(`${API_URL}/api/clickstream/${userId}/stats`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async getUserEvents(
+    userId: string,
+    action: 'view_item' | 'add_to_cart' = 'view_item'
+  ): Promise<{
+    events: Array<{
+      product_id: string;
+      product_name: string;
+      timestamp: string;
+      action: string;
+    }>;
+  }> {
+    const url = new URL(`${API_URL}/api/clickstream/${userId}/events`);
+    url.searchParams.set('action', action);
+
+    const response = await fetch(url.toString());
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     return response.json();

@@ -8,6 +8,8 @@ export interface Product {
   price: number;
   tags: string[];
   image_url: string;
+  average_rating?: number;
+  review_count?: number;
   attributes?: {
     temp_rating_f?: number;
     weight_lb?: number;
@@ -60,7 +62,9 @@ export interface ThoughtTraceEvent {
   timestamp: Date;
 }
 
-export type UserId = 'user_new' | 'user_member' | 'user_business';
+export type UserId = 'user_new' | 'user_member' | 'user_business' | 
+  'ultralight_backpacker_sarah' | 'family_camper_mike' | 'winter_mountaineer_alex' | 
+  'weekend_hiker_emma' | 'car_camper_david' | string;
 
 export interface User {
   id: UserId;
@@ -68,4 +72,37 @@ export interface User {
   loyalty_tier: string;
 }
 
+export interface Review {
+  id: string;
+  product_id: string;
+  user_id: string;
+  rating: number;
+  title: string;
+  text: string;
+  timestamp: Date;
+  verified_purchase: boolean;
+}
+
+export interface ItineraryDay {
+  day: number;
+  title: string;
+  activities: string[];
+  weather?: string;
+  gear_needed?: string[];
+}
+
+export interface UserPersona {
+  id: string;
+  name: string;
+  avatar_color: string;
+  story: string;
+  sessions: Array<{
+    goal: string;
+    timeframe: string;
+    item_count: number;
+    categories: string[];
+  }>;
+  total_views: number;
+  total_cart_adds: number;
+}
 

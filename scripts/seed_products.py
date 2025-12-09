@@ -64,6 +64,40 @@ def seed_products(products_file: str):
     print("Index refreshed")
 
 
+def seed_reviews(reviews_file: str):
+    """Bulk index reviews from JSON file."""
+    reviews_path = Path(reviews_file)
+    
+    if not reviews_path.exists():
+        print(f"Error: Reviews file not found: {reviews_file}")
+        sys.exit(1)
+    
+    with open(reviews_path, 'r') as f:
+        reviews = json.load(f)
+    
+    def doc_generator():
+        for review in reviews:
+            yield {
+                "_index": "product-reviews",
+                "_id": review["id"],
+                "_source": review
+            }
+    
+    print(f"Indexing {len(reviews)} reviews...")
+    success, failed = bulk(es, doc_generator(), raise_on_error=False)
+    
+    if failed:
+        print(f"Warning: {len(failed)} documents failed to index")
+        for item in failed[:5]:  # Show first 5 failures
+            print(f"  Failed: {item}")
+    else:
+        print(f"Successfully indexed {success} reviews")
+    
+    # Refresh index
+    es.indices.refresh(index="product-reviews")
+    print("Reviews index refreshed")
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Seed products into Elasticsearch")
@@ -72,9 +106,16 @@ def main():
         default="generated_products/products.json",
         help="Path to products JSON file"
     )
+    parser.add_argument(
+        "--reviews",
+        help="Path to reviews JSON file (optional)"
+    )
     args = parser.parse_args()
     
     seed_products(args.products)
+    
+    if args.reviews:
+        seed_reviews(args.reviews)
 
 
 if __name__ == "__main__":

@@ -70,6 +70,41 @@ Full catalog covers 10 categories with ~150 products:
 - **Tropical & Safari**: Insect protection, cooling gear, safari essentials
 - **Accessories**: First aid, tools, gloves, gaiters, bags
 
+## Features
+
+### Core Shopping Experience
+
+- **Storefront** — Browse products by category with semantic search
+- **Product Cards** — Display title, price, brand, star ratings, review counts, and tags
+- **Product Detail Modal** — Full product info with expandable customer reviews
+- **Shopping Cart** — Add/remove items, adjust quantities, view totals
+- **Checkout Flow** — Address form + credit card (auto-populated for demo)
+- **Order Confirmation** — Post-purchase review submission with star ratings
+
+### AI Trip Planning
+
+- **Trip Planner** — Conversational AI assistant for trip planning
+- **Context Extraction** — Automatic parsing of destination, dates, and activities
+- **Suggested Gear** — Real-time product recommendations from the catalog
+- **Day-by-Day Itinerary** — Structured trip plans with export/download options
+- **Thought Trace** — Expandable panel showing agent reasoning and tool calls
+- **Quick Chat** — Floating chat button for quick questions anywhere in the app
+
+### Product Reviews
+
+- **AI-Generated Reviews** — Realistic reviews generated per product using Gemini
+- **Star Ratings** — Aggregate ratings displayed on product cards
+- **Review Display** — Expandable review section in product detail modal
+- **Post-Purchase Reviews** — Submit reviews after checkout
+
+### User Personalization
+
+- **User Personas** — Pre-built personas with unique shopping scenarios
+- **User Menu** — Consolidated dropdown showing current user, scenario, and stats
+- **Account Page** — Switch between user personas with full profile display
+- **Clickstream Tracking** — Real-time behavior tracking for guest users
+- **Personalized Recommendations** — AI uses browsing history to tailor suggestions
+
 ## Quick Start
 
 ### Prerequisites
@@ -239,10 +274,19 @@ wayfinder_supply_co/
 ├── frontend/                 # React + Vite + Tailwind
 │   ├── src/
 │   │   ├── components/       # UI components
-│   │   │   ├── Storefront.tsx
-│   │   │   ├── TripPlanner.tsx
-│   │   │   ├── ChatModal.tsx
-│   │   │   ├── ThoughtTrace.tsx
+│   │   │   ├── Storefront.tsx       # Product grid view
+│   │   │   ├── TripPlanner.tsx      # AI trip planning interface
+│   │   │   ├── ProductCard.tsx      # Product display card
+│   │   │   ├── ProductDetailModal.tsx # Full product details + reviews
+│   │   │   ├── CartView.tsx         # Shopping cart with quantities
+│   │   │   ├── CheckoutPage.tsx     # Checkout form (address + CC)
+│   │   │   ├── OrderConfirmation.tsx # Post-purchase reviews
+│   │   │   ├── ChatModal.tsx        # Quick chat modal
+│   │   │   ├── UserMenu.tsx         # User dropdown with stats
+│   │   │   ├── UserAccountPage.tsx  # User selection page
+│   │   │   ├── ClickstreamEventsModal.tsx # View browsing history
+│   │   │   ├── ItineraryModal.tsx   # Trip export modal
+│   │   │   ├── ThoughtTrace.tsx     # Agent reasoning display
 │   │   │   └── ...
 │   │   ├── lib/              # API client
 │   │   └── types/            # TypeScript types
@@ -251,9 +295,13 @@ wayfinder_supply_co/
 ├── backend/                  # FastAPI proxy server
 │   ├── main.py               # Entry point
 │   ├── routers/              # API routes
-│   │   ├── chat.py           # Agent streaming
-│   │   ├── products.py       # Product search
-│   │   └── cart.py           # Cart management
+│   │   ├── chat.py           # Agent streaming + context extraction
+│   │   ├── products.py       # Product search + listing
+│   │   ├── cart.py           # Cart management
+│   │   ├── reviews.py        # Product reviews
+│   │   ├── orders.py         # Order creation
+│   │   ├── users.py          # User personas
+│   │   └── clickstream.py    # Clickstream tracking + stats
 │   └── services/             # Elasticsearch client
 │
 ├── mcp_server/               # FastMCP external API simulation
@@ -267,11 +315,19 @@ wayfinder_supply_co/
 │
 ├── scripts/                  # Setup and generation scripts
 │   ├── generate_products.py  # AI product generation (Gemini + Imagen)
+│   ├── generate_reviews.py   # AI review generation (batch per product)
+│   ├── generate_clickstream.py # User persona clickstream generation
+│   ├── update_product_ratings.py # Calculate ratings from reviews
 │   ├── setup_elastic.py      # Index creation
-│   ├── seed_products.py      # Data indexing
-│   ├── seed_clickstream.py   # Clickstream generation
+│   ├── seed_products.py      # Data indexing (products + reviews)
+│   ├── seed_clickstream.py   # Clickstream indexing
 │   ├── create_agents.py      # Agent Builder setup
 │   └── validate_setup.py     # Health checks
+│
+├── generated_products/       # Generated data files
+│   ├── products.json         # Product catalog
+│   ├── reviews.json          # Product reviews
+│   └── user_personas.json    # User persona data
 │
 ├── config/                   # Configuration
 │   ├── product_generation.yaml  # Full product catalog config
@@ -286,15 +342,102 @@ wayfinder_supply_co/
     └── IMAGE_GENERATION_SETUP.md
 ```
 
+## Clickstream Data & Personalization
+
+Clickstream data powers the personalization engine, allowing the AI to understand user preferences and tailor recommendations based on browsing behavior.
+
+### How Clickstreams Work
+
+The `user-clickstream` Elasticsearch index stores user behavior events:
+
+```json
+{
+  "user_id": "ultralight_backpacker_sarah",
+  "action": "view_item",
+  "product_id": "prod_123",
+  "tags": ["ultralight", "hiking", "backpacking"],
+  "@timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+**Event Types:**
+- `view_item` — User viewed a product
+- `add_to_cart` — User added a product to their cart
+- `click_tag` — User clicked on a product tag
+
+### Pre-Generated User Personas
+
+The demo includes 5 user personas with rich backstories and pre-generated clickstream data:
+
+| Persona | Name | Scenario | Behavior Pattern |
+|---------|------|----------|------------------|
+| **Ultralight Backpacker** | Sarah Martinez | Planning a 3-week Pacific Crest Trail thru-hike | Ultralight gear, premium quality, sub-10lb base weight |
+| **Family Camping Dad** | Mike Thompson | Annual family camping trip with 3 kids | Family-friendly, durable, budget-conscious |
+| **Weekend Warrior** | Jennifer Walsh | Training for first sprint triathlon | Entry-level gear, versatile, value-focused |
+| **Climbing Enthusiast** | David Chen | Planning a climbing trip to Red Rocks | Technical climbing gear, safety equipment |
+| **Winter Sports Pro** | Emma Johansson | Backcountry skiing season prep | Premium winter gear, avalanche safety |
+
+Each persona has 8-15 browsing sessions with realistic shopping journeys (e.g., "Researched sleeping bags, compared weights, added ultralight option to cart").
+
+### How Personalization Works
+
+1. **User Context** — When a user starts a chat, the `get_user_affinity` workflow queries their clickstream
+2. **Category Analysis** — The system aggregates which product categories/tags the user browses most
+3. **AI Recommendations** — The trip planner agent uses this context to prioritize relevant products
+4. **Real-Time Updates** — For the guest user, new clicks immediately influence recommendations
+
+### Guest User: Interactive Demo Mode
+
+The **Guest User** (`user_new`) enables live, interactive demonstrations of personalization:
+
+#### Features
+
+- **Real-Time Tracking** — Every product view and cart add is recorded immediately
+- **Live Stats** — User menu shows live counts of views and cart adds
+- **Event History** — Click on "Views" or "Cart Adds" to see detailed event list
+- **Clear History** — Reset all tracked events with one click
+
+#### How to Use for Demos
+
+1. **Switch to Guest User**
+   - Click the user menu in the header
+   - Click "Switch User" → Select "Guest User"
+
+2. **Demonstrate Behavior Tracking**
+   - Browse some products (click on product cards)
+   - Add items to cart
+   - Open the user menu to see live stats updating
+   - Click on "Views" to show the product view history
+
+3. **Show Personalization Impact**
+   - After browsing hiking gear, open the Trip Planner
+   - Ask: "Plan a weekend camping trip"
+   - The AI will prioritize hiking-related recommendations based on recent views
+
+4. **Reset for Next Demo**
+   - Click "Clear Browsing History" in the user menu
+   - Stats reset to 0
+   - Start fresh with a new scenario
+
+#### Best Practices
+
+- **Build a Story**: Browse related products (e.g., all tents, then sleeping bags) to create a coherent preference profile
+- **Compare Users**: After demo with Guest User, switch to Sarah Martinez and ask the same question to show different recommendations
+- **Show the Data**: Use the Events modal to show exactly what was tracked
+- **Explain the Flow**: Point out how the AI references "based on your browsing history" in responses
+
 ## User Personas
 
-The demo includes three user personas to showcase personalization:
+The demo includes multiple user personas to showcase personalization:
 
-| Persona | Name | Loyalty Tier | Behavior |
-|---------|------|--------------|----------|
-| **New User** | Jordan Explorer | None | First-time visitor, no history |
-| **Member** | Alex Hiker | Platinum | Ultralight preference, free shipping |
-| **Business** | Casey Campground | Business | Bulk buyer, campground owner |
+| Persona | Name | Scenario | Behavior |
+|---------|------|----------|----------|
+| **Ultralight Backpacker** | Sarah Martinez | PCT thru-hike | Premium ultralight gear focus |
+| **Family Camper** | Mike Thompson | Family camping | Family-friendly, durable, budget |
+| **Weekend Warrior** | Jennifer Walsh | Sprint triathlon | Entry-level, versatile |
+| **Climbing Enthusiast** | David Chen | Red Rocks trip | Technical climbing gear |
+| **Winter Pro** | Emma Johansson | Backcountry skiing | Premium winter gear |
+| **Guest User** | Guest | Live demo | Real-time tracking, no history |
 
 ## Workshop Flow
 
@@ -303,6 +446,8 @@ The demo includes three user personas to showcase personalization:
 3. **Watch the Agent Think** — See the Thought Trace panel show tool calls
 4. **Test Personalization** — Switch users to see different recommendations
 5. **Try Different Locations** — Test covered vs. uncovered destinations
+6. **Interactive Demo** — Use Guest User to show live clickstream tracking
+7. **Complete Purchase** — Demo checkout flow with reviews
 
 ## Environment Variables
 
@@ -475,18 +620,45 @@ python scripts/seed_products.py
 python scripts/seed_products.py --products generated_products/products.json
 ```
 
-### Step 5: Generate Clickstream Data
+### Step 5: Generate Reviews
 
-Generate synthetic user behavior data for personalization:
+Generate AI-powered product reviews:
 
 ```bash
+# Generate reviews for all products (uses batch API for speed)
+python scripts/generate_reviews.py
+
+# Update product ratings from reviews
+python scripts/update_product_ratings.py
+```
+
+**Output:**
+- Reviews: `generated_products/reviews.json`
+- Updated ratings in `generated_products/products.json`
+
+### Step 6: Generate Clickstream Data
+
+Generate realistic user behavior data with coherent session stories:
+
+```bash
+# Generate clickstream and user persona data
+python scripts/generate_clickstream.py
+
+# Seed clickstream into Elasticsearch
 python scripts/seed_clickstream.py
 ```
 
 **Generated User Personas:**
-- `user_member` — 50 events with "ultralight" preference
-- `user_business` — 30 events with "family/budget" preference  
-- `user_new` — 20 random events
+- `ultralight_backpacker_sarah` — PCT thru-hiker, ultralight focus
+- `family_camping_dad_mike` — Family camping, budget-conscious
+- `weekend_warrior_jennifer` — Sprint triathlon training
+- `climbing_enthusiast_david` — Red Rocks climbing trip
+- `winter_sports_pro_emma` — Backcountry skiing prep
+- `user_new` — Guest user (starts empty, tracks live)
+
+**Output:**
+- Clickstream events indexed to `user-clickstream`
+- User personas: `generated_products/user_personas.json`
 
 ### Complete Workflow Example
 
@@ -508,16 +680,23 @@ python scripts/generate_products.py --config config/product_generation.yaml
 # 3. Upload images to GCS
 python scripts/upload_images_to_gcs.py
 
-# 4. Create Elasticsearch indices
+# 4. Generate product reviews
+python scripts/generate_reviews.py
+python scripts/update_product_ratings.py
+
+# 5. Generate clickstream data and user personas
+python scripts/generate_clickstream.py
+
+# 6. Create Elasticsearch indices
 python scripts/setup_elastic.py --force
 
-# 5. Load products into Elasticsearch
+# 7. Load products and reviews into Elasticsearch
 python scripts/seed_products.py
 
-# 6. Generate clickstream data
+# 8. Load clickstream data
 python scripts/seed_clickstream.py
 
-# 7. Verify the data
+# 9. Verify the data
 curl -X GET "${SNAPSHOT_ELASTICSEARCH_URL}/product-catalog/_count" \
   -H "Authorization: ApiKey ${SNAPSHOT_ELASTICSEARCH_APIKEY}"
 ```
@@ -567,11 +746,12 @@ brands:
 
 ## Tech Stack
 
-- **Frontend**: React 18, Vite, Tailwind CSS, Framer Motion, Lucide Icons
-- **Backend**: Python 3.11+, FastAPI, httpx, SSE
+- **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, Framer Motion, Lucide Icons
+- **Backend**: Python 3.11+, FastAPI, httpx, SSE (Server-Sent Events)
 - **MCP Server**: FastMCP, Pydantic
-- **Search**: Elasticsearch 9.x, ELSER (semantic), Agent Builder
-- **AI Generation**: Google Gemini 2.5 Flash (text), Vertex AI Imagen 3 (images)
+- **Search & AI**: Elasticsearch 9.x, ELSER (semantic search), Agent Builder, Workflows
+- **Data Generation**: Google Gemini 2.5 Flash (products, reviews), Vertex AI Imagen 3 (images)
+- **Personalization**: Elasticsearch clickstream analytics, user affinity scoring
 
 ## License
 

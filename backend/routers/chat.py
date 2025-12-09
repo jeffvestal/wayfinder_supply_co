@@ -329,6 +329,98 @@ def format_sse_event(event_type: str, data: dict) -> str:
     return f"data: {json.dumps({'type': event_type, 'data': data})}\n\n"
 
 
+@router.post("/extract-itinerary")
+async def extract_itinerary_endpoint(
+    trip_plan: str = Query(..., description="The trip plan text to extract itinerary from")
+):
+    """
+    Extract structured day-by-day itinerary from a trip plan.
+    Calls itinerary-extractor-agent synchronously and returns JSON.
+    """
+    url = f"{KIBANA_URL}/api/agent_builder/converse/async"
+    
+    headers = {
+        "Authorization": f"ApiKey {ELASTICSEARCH_APIKEY}",
+        "Content-Type": "application/json",
+        "kbn-xsrf": "true",
+    }
+    
+    payload = {
+        "input": trip_plan,
+        "agent_id": "itinerary-extractor-agent",
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            async with client.stream("POST", url, headers=headers, json=payload) as response:
+                if response.status_code != 200:
+                    error_text = await response.aread()
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=f"Agent Builder API error: {error_text.decode() if error_text else 'Unknown error'}"
+                    )
+                
+                # Collect the full response
+                full_response = ""
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        try:
+                            raw_data = json.loads(data_str)
+                            data = raw_data.get("data", raw_data)
+                            
+                            # Look for message content
+                            if "text_chunk" in data:
+                                full_response += data["text_chunk"]
+                            elif "message_content" in data:
+                                full_response = data["message_content"]
+                            elif "round" in data:
+                                round_data = data["round"]
+                                if "response" in round_data and "message" in round_data["response"]:
+                                    full_response = round_data["response"]["message"]
+                        except json.JSONDecodeError:
+                            continue
+                
+                # Parse JSON from response (agent should return only JSON)
+                full_response = full_response.strip()
+                
+                # Remove markdown code blocks if present
+                if full_response.startswith("```"):
+                    # Extract JSON from code block
+                    lines = full_response.split("\n")
+                    json_lines = []
+                    in_json = False
+                    for line in lines:
+                        if line.strip().startswith("```"):
+                            if in_json:
+                                break
+                            in_json = True
+                            continue
+                        if in_json:
+                            json_lines.append(line)
+                    full_response = "\n".join(json_lines)
+                
+                # Try to parse as JSON
+                try:
+                    parsed = json.loads(full_response)
+                    # Ensure we have the expected structure
+                    days = parsed.get("days", [])
+                    return {"days": days}
+                except json.JSONDecodeError:
+                    # If parsing fails, return empty
+                    return {"days": []}
+                    
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Request timeout")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Connection error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
 @router.post("/extract-trip-entities")
 async def extract_trip_entities_endpoint(
     trip_plan: str = Query(..., description="The trip plan text to extract entities from")

@@ -288,6 +288,56 @@ Rules:
     )
 
 
+def create_itinerary_extractor_agent() -> Optional[str]:
+    """Create the Itinerary Extractor agent that extracts structured day-by-day itinerary from trip plans."""
+    instructions = """You extract a structured day-by-day itinerary from trip planning responses. Return ONLY valid JSON, no other text.
+
+Extract the itinerary as an array of days. Each day should have:
+- day: Day number (1, 2, 3, etc.)
+- title: A descriptive title for the day (e.g., "Valley to Snow Creek", "Exploration Day", "Return Journey")
+- activities: Array of specific activities/actions for that day
+
+JSON Schema:
+{
+  "days": [
+    {
+      "day": 1,
+      "title": "Day 1 Title",
+      "activities": [
+        "Start early from valley floor",
+        "Gain elevation gradually with snowshoes",
+        "Camp below treeline for wind protection"
+      ]
+    },
+    {
+      "day": 2,
+      "title": "Day 2 Title",
+      "activities": [
+        "Practice winter camping skills",
+        "Short radius exploration",
+        "Return to established camp"
+      ]
+    }
+  ]
+}
+
+Rules:
+- Look for explicit day markers: "Day 1:", "Day 2:", "First day", "Second day", etc.
+- Extract activities as individual items from bullet points, numbered lists, or sentences
+- Each activity should be a complete, actionable item
+- If the trip plan mentions a multi-day trip but doesn't break it down by days, infer logical day breaks based on the content
+- If no day-by-day breakdown exists, create a single day entry with all activities
+- ONLY return the JSON object. No explanation, no markdown code blocks, no extra text."""
+    
+    return create_agent(
+        agent_id="itinerary-extractor-agent",
+        name="Itinerary Extractor",
+        description="Extracts structured day-by-day itinerary from trip plan responses. Returns JSON only.",
+        instructions=instructions,
+        tool_ids=[]  # No tools needed - just parsing
+    )
+
+
 def create_esql_tool(name: str, query: str, description: str, params: Optional[Dict] = None) -> Optional[str]:
     """Create an ES|QL tool and return its ID. Deletes existing tool first."""
     global FAILURES
@@ -543,6 +593,9 @@ def main() -> int:
     response_parser_id = create_response_parser_agent()
     time.sleep(1)
     
+    itinerary_extractor_id = create_itinerary_extractor_agent()
+    time.sleep(1)
+    
     trip_planner_id = create_trip_planner_agent(tool_ids=tool_ids)
     time.sleep(1)
     
@@ -556,6 +609,7 @@ def main() -> int:
         print("Setup Complete!")
     print(f"Context Extractor Agent ID: {context_extractor_id}")
     print(f"Response Parser Agent ID: {response_parser_id}")
+    print(f"Itinerary Extractor Agent ID: {itinerary_extractor_id}")
     print(f"Trip Planner Agent ID: {trip_planner_id}")
     print(f"Trip Itinerary Agent ID: {trip_itinerary_id}")
     print(f"Created {len(tool_ids)} tools")

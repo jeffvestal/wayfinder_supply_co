@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChatMessage, UserId, ThoughtTraceEvent } from '../types'
 import { api } from '../lib/api'
+import { ItineraryModal } from './ItineraryModal'
 import { 
   Send, Loader2, MapPin, Calendar, Mountain, ChevronDown, ChevronRight,
   ShoppingCart, Plus, Compass, CloudSun, Backpack, CheckCircle2, Clock,
@@ -193,6 +194,7 @@ export function TripPlanner({ userId }: TripPlannerProps) {
   const [cartExpanded, setCartExpanded] = useState(true)
   const [otherItemsExpanded, setOtherItemsExpanded] = useState(false)
   const [itineraryExpanded, setItineraryExpanded] = useState(true)
+  const [itineraryModalOpen, setItineraryModalOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -411,8 +413,8 @@ export function TripPlanner({ userId }: TripPlannerProps) {
             )
           }
           
-          // Parse itinerary from response (quick regex-based)
-          parseItineraryFromResponse(messageContent)
+          // Extract itinerary using agent (replaces fragile regex)
+          extractItineraryFromResponse(messageContent)
           
           // Skip slow entity extraction - products already extracted from tool_result events
           // Use fallback regex extraction as backup (runs in parallel, won't hurt)
@@ -440,59 +442,35 @@ export function TripPlanner({ userId }: TripPlannerProps) {
     }
   }
 
-  const parseItineraryFromResponse = (content: string) => {
-    // Look for day-by-day patterns in the response
-    const dayPatterns = [
-      /Day\s*(\d+)[:\s-]+(.+?)(?=Day\s*\d+|$)/gis,
-      /(\d+)(?:st|nd|rd|th)\s+Day[:\s-]+(.+?)(?=\d+(?:st|nd|rd|th)\s+Day|$)/gis,
-    ]
-    
-    const days: ItineraryDay[] = []
-    
-    for (const pattern of dayPatterns) {
-      let match
-      while ((match = pattern.exec(content)) !== null) {
-        const dayNum = parseInt(match[1])
-        const dayContent = match[2].trim()
-        
-        // Extract activities from the day content
-        const activities = dayContent
+  const extractItineraryFromResponse = async (content: string) => {
+    try {
+      const result = await api.extractItinerary(content)
+      if (result.days && result.days.length > 0) {
+        const days: ItineraryDay[] = result.days.map(d => ({
+          day: d.day,
+          title: d.title || `Day ${d.day}`,
+          activities: d.activities || [],
+        }))
+        setItinerary(days)
+      }
+    } catch (error) {
+      console.error('Failed to extract itinerary:', error)
+      // Fallback: create simple overview if extraction fails
+      if (content.length > 100) {
+        const bulletPoints = content
           .split(/[•\-\n]/)
           .map(a => a.trim())
-          .filter(a => a.length > 0 && a.length < 200)
-          .slice(0, 5)
+          .filter(a => a.length > 20 && a.length < 200)
+          .slice(0, 6)
         
-        if (activities.length > 0) {
-          days.push({
-            day: dayNum,
-            title: `Day ${dayNum}`,
-            activities,
-          })
+        if (bulletPoints.length >= 2) {
+          setItinerary([{
+            day: 1,
+            title: 'Trip Overview',
+            activities: bulletPoints,
+          }])
         }
       }
-      if (days.length > 0) break
-    }
-    
-    // If no structured days found, create a simple itinerary from key points
-    if (days.length === 0 && content.length > 100) {
-      const bulletPoints = content
-        .split(/[•\-\n]/)
-        .map(a => a.trim())
-        .filter(a => a.length > 20 && a.length < 200)
-        .slice(0, 6)
-      
-      if (bulletPoints.length >= 2) {
-        setItinerary([{
-          day: 1,
-          title: 'Trip Overview',
-          activities: bulletPoints,
-        }])
-        return
-      }
-    }
-    
-    if (days.length > 0) {
-      setItinerary(days)
     }
   }
 
@@ -1136,6 +1114,13 @@ export function TripPlanner({ userId }: TripPlannerProps) {
           </div>
         </div>
       </div>
+      
+      {/* Itinerary Modal */}
+      <ItineraryModal
+        itinerary={itinerary}
+        isOpen={itineraryModalOpen}
+        onClose={() => setItineraryModalOpen(false)}
+      />
     </div>
   )
 }

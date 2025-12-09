@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChatMessage, UserId } from '../types'
+import { Product, ChatMessage, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
 import { Send, Loader2, X, ExternalLink, ChevronDown, ChevronRight, Settings, Database } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { ProductDetailModal } from './ProductDetailModal'
 
 interface AgentStep {
   type: 'reasoning' | 'tool_call';
@@ -33,8 +34,15 @@ export function ChatModal({ isOpen, onClose, userId, onOpenTripPlanner, initialM
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
+  const [stepsExpanded, setStepsExpanded] = useState<Record<string, boolean>>({})
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false)
+  const [modalHeight, setModalHeight] = useState(700)
+  const [isDragging, setIsDragging] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialMessageSentRef = useRef(false)
+  const dragStartY = useRef(0)
+  const dragStartHeight = useRef(0)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -56,6 +64,18 @@ export function ChatModal({ isOpen, onClose, userId, onOpenTripPlanner, initialM
     }
   }, [isOpen])
 
+  // Drag listeners effect
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleDragMove)
+      window.addEventListener('mouseup', handleDragEnd)
+      return () => {
+        window.removeEventListener('mousemove', handleDragMove)
+        window.removeEventListener('mouseup', handleDragEnd)
+      }
+    }
+  }, [isDragging])
+
   const toggleStep = (stepId: string) => {
     setExpandedSteps(prev => {
       const newSet = new Set(prev)
@@ -66,6 +86,64 @@ export function ChatModal({ isOpen, onClose, userId, onOpenTripPlanner, initialM
       }
       return newSet
     })
+  }
+
+  // Drag handlers for resizable modal
+  const handleDragStart = (e: React.MouseEvent) => {
+    setIsDragging(true)
+    dragStartY.current = e.clientY
+    dragStartHeight.current = modalHeight
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  const handleDragMove = (e: MouseEvent) => {
+    if (!isDragging) return
+    const deltaY = dragStartY.current - e.clientY
+    const newHeight = Math.min(window.innerHeight * 0.95, Math.max(300, dragStartHeight.current + deltaY))
+    setModalHeight(newHeight)
+  }
+
+  const handleDragEnd = () => {
+    setIsDragging(false)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  // Product extraction helper
+  const extractProductMentions = (content: string): Array<{name: string, price?: string}> => {
+    const products: Array<{name: string, price?: string}> = []
+    
+    // Match patterns like "**ProductName** - $99.99" or "- ProductName ($99.99)"
+    const patterns = [
+      /\*\*([^*]+)\*\*\s*-?\s*\$(\d+\.?\d*)/g,
+      /-\s*([^(\n]+)\s*\(\$(\d+\.?\d*)\)/g,
+    ]
+    
+    patterns.forEach(pattern => {
+      let match
+      while ((match = pattern.exec(content)) !== null) {
+        products.push({
+          name: match[1].trim(),
+          price: match[2]
+        })
+      }
+    })
+    
+    return products
+  }
+
+  // Handle product click
+  const handleProductClick = async (productName: string) => {
+    try {
+      const results = await api.searchProducts(productName, 1)
+      if (results.products.length > 0) {
+        setSelectedProduct(results.products[0])
+        setIsProductModalOpen(true)
+      }
+    } catch (error) {
+      console.error('Failed to fetch product:', error)
+    }
   }
 
   const sendMessage = async (messageText: string) => {
@@ -325,8 +403,17 @@ export function ChatModal({ isOpen, onClose, userId, onOpenTripPlanner, initialM
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 h-[85vh] max-h-[700px] bg-slate-900 rounded-t-3xl shadow-2xl z-50 flex flex-col border-t border-white/10"
+            style={{ height: `${modalHeight}px` }}
+            className="fixed bottom-0 left-0 right-0 bg-slate-900 rounded-t-3xl shadow-2xl z-50 flex flex-col border-t border-white/10"
           >
+            {/* Drag Handle */}
+            <div
+              onMouseDown={handleDragStart}
+              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-primary/20 transition-colors group z-10"
+            >
+              <div className="absolute top-1 left-1/2 -translate-x-1/2 w-12 h-1 bg-slate-700 rounded-full group-hover:bg-primary/50 transition-colors" />
+            </div>
+
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
@@ -401,32 +488,89 @@ export function ChatModal({ isOpen, onClose, userId, onOpenTripPlanner, initialM
                         </div>
                       )}
 
-                      {/* Agent Steps */}
+                      {/* Agent Steps - Collapsed by Default */}
                       {message.steps && message.steps.length > 0 && (
-                        <div className="mb-3 space-y-1">
-                          <div className="text-xs font-medium text-gray-400 flex items-center mb-2">
-                            <Settings className="h-3 w-3 mr-1" />
-                            Agent Steps:
-                          </div>
-                          {message.steps
-                            .filter(step => 
-                              (step.type === 'reasoning' && step.reasoning) || 
-                              (step.type === 'tool_call' && step.tool_id && step.params && Object.keys(step.params).length > 0)
-                            )
-                            .map((step, idx) => renderStep(step, idx, message.id))}
+                        <div className="mb-3">
+                          <button
+                            onClick={() => {
+                              setStepsExpanded(prev => ({
+                                ...prev,
+                                [message.id]: !prev[message.id]
+                              }))
+                            }}
+                            className="w-full flex items-center justify-between text-xs font-medium text-gray-400 mb-2 hover:text-gray-300 transition-colors p-1.5 rounded hover:bg-slate-700/50"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Settings className="h-3 w-3" />
+                              <span>Agent Thinking</span>
+                              <span className="text-xs bg-slate-700 text-gray-300 px-1.5 py-0.5 rounded-full">
+                                {message.steps.filter(step => 
+                                  (step.type === 'reasoning' && step.reasoning) || 
+                                  (step.type === 'tool_call' && step.tool_id)
+                                ).length}
+                              </span>
+                            </div>
+                            {stepsExpanded[message.id] ? (
+                              <ChevronDown className="h-3 w-3" />
+                            ) : (
+                              <ChevronRight className="h-3 w-3" />
+                            )}
+                          </button>
+                          
+                          {stepsExpanded[message.id] && (
+                            <div className="space-y-1">
+                              {message.steps
+                                .filter(step => 
+                                  (step.type === 'reasoning' && step.reasoning) || 
+                                  (step.type === 'tool_call' && step.tool_id && step.params && Object.keys(step.params).length > 0)
+                                )
+                                .map((step, idx) => renderStep(step, idx, message.id))}
+                            </div>
+                          )}
                         </div>
                       )}
 
                       {/* Message content */}
                       {message.role === 'assistant' ? (
-                        <ReactMarkdown className="prose prose-invert prose-sm max-w-none">
-                          {message.content}
-                        </ReactMarkdown>
+                        <>
+                          <ReactMarkdown className="prose prose-invert prose-sm max-w-none prose-headings:text-white prose-p:text-gray-200 prose-strong:text-white prose-code:text-primary prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-pre:bg-slate-800 prose-li:text-gray-200 prose-ul:text-gray-200 prose-ol:text-gray-200">
+                            {message.content}
+                          </ReactMarkdown>
+                          
+                          {/* Product Previews */}
+                          {message.status === 'complete' && (() => {
+                            const products = extractProductMentions(message.content)
+                            return products.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <div className="text-xs font-medium text-gray-400 mb-1.5">Recommended Products:</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {products.slice(0, 4).map((prod, idx) => (
+                                    <button
+                                      key={idx}
+                                      onClick={() => handleProductClick(prod.name)}
+                                      className="bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 hover:border-primary/50 rounded-lg p-2.5 transition-all text-left group"
+                                    >
+                                      <div className="text-xs font-medium text-white line-clamp-2 mb-1.5 group-hover:text-primary transition-colors">
+                                        {prod.name}
+                                      </div>
+                                      {prod.price && (
+                                        <div className="text-sm font-bold text-primary">${prod.price}</div>
+                                      )}
+                                      <div className="text-xs text-gray-500 mt-1 group-hover:text-gray-400 transition-colors">
+                                        Click to view & add to cart
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </>
                       ) : (
                         <p className="text-sm">{message.content}</p>
                       )}
                       
-                      <p className="text-xs opacity-70 mt-1">
+                      <p className="text-xs opacity-70 mt-2">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
                     </div>
@@ -466,6 +610,18 @@ export function ChatModal({ isOpen, onClose, userId, onOpenTripPlanner, initialM
               </div>
             </form>
           </motion.div>
+
+          {/* Product Detail Modal */}
+          {isProductModalOpen && (
+            <ProductDetailModal
+              product={selectedProduct}
+              userId={userId}
+              onClose={() => {
+                setIsProductModalOpen(false)
+                setSelectedProduct(null)
+              }}
+            />
+          )}
         </>
       )}
     </AnimatePresence>

@@ -182,6 +182,17 @@ JSON only, no markdown."""
     
     product_id = f"WF-{category[:3].upper()}-{subcategory[:3].upper()}-{str(uuid.uuid4())[:8].upper()}"
     
+    # Generate ratings (weighted toward 3.5-4.9, with most products being 4.0-4.5)
+    # Use beta distribution to skew toward higher ratings
+    rating_base = random.betavariate(8, 2)  # Skews toward 0.8 (4.0 stars)
+    average_rating = round(3.5 + (rating_base * 1.4), 1)  # Range: 3.5-4.9
+    
+    # Generate review count (5-50, weighted toward lower end)
+    review_count = random.choices(
+        range(5, 51),
+        weights=[10-i for i in range(46)]  # More weight on lower numbers
+    )[0]
+    
     return {
         "id": product_id,
         "title": title,
@@ -192,7 +203,9 @@ JSON only, no markdown."""
         "price": price,
         "tags": tags,
         "attributes": attributes,
-        "image_url": f"/images/products/{product_id}.jpg"
+        "image_url": f"/images/products/{product_id}.jpg",
+        "average_rating": average_rating,
+        "review_count": review_count
     }
 
 
@@ -258,12 +271,21 @@ def main():
         help="Skip image generation"
     )
     parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Only generate metadata, skip image generation (same as --skip-images)"
+    )
+    parser.add_argument(
         "--use-gemini",
         action="store_true",
         default=True,
         help="Use Gemini for metadata generation"
     )
     args = parser.parse_args()
+    
+    # --metadata-only implies --skip-images
+    if args.metadata_only:
+        args.skip_images = True
     
     # Load config
     config = load_config(args.config)
@@ -298,8 +320,8 @@ def main():
                     use_gemini=args.use_gemini
                 )
                 
-                # Generate image
-                if not args.skip_images:
+                # Generate image (skip if --skip-images or --metadata-only)
+                if not args.skip_images and not args.metadata_only:
                     image_path = images_dir / f"{product['id']}.jpg"
                     generate_product_image(product, image_path, use_vertex=(config["image_provider"] == "vertex_ai"))
                 

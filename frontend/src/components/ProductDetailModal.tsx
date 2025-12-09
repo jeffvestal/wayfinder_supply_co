@@ -1,7 +1,7 @@
-import { Product, UserId } from '../types'
+import { Product, UserId, Review } from '../types'
 import { api } from '../lib/api'
-import { X, ShoppingCart, Tag, Package, Star } from 'lucide-react'
-import { useState } from 'react'
+import { X, ShoppingCart, Tag, Package, Star, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface ProductDetailModalProps {
@@ -14,13 +14,47 @@ interface ProductDetailModalProps {
 export function ProductDetailModal({ product, userId, onClose, onTagClick }: ProductDetailModalProps) {
   const [adding, setAdding] = useState(false)
   const [quantity, setQuantity] = useState(1)
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [reviewsExpanded, setReviewsExpanded] = useState(false)
+  const [loadingReviews, setLoadingReviews] = useState(false)
+
+  useEffect(() => {
+    if (product && product.review_count && product.review_count > 0) {
+      loadReviews()
+    }
+  }, [product])
+
+  const loadReviews = async () => {
+    if (!product) return
+    try {
+      setLoadingReviews(true)
+      const data = await api.getProductReviews(product.id, 10)
+      setReviews(data.reviews.map((r: any) => ({
+        ...r,
+        timestamp: new Date(r.timestamp)
+      })))
+    } catch (err) {
+      console.error('Failed to load reviews:', err)
+    } finally {
+      setLoadingReviews(false)
+    }
+  }
 
   if (!product) return null
+
+  const averageRating = product.average_rating || 0
+  const reviewCount = product.review_count || 0
 
   const handleAddToCart = async () => {
     try {
       setAdding(true)
       await api.addToCart(userId, product.id, quantity)
+      
+      // Track add to cart event for guest user
+      if (userId === 'user_new') {
+        api.trackEvent(userId, 'add_to_cart', product.id)
+      }
+      
       onClose()
     } catch (err) {
       console.error('Failed to add to cart:', err)
@@ -100,16 +134,32 @@ export function ProductDetailModal({ product, userId, onClose, onTagClick }: Pro
                 </span>
               </div>
 
-              {/* Rating placeholder */}
-              <div className="flex items-center gap-1 mb-6">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`w-5 h-5 ${star <= 4 ? 'text-amber-400 fill-amber-400' : 'text-gray-600'}`}
-                  />
-                ))}
-                <span className="text-gray-400 ml-2">(24 reviews)</span>
-              </div>
+              {/* Rating */}
+              {averageRating > 0 && reviewCount > 0 && (
+                <button
+                  onClick={() => setReviewsExpanded(!reviewsExpanded)}
+                  className="flex items-center gap-1 mb-6 hover:opacity-80 transition-opacity cursor-pointer"
+                >
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-5 h-5 ${
+                        star <= Math.round(averageRating)
+                          ? 'text-amber-400 fill-amber-400'
+                          : 'text-gray-600'
+                      }`}
+                    />
+                  ))}
+                  <span className="text-gray-400 ml-2">
+                    {averageRating.toFixed(1)} ({reviewCount} reviews)
+                  </span>
+                  {reviewsExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-gray-400 ml-1" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-gray-400 ml-1" />
+                  )}
+                </button>
+              )}
 
               {/* Description */}
               <p className="text-gray-300 leading-relaxed mb-6">
@@ -126,7 +176,13 @@ export function ProductDetailModal({ product, userId, onClose, onTagClick }: Pro
                   {product.tags.map((tag) => (
                     <button
                       key={tag}
-                      onClick={() => onTagClick?.(product.title, tag)}
+                      onClick={() => {
+                        // Track tag click for guest user
+                        if (userId === 'user_new') {
+                          api.trackEvent(userId, 'click_tag', product.id, tag)
+                        }
+                        onTagClick?.(product.title, tag)
+                      }}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-gray-300 rounded-full text-sm font-medium border border-slate-700 transition-all ${
                         onTagClick 
                           ? 'hover:bg-primary/20 hover:border-primary/50 hover:text-primary cursor-pointer' 
@@ -139,6 +195,56 @@ export function ProductDetailModal({ product, userId, onClose, onTagClick }: Pro
                   ))}
                 </div>
               </div>
+
+              {/* Reviews Section */}
+              <AnimatePresence>
+                {reviewsExpanded && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-8 border-t border-slate-700 pt-6"
+                  >
+                    <h3 className="text-lg font-display font-semibold text-white mb-4">Customer Reviews</h3>
+                    {loadingReviews ? (
+                      <div className="text-gray-400">Loading reviews...</div>
+                    ) : reviews.length === 0 ? (
+                      <div className="text-gray-400">No reviews yet.</div>
+                    ) : (
+                      <div className="space-y-4 max-h-[300px] overflow-y-auto">
+                        {reviews.map((review) => (
+                          <div key={review.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="flex items-center gap-1">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star
+                                    key={star}
+                                    className={`w-3 h-3 ${
+                                      star <= review.rating
+                                        ? 'text-amber-400 fill-amber-400'
+                                        : 'text-gray-600'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-sm font-semibold text-white">{review.title}</span>
+                              {review.verified_purchase && (
+                                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">
+                                  Verified Purchase
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-300 mb-2">{review.text}</p>
+                            <p className="text-xs text-gray-500">
+                              {review.user_id} • {review.timestamp.toLocaleDateString()}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Quantity & Add to Cart */}
               <div className="flex items-center gap-4">
@@ -175,4 +281,3 @@ export function ProductDetailModal({ product, userId, onClose, onTagClick }: Pro
     </AnimatePresence>
   )
 }
-

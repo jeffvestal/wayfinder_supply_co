@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Cart, UserId } from '../types'
+import { Cart, UserId, Product } from '../types'
 import { api } from '../lib/api'
-import { Loader2, Trash2, ShoppingBag, Sparkles } from 'lucide-react'
+import { Loader2, Trash2, ShoppingBag, Sparkles, Plus, Minus } from 'lucide-react'
+import { ProductDetailModal } from './ProductDetailModal'
 
 interface CartViewProps {
   userId: UserId
@@ -45,6 +46,8 @@ export function CartView({ userId, loyaltyTier }: CartViewProps) {
   const [cart, setCart] = useState<Cart | null>(null)
   const [loading, setLoading] = useState(true)
   const [usingMockData, setUsingMockData] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [updatingQuantities, setUpdatingQuantities] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadCart()
@@ -82,6 +85,33 @@ export function CartView({ userId, loyaltyTier }: CartViewProps) {
       await loadCart()
     } catch (err) {
       console.error('Failed to clear cart:', err)
+    }
+  }
+
+  const handleQuantityChange = async (productId: string, newQuantity: number) => {
+    if (newQuantity < 1) return
+    
+    setUpdatingQuantities(prev => new Set(prev).add(productId))
+    try {
+      await api.updateCartQuantity(userId, productId, newQuantity)
+      await loadCart()
+    } catch (err) {
+      console.error('Failed to update quantity:', err)
+    } finally {
+      setUpdatingQuantities(prev => {
+        const next = new Set(prev)
+        next.delete(productId)
+        return next
+      })
+    }
+  }
+
+  const handleItemClick = async (productId: string) => {
+    try {
+      const product = await api.getProduct(productId)
+      setSelectedProduct(product)
+    } catch (err) {
+      console.error('Failed to load product:', err)
     }
   }
 
@@ -157,26 +187,65 @@ export function CartView({ userId, loyaltyTier }: CartViewProps) {
                 <img
                   src={item.image_url || '/placeholder.png'}
                   alt={item.title}
-                  className="w-24 h-24 object-cover rounded-lg shadow-md"
+                  className="w-24 h-24 object-cover rounded-lg shadow-md cursor-pointer"
+                  onClick={() => handleItemClick(item.product_id)}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect fill="%23f1f5f9" width="96" height="96"/></svg>'
                   }}
                 />
-                <div className="flex-1">
-                  <h3 className="font-display font-semibold text-lg text-slate-900 mb-1">{item.title}</h3>
+                <div 
+                  className="flex-1 cursor-pointer"
+                  onClick={() => handleItemClick(item.product_id)}
+                >
+                  <h3 className="font-display font-semibold text-lg text-slate-900 mb-1 hover:text-primary transition-colors">{item.title}</h3>
                   <p className="text-sm text-slate-600">
-                    ${item.price.toFixed(2)} × {item.quantity}
+                    ${item.price.toFixed(2)} each
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xl font-display font-bold text-slate-900">${item.subtotal.toFixed(2)}</p>
+                <div className="flex items-center gap-3">
+                  {/* Quantity Controls */}
+                  <div className="flex items-center bg-white rounded-lg border border-slate-300">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleQuantityChange(item.product_id, item.quantity - 1)
+                      }}
+                      disabled={updatingQuantities.has(item.product_id) || item.quantity <= 1}
+                      className="p-2 text-slate-600 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className="px-4 py-2 text-slate-900 font-medium min-w-[3rem] text-center">
+                      {updatingQuantities.has(item.product_id) ? (
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                      ) : (
+                        item.quantity
+                      )}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleQuantityChange(item.product_id, item.quantity + 1)
+                      }}
+                      disabled={updatingQuantities.has(item.product_id)}
+                      className="p-2 text-slate-600 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="text-right min-w-[100px]">
+                    <p className="text-xl font-display font-bold text-slate-900">${item.subtotal.toFixed(2)}</p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRemoveItem(item.product_id)
+                    }}
+                    className="text-red-500 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleRemoveItem(item.product_id)}
-                  className="text-red-500 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
               </div>
             ))}
           </div>
@@ -197,12 +266,27 @@ export function CartView({ userId, loyaltyTier }: CartViewProps) {
               <span className="text-slate-900">Total</span>
               <span className="text-gradient">${cart.total.toFixed(2)}</span>
             </div>
-            <button className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-[1.02] mt-6">
+            <button 
+              onClick={() => {
+                // Navigate to checkout - will be handled by parent
+                window.dispatchEvent(new CustomEvent('navigate', { detail: 'checkout' }))
+              }}
+              className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-[1.02] mt-6"
+            >
               Proceed to Checkout
             </button>
           </div>
         </div>
       </div>
+      
+      {/* Product Detail Modal */}
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          userId={userId}
+          onClose={() => setSelectedProduct(null)}
+        />
+      )}
     </div>
   )
 }
