@@ -23,25 +23,67 @@ fi
 ####################################################################### WAIT FOR KUBERNETES-VM ELASTIC STACK
 
 echo "[Workshop] Waiting for Elasticsearch on kubernetes-vm..."
-MAX_RETRIES=60
+MAX_RETRIES=120
 RETRY_COUNT=0
+ES_READY=false
 
 until curl -fsS "http://kubernetes-vm:30920/_cluster/health" >/dev/null 2>&1; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-    echo "[Workshop] WARNING: Elasticsearch not ready, continuing anyway..."
+    echo "[Workshop] ERROR: Elasticsearch not ready after ${MAX_RETRIES} attempts (10 minutes)"
+    echo "[Workshop] Continuing with setup, but services may fail..."
     break
   fi
   echo "  ... waiting for Elasticsearch (attempt ${RETRY_COUNT}/${MAX_RETRIES})"
   sleep 5
 done
 
-echo "[Workshop] ✓ Elasticsearch is reachable"
+if curl -fsS "http://kubernetes-vm:30920/_cluster/health" >/dev/null 2>&1; then
+  echo "[Workshop] ✓ Elasticsearch is reachable"
+  ES_READY=true
+  
+  # Also wait for the cluster to be at least yellow status
+  echo "[Workshop] Waiting for Elasticsearch cluster health..."
+  for i in $(seq 1 30); do
+    HEALTH=$(curl -fsS "http://kubernetes-vm:30920/_cluster/health" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+    if [ "$HEALTH" = "green" ] || [ "$HEALTH" = "yellow" ]; then
+      echo "[Workshop] ✓ Elasticsearch cluster health: $HEALTH"
+      break
+    fi
+    echo "  ... cluster status: ${HEALTH:-unknown} (attempt ${i}/30)"
+    sleep 3
+  done
+else
+  echo "[Workshop] ⚠️  WARNING: Elasticsearch not reachable, backend may fail"
+fi
+
+# Wait for Kibana to be ready (needed for agent API calls)
+echo "[Workshop] Waiting for Kibana on kubernetes-vm..."
+for i in $(seq 1 60); do
+  if curl -fsS "http://kubernetes-vm:30001/api/status" >/dev/null 2>&1; then
+    echo "[Workshop] ✓ Kibana is reachable"
+    break
+  fi
+  echo "  ... waiting for Kibana (attempt ${i}/60)"
+  sleep 5
+done
 
 # Get environment variables from kubernetes-vm (includes ELASTICSEARCH_APIKEY)
 echo "[Workshop] Getting environment variables from kubernetes-vm..."
-export $(curl -s http://kubernetes-vm:9000/env | xargs)
-echo "[Workshop] ✓ Environment variables loaded"
+for i in $(seq 1 30); do
+  ENV_VARS=$(curl -s http://kubernetes-vm:9000/env 2>/dev/null)
+  if [ -n "$ENV_VARS" ]; then
+    export $(echo "$ENV_VARS" | xargs)
+    echo "[Workshop] ✓ Environment variables loaded"
+    break
+  fi
+  echo "  ... waiting for env vars (attempt ${i}/30)"
+  sleep 3
+done
+
+if [ -z "$ELASTICSEARCH_APIKEY" ]; then
+  echo "[Workshop] ⚠️  WARNING: ELASTICSEARCH_APIKEY not set, some features may fail"
+fi
 
 ####################################################################### INSTALL NODE.JS
 
@@ -217,18 +259,36 @@ else
   echo "[Workshop] ⚠️  MCP server may not be responding yet"
 fi
 
-# Check backend
-if curl -fsS http://localhost:8000/health >/dev/null 2>&1 || curl -fsS http://localhost:8000/ >/dev/null 2>&1; then
-  echo "[Workshop] ✓ Backend is running"
-else
-  echo "[Workshop] ⚠️  Backend may not be responding yet"
-fi
+# Check backend with retries (it may take time to connect to ES)
+echo "[Workshop] Waiting for backend to be healthy..."
+for i in $(seq 1 30); do
+  if curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
+    echo "[Workshop] ✓ Backend is running and healthy"
+    break
+  fi
+  if curl -fsS http://localhost:8000/ >/dev/null 2>&1; then
+    echo "[Workshop] ✓ Backend is running (health endpoint may not exist)"
+    break
+  fi
+  echo "  ... waiting for backend (attempt ${i}/30)"
+  sleep 3
+done
 
 # Check frontend
 if curl -fsS http://localhost:3000/ >/dev/null 2>&1; then
   echo "[Workshop] ✓ Frontend is running"
 else
   echo "[Workshop] ⚠️  Frontend may not be responding yet"
+fi
+
+# Verify backend can reach Elasticsearch
+echo "[Workshop] Testing backend to Elasticsearch connectivity..."
+PRODUCTS_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/products?limit=1" 2>/dev/null)
+if [ "$PRODUCTS_RESPONSE" = "200" ]; then
+  echo "[Workshop] ✓ Backend can fetch products from Elasticsearch"
+else
+  echo "[Workshop] ⚠️  Backend products API returned HTTP ${PRODUCTS_RESPONSE}"
+  echo "[Workshop] This may indicate ES is not ready yet, but services should recover"
 fi
 
 ####################################################################### COMPLETE

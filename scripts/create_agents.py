@@ -32,11 +32,51 @@ HEADERS = {
 # Track failures for exit code
 FAILURES = 0
 
+# Retry configuration for transient errors
+MAX_RETRIES = 5
+INITIAL_RETRY_DELAY = 3  # seconds
+RETRYABLE_STATUS_CODES = [502, 503, 504, 429]
+
+
+def request_with_retry(method: str, url: str, **kwargs) -> requests.Response:
+    """Make an HTTP request with retry logic for transient failures."""
+    retry_delay = INITIAL_RETRY_DELAY
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = requests.request(method, url, timeout=60, **kwargs)
+            
+            if response.status_code in RETRYABLE_STATUS_CODES:
+                if attempt < MAX_RETRIES - 1:
+                    print(f"  ⚠ Transient error ({response.status_code}), retrying in {retry_delay}s... (attempt {attempt + 1}/{MAX_RETRIES})")
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, 30)  # Exponential backoff, max 30s
+                    continue
+            
+            return response
+            
+        except requests.exceptions.Timeout:
+            if attempt < MAX_RETRIES - 1:
+                print(f"  ⚠ Request timeout, retrying in {retry_delay}s... (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 30)
+                continue
+            raise
+        except requests.exceptions.ConnectionError:
+            if attempt < MAX_RETRIES - 1:
+                print(f"  ⚠ Connection error, retrying in {retry_delay}s... (attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 30)
+                continue
+            raise
+    
+    return response  # Return last response if all retries failed
+
 
 def delete_agent(agent_id: str) -> bool:
     """Delete an agent if it exists."""
     url = f"{KIBANA_URL}/api/agent_builder/agents/{agent_id}"
-    response = requests.delete(url, headers=HEADERS)
+    response = request_with_retry("DELETE", url, headers=HEADERS)
     if response.status_code in [200, 204]:
         print(f"  ↻ Deleted existing agent: {agent_id}")
         return True
@@ -48,7 +88,7 @@ def delete_agent(agent_id: str) -> bool:
 def delete_tool(tool_id: str) -> bool:
     """Delete a tool if it exists."""
     url = f"{KIBANA_URL}/api/agent_builder/tools/{tool_id}"
-    response = requests.delete(url, headers=HEADERS)
+    response = request_with_retry("DELETE", url, headers=HEADERS)
     if response.status_code in [200, 204]:
         print(f"  ↻ Deleted existing tool: {tool_id}")
         return True
@@ -60,7 +100,7 @@ def delete_tool(tool_id: str) -> bool:
 def delete_workflow(workflow_id: str) -> bool:
     """Delete a workflow if it exists."""
     url = f"{KIBANA_URL}/api/workflows/{workflow_id}"
-    response = requests.delete(url, headers=HEADERS)
+    response = request_with_retry("DELETE", url, headers=HEADERS)
     if response.status_code in [200, 204]:
         print(f"  ↻ Deleted existing workflow: {workflow_id}")
         return True
@@ -90,7 +130,7 @@ def create_agent(agent_id: str, name: str, description: str,
         }
     }
     
-    response = requests.post(url, headers=HEADERS, json=agent_config)
+    response = request_with_retry("POST", url, headers=HEADERS, json=agent_config)
     
     if response.status_code in [200, 201]:
         data = response.json()
@@ -359,7 +399,7 @@ def create_esql_tool(name: str, query: str, description: str, params: Optional[D
         }
     }
     
-    response = requests.post(url, headers=HEADERS, json=tool_config)
+    response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
     if response.status_code in [200, 201]:
         data = response.json()
@@ -393,7 +433,7 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
         }
     }
     
-    response = requests.post(url, headers=HEADERS, json=tool_config)
+    response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
     if response.status_code in [200, 201]:
         data = response.json()
@@ -427,7 +467,7 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
         }
     }
     
-    response = requests.post(url, headers=HEADERS, json=tool_config)
+    response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
     if response.status_code in [200, 201]:
         data = response.json()
@@ -444,7 +484,7 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
 def get_workflow_id_by_name(workflow_name: str) -> Optional[str]:
     """Get workflow ID by name from list of workflows."""
     url = f"{KIBANA_URL}/api/workflows"
-    list_response = requests.get(url, headers=HEADERS)
+    list_response = request_with_retry("GET", url, headers=HEADERS)
     if list_response.status_code == 200:
         workflows = list_response.json().get("data", [])
         for wf in workflows:
@@ -474,7 +514,7 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     url = f"{KIBANA_URL}/api/workflows"
     
     # API expects {"yaml": "<yaml_string>"}
-    response = requests.post(url, headers=HEADERS, json={"yaml": yaml_content})
+    response = request_with_retry("POST", url, headers=HEADERS, json={"yaml": yaml_content})
     
     if response.status_code in [200, 201]:
         data = response.json()
