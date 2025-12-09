@@ -11,6 +11,12 @@ tabs:
   hostname: host-1
   path: /
   port: 3000
+- id: wayfinder-backend-api
+  title: Backend API
+  type: service
+  hostname: host-1
+  path: /
+  port: 8000
 - id: wdzfceiayicy
   title: Kibana
   type: service
