@@ -10,7 +10,7 @@ tabs:
   type: service
   hostname: host-1
   path: /
-  port: 3000
+  port: 8000
 - id: vefhempgf5yq
   title: Kibana
   type: service

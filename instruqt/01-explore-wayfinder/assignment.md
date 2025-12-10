@@ -10,13 +10,13 @@ tabs:
   type: service
   hostname: host-1
   path: /
-  port: 3000
+  port: 8000
 - id: 0ukl1c9nexnd
   title: Architecture Diagram
   type: service
   hostname: host-1
   path: /architecture.html
-  port: 3000
+  port: 8000
 - id: wdzfceiayicy
   title: Kibana
   type: service
