@@ -39,6 +39,15 @@ function getApiUrl(): string {
 
 const API_URL = getApiUrl();
 
+// Helper to create URL that works with both absolute and relative (empty) API_URL
+function createApiUrl(path: string): URL {
+  if (API_URL) {
+    return new URL(`${API_URL}${path}`);
+  }
+  // When API_URL is empty, use current origin as base for relative URL
+  return new URL(path, window.location.origin);
+}
+
 export interface StreamEvent {
   type: string;
   data: any;
@@ -73,7 +82,7 @@ export interface TripEntities {
 
 export const api = {
   async parseTripContext(message: string): Promise<TripContext> {
-    const url = new URL(`${API_URL}/api/parse-trip-context`);
+    const url = createApiUrl('/api/parse-trip-context');
     url.searchParams.set('message', message);
 
     const response = await fetch(url.toString(), {
@@ -95,7 +104,7 @@ export const api = {
     userId: string,
     onEvent: (event: StreamEvent) => void
   ): Promise<void> {
-    const url = new URL(`${API_URL}/api/chat`);
+    const url = createApiUrl('/api/chat');
     url.searchParams.set('message', message);
     url.searchParams.set('user_id', userId);
     
@@ -143,7 +152,7 @@ export const api = {
   },
 
   async getProducts(category?: string, limit = 20): Promise<{ products: any[]; total: number }> {
-    const url = new URL(`${API_URL}/api/products`);
+    const url = createApiUrl('/api/products');
     if (category) url.searchParams.set('category', category);
     url.searchParams.set('limit', limit.toString());
 
@@ -165,7 +174,7 @@ export const api = {
   },
 
   async searchProducts(query: string, limit = 5): Promise<{ products: any[]; total: number }> {
-    const url = new URL(`${API_URL}/api/products/search`);
+    const url = createApiUrl('/api/products/search');
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
 
@@ -178,7 +187,7 @@ export const api = {
   },
 
   async getCart(userId: string, loyaltyTier?: string): Promise<any> {
-    const url = new URL(`${API_URL}/api/cart`);
+    const url = createApiUrl('/api/cart');
     url.searchParams.set('user_id', userId);
     if (loyaltyTier) url.searchParams.set('loyalty_tier', loyaltyTier);
 
@@ -238,7 +247,7 @@ export const api = {
   },
 
   async getProductReviews(productId: string, limit = 20, offset = 0): Promise<{ reviews: any[]; total: number }> {
-    const url = new URL(`${API_URL}/api/products/${productId}/reviews`);
+    const url = createApiUrl(`/api/products/${productId}/reviews`);
     url.searchParams.set('limit', limit.toString());
     url.searchParams.set('offset', offset.toString());
 
@@ -289,7 +298,7 @@ export const api = {
   },
 
   async extractItinerary(tripPlan: string): Promise<{ days: Array<{ day: number; title: string; activities: string[] }> }> {
-    const url = new URL(`${API_URL}/api/extract-itinerary`);
+    const url = createApiUrl('/api/extract-itinerary');
     url.searchParams.set('trip_plan', tripPlan);
 
     const response = await fetch(url.toString(), {
@@ -308,7 +317,7 @@ export const api = {
   },
 
   async extractTripEntities(tripPlan: string): Promise<TripEntities> {
-    const url = new URL(`${API_URL}/api/extract-trip-entities`);
+    const url = createApiUrl('/api/extract-trip-entities');
     url.searchParams.set('trip_plan', tripPlan);
 
     const response = await fetch(url.toString(), {
@@ -396,7 +405,7 @@ export const api = {
       action: string;
     }>;
   }> {
-    const url = new URL(`${API_URL}/api/clickstream/${userId}/events`);
+    const url = createApiUrl(`/api/clickstream/${userId}/events`);
     url.searchParams.set('action', action);
 
     const response = await fetch(url.toString());
