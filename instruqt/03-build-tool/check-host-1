@@ -1,0 +1,82 @@
+#!/bin/bash
+# Validation script for Challenge 3: Build Tool
+# Checks that workflow tool exists and is properly configured
+
+set -e
+
+KIBANA_URL="${STANDALONE_KIBANA_URL:-http://kubernetes-vm:30001}"
+ES_APIKEY="${STANDALONE_ELASTICSEARCH_APIKEY}"
+
+if [ -z "$ES_APIKEY" ]; then
+    fail-message "ERROR: STANDALONE_ELASTICSEARCH_APIKEY environment variable not set"
+    exit 1
+fi
+
+echo "Checking for workflow tool..."
+
+# Check if tool exists
+TOOL_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/agent_builder/tools" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana")
+
+if [ $? -ne 0 ]; then
+    fail-message "ERROR: Failed to connect to Kibana API"
+    exit 1
+fi
+
+# Check if workflow tool exists
+if echo "$TOOL_RESPONSE" | jq -e '.data[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
+    TOOL_DATA=$(echo "$TOOL_RESPONSE" | jq '.data[] | select(.id=="tool-workflow-get-customer-profile")')
+    echo "✓ Found tool: tool-workflow-get-customer-profile"
+    
+    # Verify it's a workflow tool
+    TOOL_TYPE=$(echo "$TOOL_DATA" | jq -r '.type')
+    if [ "$TOOL_TYPE" != "workflow" ]; then
+        fail-message "ERROR: Tool type is '$TOOL_TYPE', expected 'workflow'"
+        exit 1
+    fi
+    echo "✓ Tool type is correct: $TOOL_TYPE"
+    
+    # Verify workflow_id is configured
+    WORKFLOW_ID=$(echo "$TOOL_DATA" | jq -r '.configuration.workflow_id // empty')
+    if [ -z "$WORKFLOW_ID" ]; then
+        fail-message "ERROR: Tool missing workflow_id in configuration"
+        exit 1
+    fi
+    echo "✓ Tool configured with workflow_id: $WORKFLOW_ID"
+    
+    # Verify the workflow exists
+    WORKFLOW_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/workflows" \
+      -H "Authorization: ApiKey $ES_APIKEY" \
+      -H "kbn-xsrf: true" \
+      -H "x-elastic-internal-origin: kibana")
+    
+    if echo "$WORKFLOW_RESPONSE" | jq -e ".data[] | select(.id==\"$WORKFLOW_ID\")" > /dev/null 2>&1; then
+        WORKFLOW_NAME=$(echo "$WORKFLOW_RESPONSE" | jq -r ".data[] | select(.id==\"$WORKFLOW_ID\") | .name")
+        echo "✓ Referenced workflow exists: $WORKFLOW_NAME"
+    else
+        fail-message "ERROR: Referenced workflow '$WORKFLOW_ID' does not exist"
+        exit 1
+    fi
+    
+    # Check description
+    DESCRIPTION=$(echo "$TOOL_DATA" | jq -r '.description // empty')
+    if [ -n "$DESCRIPTION" ]; then
+        echo "✓ Tool has description: $DESCRIPTION"
+    else
+        echo "⚠ Warning: Tool missing description"
+    fi
+    
+    echo ""
+    echo "Tool details:"
+    echo "$TOOL_DATA" | jq '.'
+    exit 0
+else
+    fail-message "ERROR: Tool 'tool-workflow-get-customer-profile' not found"
+    echo ""
+    echo "Available tools:"
+    echo "$TOOL_RESPONSE" | jq -r '.data[] | "\(.id) (\(.type))"' || echo "None found"
+    exit 1
+fi
+

@@ -58,3 +58,6 @@ PROJECT_SUMMARY.md
 
 tmp.txt
 instrqut-run.log
+
+# Build output (generated at runtime)
+backend/static/

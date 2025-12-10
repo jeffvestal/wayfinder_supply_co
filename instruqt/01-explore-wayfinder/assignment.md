@@ -11,12 +11,12 @@ tabs:
   hostname: host-1
   path: /
   port: 3000
-- id: wayfinder-backend-api
-  title: Backend API
+- id: architecture-diagram
+  title: Architecture Diagram
   type: service
   hostname: host-1
-  path: /
-  port: 8000
+  path: /architecture.html
+  port: 3000
 - id: wdzfceiayicy
   title: Kibana
   type: service
@@ -61,11 +61,28 @@ In this workshop, you'll explore how the system:
    - Tool calls to check weather conditions
    - Customer profile lookups
    - Product searches
+   - How the agent orchestrates multiple data sources
 
 5. **Test Personalization**: Use the user switcher (top right) to change between:
    - **Jordan Explorer** - New user, no history
    - **Alex Hiker** - Platinum member, ultralight preference
    - **Casey Campground** - Business buyer, bulk orders
+   
+   Notice how recommendations change based on user preferences and purchase history!
+
+---
+
+## Understand the Architecture
+
+1. Open the [button label="Architecture Diagram"](tab-1) tab to see how all the components connect
+
+2. **Key Components**:
+   - **Frontend** (React) - User interface with chat and thought trace
+   - **Backend Proxy** (FastAPI) - Routes requests to Agent Builder
+   - **Agent Builder** - Orchestrates workflows and tools
+   - **Workflows** - Connect to MCP server (CRM, Weather) and Elasticsearch
+   - **Elasticsearch** - Product catalog and user clickstream data
+   - **MCP Server** - Simulates external enterprise systems
 
 ---
 
@@ -121,11 +138,13 @@ curl -s localhost:9200/_cluster/health | jq
 
 ## What's Next?
 
-Once you've explored the system, you understand how:
-1. The frontend communicates with the backend proxy
-2. The backend streams responses from Agent Builder
-3. Workflows call the MCP server for weather and CRM data
-4. The agent synthesizes everything into personalized recommendations
+You've just seen an AI agent orchestrate weather data, customer profiles, product searches, and behavioral insights to create personalized trip recommendations. 
 
-🎉 **You're ready to dive deeper into building your own agents and workflows!**
+**In the next challenges, you'll build the components that make this possible:**
+- **Challenge 2**: Build a workflow that connects to external systems
+- **Challenge 3**: Create a tool that agents can use
+- **Challenge 4**: Build an agent that orchestrates everything
+- **Challenge 5**: Test your components in the full application
+
+🎉 **Ready to build? Let's start with workflows!**
 

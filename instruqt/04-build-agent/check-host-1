@@ -1,0 +1,109 @@
+#!/bin/bash
+# Validation script for Challenge 4: Build Agent
+# Checks that trip-planner-agent exists with correct tools and instructions
+
+set -e
+
+KIBANA_URL="${STANDALONE_KIBANA_URL:-http://kubernetes-vm:30001}"
+ES_APIKEY="${STANDALONE_ELASTICSEARCH_APIKEY}"
+
+if [ -z "$ES_APIKEY" ]; then
+    fail-message "ERROR: STANDALONE_ELASTICSEARCH_APIKEY environment variable not set"
+    exit 1
+fi
+
+echo "Checking for trip-planner-agent..."
+
+# Check if agent exists
+AGENT_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/agent_builder/agents" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana")
+
+if [ $? -ne 0 ]; then
+    fail-message "ERROR: Failed to connect to Kibana API"
+    exit 1
+fi
+
+# Check if agent exists
+if echo "$AGENT_RESPONSE" | jq -e '.data[] | select(.id=="trip-planner-agent")' > /dev/null 2>&1; then
+    AGENT_DATA=$(echo "$AGENT_RESPONSE" | jq '.data[] | select(.id=="trip-planner-agent")')
+    echo "✓ Found agent: trip-planner-agent"
+    
+    # Check name
+    AGENT_NAME=$(echo "$AGENT_DATA" | jq -r '.name // empty')
+    if [ -n "$AGENT_NAME" ]; then
+        echo "✓ Agent name: $AGENT_NAME"
+    fi
+    
+    # Check description
+    DESCRIPTION=$(echo "$AGENT_DATA" | jq -r '.description // empty')
+    if [ -n "$DESCRIPTION" ]; then
+        echo "✓ Agent has description"
+    fi
+    
+    # Check instructions
+    INSTRUCTIONS=$(echo "$AGENT_DATA" | jq -r '.configuration.instructions // empty')
+    if [ -z "$INSTRUCTIONS" ]; then
+        fail-message "ERROR: Agent missing instructions"
+        exit 1
+    fi
+    
+    INSTRUCTIONS_LENGTH=$(echo "$INSTRUCTIONS" | wc -c)
+    if [ "$INSTRUCTIONS_LENGTH" -lt 500 ]; then
+        fail-message "ERROR: Instructions seem too short (${INSTRUCTIONS_LENGTH} chars). Expected at least 500 characters."
+        exit 1
+    fi
+    echo "✓ Agent has instructions (${INSTRUCTIONS_LENGTH} characters)"
+    
+    # Check for key instruction content
+    if echo "$INSTRUCTIONS" | grep -qi "catalog-only\|wayfinder\|product_search"; then
+        echo "✓ Instructions contain key content (catalog rules, product search)"
+    else
+        echo "⚠ Warning: Instructions may be missing key content"
+    fi
+    
+    # Check tools
+    TOOLS=$(echo "$AGENT_DATA" | jq -r '.configuration.tools[0].tool_ids[]? // empty')
+    if [ -z "$TOOLS" ]; then
+        fail-message "ERROR: Agent has no tools assigned"
+        exit 1
+    fi
+    
+    TOOL_COUNT=$(echo "$AGENT_DATA" | jq '.configuration.tools[0].tool_ids | length')
+    echo "✓ Agent has $TOOL_COUNT tool(s) assigned"
+    
+    # Verify expected tools are present
+    EXPECTED_TOOLS=("product-search" "check-trip-safety" "get-customer-profile" "get-user-affinity")
+    MISSING_TOOLS=()
+    
+    for expected in "${EXPECTED_TOOLS[@]}"; do
+        if ! echo "$TOOLS" | grep -qi "$expected"; then
+            MISSING_TOOLS+=("$expected")
+        fi
+    done
+    
+    if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
+        echo "⚠ Warning: Missing expected tools: ${MISSING_TOOLS[*]}"
+        echo "Assigned tools:"
+        echo "$TOOLS" | while read tool_id; do
+            echo "  - $tool_id"
+        done
+    else
+        echo "✓ All expected tools are assigned"
+    fi
+    
+    echo ""
+    echo "Agent summary:"
+    echo "  Name: $AGENT_NAME"
+    echo "  Tools: $TOOL_COUNT"
+    echo "  Instructions length: ${INSTRUCTIONS_LENGTH} characters"
+    exit 0
+else
+    fail-message "ERROR: Agent 'trip-planner-agent' not found"
+    echo ""
+    echo "Available agents:"
+    echo "$AGENT_RESPONSE" | jq -r '.data[] | "\(.id) (\(.name))"' || echo "None found"
+    exit 1
+fi
+

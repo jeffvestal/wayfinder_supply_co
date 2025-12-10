@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wayfinder Supply Co. Architecture</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #fff;
+            border-bottom: 2px solid #006bb3;
+            padding-bottom: 10px;
+        }
+        .diagram {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .description {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .component {
+            margin: 15px 0;
+            padding: 10px;
+            background: #333;
+            border-left: 4px solid #006bb3;
+            border-radius: 4px;
+        }
+        .component h3 {
+            margin-top: 0;
+            color: #4da6ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Wayfinder Supply Co. Architecture</h1>
+        
+        <div class="description">
+            <h2>System Overview</h2>
+            <p>Wayfinder Supply Co. demonstrates Elastic Agentic Search by federating data from multiple sources and using AI agents to create personalized recommendations.</p>
+        </div>
+
+        <div class="diagram">
+            <div class="mermaid">
+flowchart TB
+    subgraph UI["User Interface"]
+        Frontend["React Frontend<br/>- Storefront View<br/>- Chat Interface (SSE)<br/>- Thought Trace Panel<br/>- Cart View"]
+    end
+    
+    subgraph Backend["Backend Proxy"]
+        FastAPI["FastAPI Backend<br/>- Chat Endpoint (SSE proxy)<br/>- Product API<br/>- Cart Management"]
+    end
+    
+    subgraph Elastic["Elastic Stack"]
+        AgentBuilder["Agent Builder<br/>- Trip Planner Agent<br/>- Itinerary Agent"]
+        Workflows["Workflows<br/>- check_trip_safety<br/>- get_customer_profile<br/>- get_user_affinity"]
+        Elasticsearch["Elasticsearch<br/>- product-catalog<br/>- user-clickstream"]
+    end
+    
+    subgraph MCP["MCP Server"]
+        MCPServer["FastAPI MCP Server<br/>- Weather Service<br/>- CRM Service"]
+    end
+    
+    Frontend -->|HTTP/SSE| FastAPI
+    FastAPI -->|SSE| AgentBuilder
+    AgentBuilder -->|Uses| Workflows
+    AgentBuilder -->|Queries| Elasticsearch
+    Workflows -->|HTTP JSON-RPC| MCPServer
+    Workflows -->|ES|QL| Elasticsearch
+    
+    style UI fill:#2d5aa0
+    style Backend fill:#006bb3
+    style Elastic fill:#00bfb3
+    style MCP fill:#fec514
+            </div>
+        </div>
+
+        <div class="description">
+            <h2>Component Details</h2>
+            
+            <div class="component">
+                <h3>Frontend (React + Vite)</h3>
+                <p><strong>Technology:</strong> React 18, TypeScript, Tailwind CSS, Radix UI</p>
+                <p><strong>Features:</strong> Server-Sent Events for real-time agent responses, thought trace visualization, user persona switching</p>
+            </div>
+            
+            <div class="component">
+                <h3>Backend Proxy (FastAPI)</h3>
+                <p><strong>Responsibilities:</strong> Proxy SSE streams from Agent Builder, product catalog queries, cart management</p>
+                <p><strong>Endpoints:</strong> POST /api/chat, GET /api/products, GET /api/products/search, POST /api/cart</p>
+            </div>
+            
+            <div class="component">
+                <h3>Agent Builder</h3>
+                <p><strong>Trip Planner Agent:</strong> Main orchestrator that uses multiple tools (search, workflows, ES|QL) to make intelligent decisions</p>
+                <p><strong>Trip Itinerary Agent:</strong> Synthesizes trip plans and formats markdown output with loyalty perks</p>
+            </div>
+            
+            <div class="component">
+                <h3>Workflows</h3>
+                <p><strong>check_trip_safety:</strong> Calls MCP server for weather conditions and road alerts</p>
+                <p><strong>get_customer_profile:</strong> Calls MCP server for CRM data (purchase history, loyalty tier)</p>
+                <p><strong>get_user_affinity:</strong> ES|QL query on clickstream to analyze user preferences</p>
+            </div>
+            
+            <div class="component">
+                <h3>Elasticsearch Indices</h3>
+                <p><strong>product-catalog:</strong> Products with semantic_text field (ELSER), hybrid search (keyword + semantic), rich metadata</p>
+                <p><strong>user-clickstream:</strong> User browsing behavior, tag preferences, used for personalization</p>
+            </div>
+            
+            <div class="component">
+                <h3>MCP Server (FastAPI)</h3>
+                <p><strong>Purpose:</strong> Simulates external enterprise systems (CRM, Weather API)</p>
+                <p><strong>Protocol:</strong> JSON-RPC over HTTP</p>
+                <p><strong>Tools:</strong> get_trip_conditions_tool, get_customer_profile_tool</p>
+            </div>
+        </div>
+
+        <div class="description">
+            <h2>Data Flow</h2>
+            <h3>Chat Request Flow</h3>
+            <ol>
+                <li>User sends message via frontend</li>
+                <li>Frontend streams to backend /api/chat</li>
+                <li>Backend proxies to Agent Builder /api/agent_builder/converse/async</li>
+                <li>Agent Builder processes:
+                    <ul>
+                        <li>Calls workflow tools (weather, CRM)</li>
+                        <li>Executes ES|QL queries (affinity)</li>
+                        <li>Searches product catalog</li>
+                        <li>Calls Itinerary Agent</li>
+                    </ul>
+                </li>
+                <li>Responses stream back via SSE</li>
+                <li>Frontend displays in chat + thought trace</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#006bb3',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#4da6ff',
+                lineColor: '#4da6ff',
+                secondaryColor: '#00bfb3',
+                tertiaryColor: '#fec514'
+            }
+        });
+    </script>
+</body>
+</html>
+

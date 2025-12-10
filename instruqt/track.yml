@@ -3,10 +3,19 @@ id: vkzzzttrdcya
 title: 'Wayfinder Supply Co: Building an Agentic Search Experience'
 teaser: Build an intelligent search experience that federates data from multiple sources,
   personalizes results, and orchestrates workflows to provide personalized gear recommendations.
-description: Learn to build an AI-powered trip planning agent using Elastic Agent
-  Builder, Workflows, and semantic search. This workshop demonstrates how to go beyond
-  keyword matching by federating data from Elasticsearch, CRM systems, and external
-  APIs.
+description: |
+  Learn to build an AI-powered trip planning agent using Elastic Agent Builder, 
+  Workflows, and semantic search. This hands-on workshop guides you through building 
+  the components of an agentic search system:
+  
+  - Challenge 1: Explore the complete Wayfinder Supply Co. demo application
+  - Challenge 2: Build a workflow that connects to external systems (CRM, Weather)
+  - Challenge 3: Create a tool that makes workflows available to agents
+  - Challenge 4: Build an agent that orchestrates multiple tools
+  - Challenge 5: Test your complete system working together
+  
+  You'll learn how to go beyond keyword matching by federating data from Elasticsearch, 
+  CRM systems, and external APIs to create personalized, intelligent recommendations.
 icon: ""
 tags:
 - search
@@ -30,5 +39,5 @@ lab_config:
     name: modern-dark
   override_challenge_layout: false
   hideStopButton: false
-checksum: "8697218298534836044"
+checksum: "3234482588499310836"
 enhanced_loading: false

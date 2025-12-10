@@ -1,0 +1,70 @@
+#!/bin/bash
+# Validation script for Challenge 2: Build Workflow
+# Checks that get_customer_profile workflow exists and can be executed
+
+set -e
+
+KIBANA_URL="${STANDALONE_KIBANA_URL:-http://kubernetes-vm:30001}"
+ES_APIKEY="${STANDALONE_ELASTICSEARCH_APIKEY}"
+
+if [ -z "$ES_APIKEY" ]; then
+    fail-message "ERROR: STANDALONE_ELASTICSEARCH_APIKEY environment variable not set"
+    exit 1
+fi
+
+echo "Checking for get_customer_profile workflow..."
+
+# Check if workflow exists
+WORKFLOW_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/workflows" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana")
+
+if [ $? -ne 0 ]; then
+    fail-message "ERROR: Failed to connect to Kibana API"
+    exit 1
+fi
+
+# Check if workflow exists by name
+if echo "$WORKFLOW_RESPONSE" | jq -e '.data[] | select(.name=="get_customer_profile")' > /dev/null 2>&1; then
+    WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | select(.name=="get_customer_profile") | .id')
+    echo "✓ Found workflow: get_customer_profile (ID: $WORKFLOW_ID)"
+else
+    fail-message "ERROR: Workflow 'get_customer_profile' not found"
+    echo "Available workflows:"
+    echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | .name' || echo "None found"
+    exit 1
+fi
+
+# Test workflow execution
+echo "Testing workflow execution..."
+EXECUTION_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/_execute" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "Content-Type: application/json" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana" \
+  -d '{
+    "input": {
+      "user_id": "user_member"
+    }
+  }')
+
+if [ $? -ne 0 ]; then
+    fail-message "ERROR: Failed to execute workflow"
+    exit 1
+fi
+
+# Check if execution was successful
+if echo "$EXECUTION_RESPONSE" | jq -e '.status == "success" or .status == "running"' > /dev/null 2>&1; then
+    echo "✓ Workflow executed successfully"
+    echo ""
+    echo "Workflow output:"
+    echo "$EXECUTION_RESPONSE" | jq '.'
+    exit 0
+else
+    fail-message "ERROR: Workflow execution failed"
+    echo "Response:"
+    echo "$EXECUTION_RESPONSE" | jq '.'
+    exit 1
+fi
+

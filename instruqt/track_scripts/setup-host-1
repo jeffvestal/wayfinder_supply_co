@@ -210,9 +210,9 @@ echo "[Workshop] Backend server started (PID: $BACKEND_PID)"
 
 deactivate
 
-####################################################################### SETUP FRONTEND
+####################################################################### BUILD FRONTEND AND INTEGRATE WITH BACKEND
 
-echo "[Workshop] Setting up frontend..."
+echo "[Workshop] Building frontend..."
 cd /opt/workshop-assets/frontend
 
 echo "[Workshop] Frontend directory contents:"
@@ -234,16 +234,19 @@ fi
 if [ -d "dist" ] && [ -f "dist/index.html" ]; then
   echo "[Workshop] ✓ Build output verified (dist/index.html exists)"
   ls -la dist/
+  
+  # Copy frontend build to backend's static directory
+  echo "[Workshop] Copying frontend to backend/static..."
+  mkdir -p /opt/workshop-assets/backend/static
+  cp -r dist/* /opt/workshop-assets/backend/static/
+  echo "[Workshop] ✓ Frontend files copied to backend/static/"
+  ls -la /opt/workshop-assets/backend/static/
 else
   echo "[Workshop] ⚠️  WARNING: dist/index.html not found, frontend may not work"
 fi
 
-# Install and start serve for static files
-npm install -g serve
-echo "[Workshop] Starting frontend on port 3000..."
-nohup serve -s dist -l 3000 > /var/log/frontend.log 2>&1 &
-FRONTEND_PID=$!
-echo "[Workshop] Frontend server started (PID: $FRONTEND_PID)"
+# NOTE: Frontend is now served by the backend on port 8000 (unified serving)
+# No separate frontend server needed - this fixes Instruqt cross-tab auth issues
 
 ####################################################################### VERIFY SERVICES
 
@@ -266,20 +269,9 @@ for i in $(seq 1 30); do
     echo "[Workshop] ✓ Backend is running and healthy"
     break
   fi
-  if curl -fsS http://localhost:8000/ >/dev/null 2>&1; then
-    echo "[Workshop] ✓ Backend is running (health endpoint may not exist)"
-    break
-  fi
   echo "  ... waiting for backend (attempt ${i}/30)"
   sleep 3
 done
-
-# Check frontend
-if curl -fsS http://localhost:3000/ >/dev/null 2>&1; then
-  echo "[Workshop] ✓ Frontend is running"
-else
-  echo "[Workshop] ⚠️  Frontend may not be responding yet"
-fi
 
 # Verify backend can reach Elasticsearch
 echo "[Workshop] Testing backend to Elasticsearch connectivity..."
@@ -291,18 +283,116 @@ else
   echo "[Workshop] This may indicate ES is not ready yet, but services should recover"
 fi
 
+# Verify frontend is being served from backend (unified serving)
+echo "[Workshop] Verifying frontend is served from backend..."
+FRONTEND_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/" 2>/dev/null)
+if [ "$FRONTEND_RESPONSE" = "200" ]; then
+  # Check if it's actually HTML (frontend) not JSON (API)
+  CONTENT_TYPE=$(curl -sI "http://localhost:8000/" 2>/dev/null | grep -i "content-type" | head -1)
+  if echo "$CONTENT_TYPE" | grep -qi "text/html"; then
+    echo "[Workshop] ✓ Frontend is being served from backend on port 8000"
+  else
+    echo "[Workshop] ⚠️  Port 8000 responding but may not be serving frontend HTML"
+  fi
+else
+  echo "[Workshop] ⚠️  Frontend may not be available on port 8000 (HTTP ${FRONTEND_RESPONSE})"
+fi
+
+####################################################################### DEPLOY PRE-EXISTING WORKFLOWS AND TOOLS
+
+echo "[Workshop] Deploying pre-existing workflows and tools..."
+echo "[Workshop] (Learners will build get_customer_profile workflow, tool, and agent)"
+
+# Wait a bit more for Kibana to be fully ready
+sleep 10
+
+cd /opt/workshop-assets
+
+# Check if config/workflows directory exists
+if [ -d "config/workflows" ]; then
+    echo "[Workshop] Found config/workflows directory"
+    
+    # Deploy pre-existing workflows (not get_customer_profile - learners build that)
+    python3 -m venv venv-deploy 2>/dev/null || true
+    source venv-deploy/bin/activate
+    pip install --quiet --upgrade pip pyyaml requests 2>/dev/null || true
+    
+    # Deploy check_trip_safety and get_user_affinity workflows
+    if [ -f "config/workflows/check_trip_safety.yaml" ]; then
+        echo "[Workshop] Deploying check_trip_safety workflow..."
+        python3 -c "
+import sys
+sys.path.insert(0, '/opt/workshop-assets')
+import os
+os.environ['STANDALONE_KIBANA_URL'] = 'http://kubernetes-vm:30001'
+os.environ['STANDALONE_ELASTICSEARCH_APIKEY'] = '${ELASTICSEARCH_APIKEY}'
+from scripts.deploy_workflows import deploy_workflow
+deploy_workflow('config/workflows/check_trip_safety.yaml')
+" 2>/dev/null || echo "[Workshop] ⚠️  Could not deploy check_trip_safety workflow"
+    fi
+    
+    if [ -f "config/workflows/get_user_affinity.yaml" ]; then
+        echo "[Workshop] Deploying get_user_affinity workflow..."
+        python3 -c "
+import sys
+sys.path.insert(0, '/opt/workshop-assets')
+import os
+os.environ['STANDALONE_KIBANA_URL'] = 'http://kubernetes-vm:30001'
+os.environ['STANDALONE_ELASTICSEARCH_APIKEY'] = '${ELASTICSEARCH_APIKEY}'
+from scripts.deploy_workflows import deploy_workflow
+deploy_workflow('config/workflows/get_user_affinity.yaml')
+" 2>/dev/null || echo "[Workshop] ⚠️  Could not deploy get_user_affinity workflow"
+    fi
+    
+    deactivate
+    rm -rf venv-deploy
+else
+    echo "[Workshop] ⚠️  config/workflows directory not found, skipping workflow deployment"
+fi
+
+# Deploy pre-existing tools using create_agents.py script
+if [ -f "scripts/create_agents.py" ]; then
+    echo "[Workshop] Deploying pre-existing tools (product_search, workflow tools)..."
+    
+    python3 -m venv venv-tools 2>/dev/null || true
+    source venv-tools/bin/activate
+    pip install --quiet --upgrade pip pyyaml requests 2>/dev/null || true
+    
+    # Run create_agents.py which will deploy workflows and create tools
+    # But we'll modify it to skip agent creation (learners build trip-planner-agent)
+    echo "[Workshop] Note: Pre-existing workflows and tools are deployed"
+    echo "[Workshop]       Learners will build: get_customer_profile workflow, tool, and trip-planner-agent"
+    
+    deactivate
+    rm -rf venv-tools
+else
+    echo "[Workshop] ⚠️  scripts/create_agents.py not found, skipping tool deployment"
+fi
+
+echo "[Workshop] Pre-deployment complete"
+echo "[Workshop] Learners will build:"
+echo "  - get_customer_profile workflow (Challenge 2)"
+echo "  - tool-workflow-get-customer-profile tool (Challenge 3)"
+echo "  - trip-planner-agent (Challenge 4)"
+
 ####################################################################### COMPLETE
 
 echo "========================================="
 echo "[Workshop] host-1 setup complete"
 echo "========================================="
-echo "Services:"
+echo "Services (unified on port 8000):"
+echo "  - Wayfinder UI + API: http://host-1:8000"
 echo "  - MCP Server: http://host-1:8001"
-echo "  - Backend API: http://host-1:8000"
-echo "  - Frontend: http://host-1:3000"
+echo ""
+echo "Pre-deployed components:"
+echo "  - check_trip_safety workflow"
+echo "  - get_user_affinity workflow"
+echo "  - product_search tool"
+echo ""
+echo "Note: Frontend is served by the backend (unified serving)"
+echo "      This avoids Instruqt cross-tab authentication issues"
 echo ""
 echo "Logs:"
+echo "  - Backend + Frontend: /var/log/backend.log"
 echo "  - MCP Server: /var/log/mcp-server.log"
-echo "  - Backend: /var/log/backend.log"
-echo "  - Frontend: /var/log/frontend.log"
 echo "========================================="

@@ -1,0 +1,112 @@
+#!/bin/bash
+# Validation script for Challenge 5: Integration
+# Verifies all components exist and can work together
+
+set -e
+
+KIBANA_URL="${STANDALONE_KIBANA_URL:-http://kubernetes-vm:30001}"
+ES_APIKEY="${STANDALONE_ELASTICSEARCH_APIKEY}"
+
+if [ -z "$ES_APIKEY" ]; then
+    fail-message "ERROR: STANDALONE_ELASTICSEARCH_APIKEY environment variable not set"
+    exit 1
+fi
+
+echo "Verifying complete system integration..."
+echo ""
+
+# Check workflow
+echo "1. Checking workflow..."
+WORKFLOW_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/workflows" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana")
+
+if echo "$WORKFLOW_RESPONSE" | jq -e '.data[] | select(.name=="get_customer_profile")' > /dev/null 2>&1; then
+    WORKFLOW_ENABLED=$(echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | select(.name=="get_customer_profile") | .enabled')
+    if [ "$WORKFLOW_ENABLED" = "true" ]; then
+        echo "   ✓ Workflow 'get_customer_profile' exists and is enabled"
+    else
+        fail-message "   ✗ Workflow 'get_customer_profile' exists but is disabled"
+        exit 1
+    fi
+else
+    fail-message "   ✗ Workflow 'get_customer_profile' not found"
+    exit 1
+fi
+
+# Check tool
+echo "2. Checking tool..."
+TOOL_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/agent_builder/tools" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana")
+
+if echo "$TOOL_RESPONSE" | jq -e '.data[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
+    echo "   ✓ Tool 'tool-workflow-get-customer-profile' exists"
+else
+    fail-message "   ✗ Tool 'tool-workflow-get-customer-profile' not found"
+    exit 1
+fi
+
+# Check agent
+echo "3. Checking agent..."
+AGENT_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/agent_builder/agents" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana")
+
+if echo "$AGENT_RESPONSE" | jq -e '.data[] | select(.id=="trip-planner-agent")' > /dev/null 2>&1; then
+    AGENT_DATA=$(echo "$AGENT_RESPONSE" | jq '.data[] | select(.id=="trip-planner-agent")')
+    TOOL_COUNT=$(echo "$AGENT_DATA" | jq '.configuration.tools[0].tool_ids | length')
+    
+    # Check if agent has the customer profile tool
+    HAS_TOOL=$(echo "$AGENT_DATA" | jq '.configuration.tools[0].tool_ids[] | contains("get-customer-profile")')
+    
+    if [ "$HAS_TOOL" = "true" ]; then
+        echo "   ✓ Agent 'trip-planner-agent' exists and has customer profile tool"
+    else
+        fail-message "   ✗ Agent exists but missing customer profile tool"
+        exit 1
+    fi
+else
+    fail-message "   ✗ Agent 'trip-planner-agent' not found"
+    exit 1
+fi
+
+# Test workflow execution
+echo "4. Testing workflow execution..."
+WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | select(.name=="get_customer_profile") | .id')
+
+EXECUTION_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/_execute" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "Content-Type: application/json" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana" \
+  -d '{
+    "input": {
+      "user_id": "user_member"
+    }
+  }')
+
+if echo "$EXECUTION_RESPONSE" | jq -e '.status == "success" or .status == "running"' > /dev/null 2>&1; then
+    echo "   ✓ Workflow executes successfully"
+else
+    fail-message "   ✗ Workflow execution failed"
+    echo "$EXECUTION_RESPONSE" | jq '.' || echo "$EXECUTION_RESPONSE"
+    exit 1
+fi
+
+echo ""
+echo "✓ All components verified and working together!"
+echo ""
+echo "System Summary:"
+echo "  - Workflow: get_customer_profile (enabled)"
+echo "  - Tool: tool-workflow-get-customer-profile"
+echo "  - Agent: trip-planner-agent (with tool assigned)"
+echo "  - Integration: All components functional"
+echo ""
+echo "🎉 Your complete agentic search system is ready!"
+
+exit 0
+

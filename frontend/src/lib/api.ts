@@ -7,21 +7,30 @@ function getApiUrl(): string {
   
   // In browser, determine URL dynamically
   if (typeof window !== 'undefined') {
-    const { protocol, hostname } = window.location;
+    const { protocol, hostname, port } = window.location;
     
-    // Instruqt URLs look like: https://host-1-3000-{sandbox}.env.play.instruqt.com
-    // We need to change port 3000 to 8000
+    // If frontend is served from port 8000, backend is same origin (unified serving)
+    // This works for: Instruqt (unified), Cloud Run, K8s, production deployments
+    if (hostname.includes('-8000-') || port === '8000') {
+      return ''; // Same origin - use relative URLs
+    }
+    
+    // Instruqt with separate tabs (legacy): host-1-3000-{sandbox} → host-1-8000-{sandbox}
     if (hostname.includes('-3000-')) {
       return `${protocol}//${hostname.replace('-3000-', '-8000-')}`;
     }
     
     // Local development: frontend on 3000, backend on 8000
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return `${protocol}//${hostname}:8000`;
+      if (port === '3000') {
+        return `${protocol}//${hostname}:8000`;
+      }
+      // Already on port 8000 or no port specified
+      return '';
     }
     
-    // Same host, different port
-    return `${protocol}//${hostname}:8000`;
+    // Production/other: assume same origin
+    return '';
   }
   
   // Fallback for SSR or other environments
