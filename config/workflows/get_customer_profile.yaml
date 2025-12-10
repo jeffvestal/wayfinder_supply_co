@@ -15,7 +15,7 @@ steps:
   - name: call_crm_mcp
     type: http
     with:
-      url: "http://host-1:8001/mcp"
+      url: "http://host-1:8002/mcp"
       method: POST
       headers:
         Content-Type: application/json

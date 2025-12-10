@@ -179,7 +179,7 @@ This workshop demonstrates how to build an intelligent search experience using E
 
 ### Workflows Not Executing
 
-- Verify MCP server is running: `http://host-1:8001/health`
+- Verify MCP server is running: `http://host-1:8002/health`
 - Check workflow inputs match expected format
 - Review workflow execution logs in Kibana
 

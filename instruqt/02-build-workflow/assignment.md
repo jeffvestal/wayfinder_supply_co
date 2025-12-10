@@ -93,7 +93,7 @@ steps:
   - name: call_crm_mcp
     type: http
     with:
-      url: "http://host-1:8001/mcp"
+      url: "http://host-1:8002/mcp"
       method: POST
       headers:
         Content-Type: application/json
@@ -163,7 +163,7 @@ steps:
   - name: call_crm_mcp
     type: http
     with:
-      url: "http://host-1:8001/mcp"
+      url: "http://host-1:8002/mcp"
       method: POST
       headers:
         Content-Type: application/json
@@ -210,7 +210,7 @@ curl -X POST "$KIBANA_URL/api/workflows" \
   -H "x-elastic-internal-origin: kibana" \
   -d @- << 'EOF'
 {
-  "yaml": "version: \"1\"\nname: get_customer_profile\nenabled: true\n\ninputs:\n  - name: user_id\n    type: string\n    required: true\n    description: \"The user identifier\"\n\ntriggers:\n  - type: manual\n\nsteps:\n  - name: call_crm_mcp\n    type: http\n    with:\n      url: \"http://host-1:8001/mcp\"\n      method: POST\n      headers:\n        Content-Type: application/json\n      body:\n        jsonrpc: \"2.0\"\n        method: \"tools/call\"\n        params:\n          name: \"get_customer_profile_tool\"\n          arguments:\n            user_id: \"{{ inputs.user_id }}\"\n        id: \"{{ execution.id }}\"\n    on-failure:\n      retry:\n        max-attempts: 2\n        delay: 1s\n\n  - name: log_profile\n    type: console\n    with:\n      message: |\n        Customer Profile for {{ inputs.user_id }}:\n        Name: {{ steps.call_crm_mcp.output.data.result.name }}\n        Loyalty Tier: {{ steps.call_crm_mcp.output.data.result.loyalty_tier }}\n        Lifetime Value: ${{ steps.call_crm_mcp.output.data.result.lifetime_value }}\n        Purchase History: {{ steps.call_crm_mcp.output.data.result.purchase_history | size }} items\n"
+  "yaml": "version: \"1\"\nname: get_customer_profile\nenabled: true\n\ninputs:\n  - name: user_id\n    type: string\n    required: true\n    description: \"The user identifier\"\n\ntriggers:\n  - type: manual\n\nsteps:\n  - name: call_crm_mcp\n    type: http\n    with:\n      url: \"http://host-1:8002/mcp\"\n      method: POST\n      headers:\n        Content-Type: application/json\n      body:\n        jsonrpc: \"2.0\"\n        method: \"tools/call\"\n        params:\n          name: \"get_customer_profile_tool\"\n          arguments:\n            user_id: \"{{ inputs.user_id }}\"\n        id: \"{{ execution.id }}\"\n    on-failure:\n      retry:\n        max-attempts: 2\n        delay: 1s\n\n  - name: log_profile\n    type: console\n    with:\n      message: |\n        Customer Profile for {{ inputs.user_id }}:\n        Name: {{ steps.call_crm_mcp.output.data.result.name }}\n        Loyalty Tier: {{ steps.call_crm_mcp.output.data.result.loyalty_tier }}\n        Lifetime Value: ${{ steps.call_crm_mcp.output.data.result.lifetime_value }}\n        Purchase History: {{ steps.call_crm_mcp.output.data.result.purchase_history | size }} items\n"
 }
 EOF
 ```
