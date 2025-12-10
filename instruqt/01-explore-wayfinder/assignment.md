@@ -11,7 +11,7 @@ tabs:
   hostname: host-1
   path: /
   port: 3000
-- id: architecture-diagram
+- id: 0ukl1c9nexnd
   title: Architecture Diagram
   type: service
   hostname: host-1
@@ -67,7 +67,7 @@ In this workshop, you'll explore how the system:
    - **Jordan Explorer** - New user, no history
    - **Alex Hiker** - Platinum member, ultralight preference
    - **Casey Campground** - Business buyer, bulk orders
-   
+
    Notice how recommendations change based on user preferences and purchase history!
 
 ---
@@ -138,7 +138,7 @@ curl -s localhost:9200/_cluster/health | jq
 
 ## What's Next?
 
-You've just seen an AI agent orchestrate weather data, customer profiles, product searches, and behavioral insights to create personalized trip recommendations. 
+You've just seen an AI agent orchestrate weather data, customer profiles, product searches, and behavioral insights to create personalized trip recommendations.
 
 **In the next challenges, you'll build the components that make this possible:**
 - **Challenge 2**: Build a workflow that connects to external systems

@@ -1,17 +1,17 @@
 ---
 slug: build-tool
-id: tool-challenge-001
+id: zspkqmjda68g
 type: challenge
 title: Build a Tool
 teaser: Wrap your workflow as a tool that agents can use
 tabs:
-- id: kibana-agent-builder
+- id: ru07u4jacjov
   title: Kibana Agent Builder
   type: service
   hostname: kubernetes-vm
   path: /app/agent_builder
   port: 30001
-- id: terminal-tool
+- id: jxurvygvav1x
   title: Terminal
   type: terminal
   hostname: host-1

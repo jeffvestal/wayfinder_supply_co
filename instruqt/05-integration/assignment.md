@@ -1,23 +1,23 @@
 ---
 slug: integration
-id: integration-challenge-001
+id: rls4juj7y8pb
 type: challenge
 title: Bring It All Together
 teaser: Test your complete system - workflow, tool, and agent working together
 tabs:
-- id: wayfinder-ui-final
+- id: oy109wuivmhk
   title: Wayfinder UI
   type: service
   hostname: host-1
   path: /
   port: 3000
-- id: kibana-final
+- id: vefhempgf5yq
   title: Kibana
   type: service
   hostname: kubernetes-vm
   path: /
   port: 30001
-- id: terminal-final
+- id: vgf86cqnhjdv
   title: Terminal
   type: terminal
   hostname: host-1
@@ -160,10 +160,10 @@ All three should be present and configured correctly!
 
 You've successfully built a complete agentic search system:
 
-✅ **Workflow** - Automated data retrieval from external systems  
-✅ **Tool** - Made workflow available to AI agents  
-✅ **Agent** - Orchestrated multiple tools to create intelligent responses  
-✅ **Integration** - All components working together seamlessly  
+✅ **Workflow** - Automated data retrieval from external systems
+✅ **Tool** - Made workflow available to AI agents
+✅ **Agent** - Orchestrated multiple tools to create intelligent responses
+✅ **Integration** - All components working together seamlessly
 
 ---
 

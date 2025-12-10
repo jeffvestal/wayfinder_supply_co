@@ -1,17 +1,17 @@
 ---
 slug: build-agent
-id: agent-challenge-001
+id: fmn5tessjtya
 type: challenge
 title: Build an Agent
 teaser: Create an AI agent that orchestrates workflows and tools to plan trips
 tabs:
-- id: kibana-agent-builder-agent
+- id: ieur95euxyid
   title: Kibana Agent Builder
   type: service
   hostname: kubernetes-vm
   path: /app/agent_builder
   port: 30001
-- id: terminal-agent
+- id: rkawx4ic31pz
   title: Terminal
   type: terminal
   hostname: host-1
@@ -140,7 +140,7 @@ When a customer asks about a trip, FIRST use the check_trip_safety tool to valid
    - Use product_search to find "tents" suitable for the season
    - Use product_search to find "backpacks" matching user preferences
    - Use product_search for any other needed categories
-   
+
 5. **Build Recommendations**: From the search results:
    - Select products that match the trip requirements
    - Include the exact product name and price from the catalog

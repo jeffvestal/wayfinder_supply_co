@@ -1,22 +1,23 @@
 ---
 slug: build-workflow
-id: workflow-challenge-001
+id: izndj9o584gm
 type: challenge
 title: Build a Workflow
-teaser: Create a workflow that connects to external systems and retrieves customer data
+teaser: Create a workflow that connects to external systems and retrieves customer
+  data
 tabs:
-- id: code-editor
+- id: zzux5pxawd9r
   title: Code Editor
   type: code
   hostname: host-1
   path: /opt/workshop-assets
-- id: kibana-workflows
+- id: mzsvd6hetpqv
   title: Kibana Workflows
   type: service
   hostname: kubernetes-vm
   path: /app/workflows
   port: 30001
-- id: terminal-workflow
+- id: cgn8ifagnwx1
   title: Terminal
   type: terminal
   hostname: host-1
