@@ -188,29 +188,7 @@ echo "[Workshop] MCP server started (PID: $MCP_PID)"
 
 deactivate
 
-####################################################################### SETUP BACKEND PROXY
-
-echo "[Workshop] Setting up backend proxy..."
-cd /opt/workshop-assets/backend
-
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# Start backend in background with environment variables
-echo "[Workshop] Starting backend server on port 8000..."
-ELASTICSEARCH_URL="${ELASTICSEARCH_URL}" \
-KIBANA_URL="${KIBANA_URL}" \
-MCP_SERVER_URL="${MCP_SERVER_URL}" \
-ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
-nohup /opt/workshop-assets/backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /var/log/backend.log 2>&1 &
-BACKEND_PID=$!
-echo "[Workshop] Backend server started (PID: $BACKEND_PID)"
-
-deactivate
-
-####################################################################### BUILD FRONTEND AND INTEGRATE WITH BACKEND
+####################################################################### BUILD FRONTEND FIRST (before backend starts)
 
 echo "[Workshop] Building frontend..."
 cd /opt/workshop-assets/frontend
@@ -230,7 +208,7 @@ else
   ls -la dist/ 2>/dev/null || echo "[Workshop] dist/ does not exist"
 fi
 
-# Verify build output
+# Verify build output and copy to backend/static BEFORE backend starts
 if [ -d "dist" ] && [ -f "dist/index.html" ]; then
   echo "[Workshop] ✓ Build output verified (dist/index.html exists)"
   ls -la dist/
@@ -247,6 +225,29 @@ fi
 
 # NOTE: Frontend is now served by the backend on port 8000 (unified serving)
 # No separate frontend server needed - this fixes Instruqt cross-tab auth issues
+
+####################################################################### SETUP BACKEND PROXY (after frontend build)
+
+echo "[Workshop] Setting up backend proxy..."
+cd /opt/workshop-assets/backend
+
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Start backend in background with environment variables
+# NOTE: static/ directory must exist BEFORE this starts for frontend to be served
+echo "[Workshop] Starting backend server on port 8000..."
+ELASTICSEARCH_URL="${ELASTICSEARCH_URL}" \
+KIBANA_URL="${KIBANA_URL}" \
+MCP_SERVER_URL="${MCP_SERVER_URL}" \
+ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
+nohup /opt/workshop-assets/backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /var/log/backend.log 2>&1 &
+BACKEND_PID=$!
+echo "[Workshop] Backend server started (PID: $BACKEND_PID)"
+
+deactivate
 
 ####################################################################### VERIFY SERVICES
 
