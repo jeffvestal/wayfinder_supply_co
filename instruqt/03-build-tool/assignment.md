@@ -15,10 +15,6 @@ tabs:
   title: Terminal
   type: terminal
   hostname: host-1
-- id: tool-cheatsheet
-  title: Tool Cheat Sheet
-  type: external
-  url: /docs/TOOL_CHEATSHEET.md
 difficulty: intermediate
 timelimit: 1200
 enhanced_loading: null
@@ -205,8 +201,8 @@ Once verified, you're ready for the next challenge: **Building an Agent** that u
 - Verify Kibana URL is correct: `echo $KIBANA_URL`
 
 **Need help?**
-- Check the [button label="Tool Cheat Sheet"](tab-2) for reference
 - Review tool examples in Agent Builder UI
+- Check `docs/TOOL_CHEATSHEET.md` in the repo for reference (TODO: add as tab)
 
 ---
 

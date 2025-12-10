@@ -20,10 +20,6 @@ tabs:
   title: Terminal
   type: terminal
   hostname: host-1
-- id: workflow-cheatsheet
-  title: Workflow Cheat Sheet
-  type: external
-  url: /docs/WORKFLOW_CHEATSHEET.md
 difficulty: intermediate
 timelimit: 1500
 enhanced_loading: null
@@ -297,6 +293,6 @@ Once verified, you're ready for the next challenge: **Building a Tool** that wra
 - Check MCP server logs: `docker logs wayfinder-mcp-server`
 
 **Need help?**
-- Check the [button label="Workflow Cheat Sheet"](tab-3) for reference
 - Review the workflow execution logs in Kibana
+- Check `docs/WORKFLOW_CHEATSHEET.md` in the repo for reference (TODO: add as tab)
 

@@ -15,10 +15,6 @@ tabs:
   title: Terminal
   type: terminal
   hostname: host-1
-- id: agent-cheatsheet
-  title: Agent Cheat Sheet
-  type: external
-  url: /docs/AGENT_CHEATSHEET.md
 difficulty: advanced
 timelimit: 1800
 enhanced_loading: null
@@ -312,9 +308,9 @@ Once verified, you're ready for the final challenge: **Testing everything togeth
 - Review tool call sequence in execution logs
 
 **Need help?**
-- Check the [button label="Agent Cheat Sheet"](tab-2) for reference
 - Review agent examples in Agent Builder UI
 - Check execution logs for debugging
+- Check `docs/AGENT_CHEATSHEET.md` in the repo for reference (TODO: add as tab)
 
 ---
 
