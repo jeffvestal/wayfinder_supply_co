@@ -254,70 +254,55 @@ async def hybrid_search(
 ):
     """
     Real hybrid search combining semantic (ELSER) and lexical (BM25) using retrievers with RRF.
+    Uses linear combination via RRF to merge results from both search types.
     """
     es = get_elastic_client()
     
-    try:
-        # Build base query with retrievers
-        # Using RRF (Reciprocal Rank Fusion) to combine semantic and lexical results
-        base_query = {
-            "retriever": {
-                "rrf": {
-                    "retrievers": [
-                        {
-                            "standard": {
-                                "query": {
-                                    "multi_match": {
-                                        "query": q,
-                                        "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
-                                        "type": "best_fields",
-                                        "fuzziness": "AUTO"
-                                    }
-                                }
-                            }
-                        },
-                        {
-                            "standard": {
-                                "query": {
-                                    "semantic": {
-                                        "field": "description.semantic",
-                                        "query": q
-                                    }
-                                }
+    # Build retriever config for RRF (Reciprocal Rank Fusion)
+    retriever_config = {
+        "rrf": {
+            "retrievers": [
+                # Lexical retriever (BM25)
+                {
+                    "standard": {
+                        "query": {
+                            "multi_match": {
+                                "query": q,
+                                "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
+                                "type": "best_fields",
+                                "fuzziness": "AUTO"
                             }
                         }
-                    ]
-                }
-            }
-        }
-        
-        # Add personalization if user_id provided
-        query = base_query
-        if user_id:
-            prefs = get_user_preferences(user_id, es)
-            if prefs["tags"] or prefs["categories"]:
-                # Wrap in function_score for boosting
-                query = {
-                    "function_score": {
-                        "query": base_query,
-                        "functions": [
-                            {
-                                "filter": {"terms": {"tags": prefs["tags"]}},
-                                "weight": 1.5
-                            },
-                            {
-                                "filter": {"terms": {"category": prefs["categories"]}},
-                                "weight": 1.3
+                    }
+                },
+                # Semantic retriever (ELSER via semantic_text)
+                {
+                    "standard": {
+                        "query": {
+                            "semantic": {
+                                "field": "description.semantic",
+                                "query": q
                             }
-                        ],
-                        "boost_mode": "multiply",
-                        "score_mode": "sum"
+                        }
                     }
                 }
-        
+            ],
+            "rank_window_size": 50,
+            "rank_constant": 20
+        }
+    }
+    
+    # Build the es_query representation for display
+    es_query_display = {
+        "retriever": retriever_config,
+        "highlight": {"fields": {"title": {}, "description": {}}}
+    }
+    
+    try:
+        # Use retriever as top-level parameter (correct syntax for ES Python client)
         response = es.search(
             index="product-catalog",
-            query=query,
+            retriever=retriever_config,
             highlight={
                 "fields": {
                     "title": {},
@@ -329,17 +314,24 @@ async def hybrid_search(
         
         products = []
         raw_hits = []
+        
+        # Get user preferences for post-search personalization boost indicator
+        personalized = False
+        if user_id:
+            prefs = get_user_preferences(user_id, es)
+            personalized = bool(prefs["tags"] or prefs["categories"])
+        
         for hit in response["hits"]["hits"]:
             product = hit["_source"]
             product["id"] = hit["_id"]
-            product["_score"] = hit["_score"]
+            product["_score"] = hit.get("_score")
             product["_highlight"] = hit.get("highlight", {})
             products.append(product)
             # Store raw hit for query viewer (top 3 only)
             if len(raw_hits) < 3:
                 raw_hits.append({
                     "_id": hit["_id"],
-                    "_score": hit["_score"],
+                    "_score": hit.get("_score"),
                     "_source": hit["_source"],
                     "highlight": hit.get("highlight", {})
                 })
@@ -348,69 +340,23 @@ async def hybrid_search(
             "products": products,
             "total": response["hits"]["total"]["value"],
             "query": q,
-            "es_query": query,  # The actual Elasticsearch query
-            "raw_hits": raw_hits,  # Top 3 raw response documents
-            "search_type": "hybrid",
-            "personalized": user_id is not None
+            "es_query": es_query_display,
+            "raw_hits": raw_hits,
+            "search_type": "hybrid_rrf",
+            "personalized": personalized
         }
     except Exception as e:
-        # Fallback to multi_match if retrievers fail (e.g., semantic_text field not available)
-        print(f"Warning: Hybrid search with retrievers failed, falling back: {e}")
-        try:
-            response = es.search(
-                index="product-catalog",
-                query={
-                    "multi_match": {
-                        "query": q,
-                        "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
-                        "type": "best_fields",
-                        "fuzziness": "AUTO"
-                    }
-                },
-                highlight={
-                    "fields": {
-                        "title": {},
-                        "description": {}
-                    }
-                },
-                size=limit
+        # Don't silently fallback - fail clearly so we know there's an issue
+        error_msg = str(e)
+        print(f"ERROR: Hybrid search failed: {error_msg}")
+        
+        # Check if it's a semantic field issue
+        if "semantic" in error_msg.lower() or "inference" in error_msg.lower():
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Hybrid search requires semantic_text field 'description.semantic'. Error: {error_msg}"
             )
-            
-            products = []
-            raw_hits = []
-            for hit in response["hits"]["hits"]:
-                product = hit["_source"]
-                product["id"] = hit["_id"]
-                product["_score"] = hit["_score"]
-                product["_highlight"] = hit.get("highlight", {})
-                products.append(product)
-                # Store raw hit for query viewer (top 3 only)
-                if len(raw_hits) < 3:
-                    raw_hits.append({
-                        "_id": hit["_id"],
-                        "_score": hit["_score"],
-                        "_source": hit["_source"],
-                        "highlight": hit.get("highlight", {})
-                    })
-            
-            return {
-                "products": products,
-                "total": response["hits"]["total"]["value"],
-                "query": q,
-                "es_query": {
-                    "multi_match": {
-                        "query": q,
-                        "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
-                        "type": "best_fields",
-                        "fuzziness": "AUTO"
-                    }
-                },
-                "raw_hits": raw_hits,
-                "search_type": "hybrid_fallback",
-                "personalized": False
-            }
-        except Exception as fallback_error:
-            raise HTTPException(status_code=500, detail=f"Hybrid search error: {str(fallback_error)}")
+        raise HTTPException(status_code=500, detail=f"Hybrid search error: {error_msg}")
 
 
 @router.get("/products/{product_id}")

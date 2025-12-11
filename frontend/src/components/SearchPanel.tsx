@@ -104,35 +104,61 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     const products: Product[] = []
     const seenIds = new Set<string>()
     
+    const addProduct = (item: any) => {
+      if (item && item.id && item.title && !seenIds.has(item.id)) {
+        seenIds.add(item.id)
+        products.push({
+          id: item.id,
+          title: item.title,
+          price: item.price,
+          description: item.description,
+          category: item.category,
+          image_url: item.image_url,
+          tags: item.tags,
+          average_rating: item.average_rating,
+          review_count: item.review_count
+        } as Product)
+      }
+    }
+    
+    console.log('Extracting products from steps:', steps)
+    
     for (const step of steps) {
       if (step.type === 'tool_call' && step.results) {
+        console.log('Tool results:', step.tool_id, step.results)
+        
         for (const result of step.results) {
-          // Handle product search results (array of products)
+          // Results might be the direct array of products
           if (Array.isArray(result)) {
-            for (const item of result) {
-              if (item.id && item.title && !seenIds.has(item.id)) {
-                seenIds.add(item.id)
-                products.push(item as Product)
-              }
+            result.forEach(addProduct)
+          }
+          // Single product object
+          else if (result && typeof result === 'object') {
+            // Direct product
+            if (result.id && result.title) {
+              addProduct(result)
             }
-          }
-          // Handle single product result
-          if (result.id && result.title && !seenIds.has(result.id)) {
-            seenIds.add(result.id)
-            products.push(result as Product)
-          }
-          // Handle nested results structure
-          if (result.products && Array.isArray(result.products)) {
-            for (const item of result.products) {
-              if (item.id && item.title && !seenIds.has(item.id)) {
-                seenIds.add(item.id)
-                products.push(item as Product)
-              }
+            // Nested in .products
+            if (result.products && Array.isArray(result.products)) {
+              result.products.forEach(addProduct)
+            }
+            // Nested in .hits or .results
+            if (result.hits && Array.isArray(result.hits)) {
+              result.hits.forEach(addProduct)
+            }
+            if (result.results && Array.isArray(result.results)) {
+              result.results.forEach(addProduct)
+            }
+            // Elasticsearch-style response
+            if (result._source && result._source.id) {
+              addProduct(result._source)
             }
           }
         }
       }
     }
+    
+    console.log('Extracted products:', products)
     return products.slice(0, 5) // Limit to top 5
   }
 
@@ -479,11 +505,15 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
             case 'message_complete':
               currentContent = data.message_content || currentContent
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'complete' } : null)
+              // Extract products when message completes
+              console.log('Message complete, extracting products from steps:', currentSteps)
+              setDemoAgenticProducts(extractProductsFromSteps(currentSteps))
               break
 
             case 'completion':
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'complete' } : null)
-              // Extract products from tool results
+              // Also extract products on completion event
+              console.log('Completion event, extracting products from steps:', currentSteps)
               setDemoAgenticProducts(extractProductsFromSteps(currentSteps))
               break
 
