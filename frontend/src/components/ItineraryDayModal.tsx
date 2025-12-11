@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, MapPin, Clock } from 'lucide-react'
+import { X, MapPin } from 'lucide-react'
 
 interface ItineraryDay {
   day: number

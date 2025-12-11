@@ -57,7 +57,7 @@ function getCurrentStatus(steps: AgentStep[], isLoading: boolean): string {
   return 'Working...'
 }
 
-export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner }: SearchPanelProps) {
+export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner }: SearchPanelProps) {
   const [mode, setMode] = useState<SearchMode>('chat')
   const [panelWidth, setPanelWidth] = useState(50) // Percentage of screen width
   const [isDragging, setIsDragging] = useState(false)
