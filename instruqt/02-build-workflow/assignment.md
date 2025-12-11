@@ -6,11 +6,6 @@ title: Build a Workflow
 teaser: Create a workflow that connects to external systems and retrieves customer
   data
 tabs:
-- id: zzux5pxawd9r
-  title: Code Editor
-  type: code
-  hostname: host-1
-  path: /opt/workshop-assets
 - id: mzsvd6hetpqv
   title: Kibana Workflows
   type: service
@@ -56,13 +51,26 @@ You'll create the `get_customer_profile` workflow that:
 
 ---
 
-## Step 1: Create the Workflow File
+## Step 1: Open the Workflows UI
 
-1. Open the [button label="Code Editor"](tab-0) tab
+1. Open the [button label="Kibana Workflows"](tab-0) tab
 
-2. Create a new file: `config/workflows/get_customer_profile.yaml`
+2. You should be in the **Workflows** UI. If you switched out of it:
+   - Click the **hamburger menu** (☰) in the top-left corner
+   - Navigate to **Management** → **Workflows**
 
-3. Start with the basic structure:
+---
+
+## Step 2: Create a New Workflow
+
+1. Click **"Create a new workflow"**
+2. This will open the YAML editor. Delete all the boilerplate text.
+
+---
+
+## Step 3: Define the Inputs
+
+A workflow needs to know what data it expects. Paste this block into the editor:
 
 ```yaml
 version: "1"
@@ -77,16 +85,17 @@ inputs:
 
 triggers:
   - type: manual
-
-steps:
-  # Your steps will go here
 ```
+
+This tells the workflow to expect one `string` input called `user_id`.
 
 ---
 
-## Step 2: Add the HTTP Step
+## Step 4: Add the HTTP Step
 
-Add a step that calls the MCP server. The MCP server uses JSON-RPC protocol:
+Now let's tell the workflow *what to do*. We'll add a `steps` block that calls the MCP server.
+
+Paste this *below* your `triggers` block:
 
 ```yaml
 steps:
@@ -116,11 +125,15 @@ steps:
 - `{{ execution.id }}` - Unique execution ID for this workflow run
 - `on-failure` - Retry logic for resilience
 
+> [!IMPORTANT]
+> Spaces in YAML are important!
+> `steps` should be at the beginning of the line (no indent), same level as `triggers`.
+
 ---
 
-## Step 3: Add Console Output Step
+## Step 5: Add Console Output Step
 
-Add a step to log the customer profile:
+Add this step *inside* the `steps` block (indented under `steps:`, after the `call_crm_mcp` step):
 
 ```yaml
   - name: log_profile
@@ -137,13 +150,9 @@ Add a step to log the customer profile:
 **Key Points:**
 - `steps.call_crm_mcp.output` - Access the previous step's output
 - `| size` - Liquid filter to get array size
-- Multi-line message using `|` YAML syntax
 
----
-
-## Step 4: Complete Workflow
-
-Your complete workflow should look like this:
+<details>
+  <summary>Click to see Full YAML</summary>
 
 ```yaml
 version: "1"
@@ -191,55 +200,29 @@ steps:
         Purchase History: {{ steps.call_crm_mcp.output.data.result.purchase_history | size }} items
 ```
 
----
-
-## Step 5: Deploy the Workflow via Kibana UI
-
-1. Open the [button label="Kibana Workflows"](tab-1) tab
-
-2. Navigate to the Workflows UI:
-   - Click the **hamburger menu** (☰) in the top-left corner
-   - Go to **Management** → **Workflows**
-   - You should see the Workflows UI with a list of existing workflows
-
-3. Create a new workflow:
-   - Click **"Create a new workflow"** button
-   - This opens the YAML editor
-
-4. Copy your complete workflow YAML from Step 4 and paste it into the editor
-
-5. Click **"Save"** to deploy the workflow
-
-The workflow will be automatically saved and enabled. You should see it appear in the workflows list!
-
-**Note:** The Workflows UI is a YAML editor - you're editing the same YAML format you created in the Code Editor. This is the recommended way to create and manage workflows.
+</details>
 
 ---
 
-## Step 6: Test the Workflow
+## Step 6: Save and Run the Workflow
 
-Test your workflow using the Kibana UI:
+1. Click **"Save"** in the top right
 
-1. In the [button label="Kibana Workflows"](tab-1) tab, find your `get_customer_profile` workflow in the list
+2. Click the ▶️ (run) button next to Save
 
-2. Click on the workflow name to open it
+3. A panel will appear asking for the `user_id` input
 
-3. Click the **"Run workflow"** or **"Execute"** button
+4. In the `user_id` field, enter `user_member` and click **"Run"**
 
-4. In the input dialog, enter:
-   ```json
-   {
-     "user_id": "user_member"
-   }
-   ```
+---
 
-5. Click **"Run"** to execute the workflow
+## Step 7: Check the Output
 
-6. View the execution results:
-   - The console output step will show the customer profile information
-   - Check the execution logs to see the full response from the MCP server
+You will see the workflow run in real-time.
 
-You should see output like:
+1. Click on the `log_profile` step
+2. In the **Output** tab, you should see:
+
 ```
 Customer Profile for user_member:
 Name: Sarah Martinez
@@ -247,6 +230,8 @@ Loyalty Tier: Platinum
 Lifetime Value: $2847.50
 Purchase History: 12 items
 ```
+
+🎉 You've built and run your first workflow!
 
 ---
 
@@ -282,15 +267,18 @@ Once verified, you're ready for the next challenge: **Building a Tool** that wra
 
 ## Troubleshooting
 
-**Workflow not appearing?**
-- Check that you included the `x-elastic-internal-origin: kibana` header
-- Verify the YAML syntax is correct (use a YAML validator)
+**YAML syntax errors?**
+- Check indentation - YAML is space-sensitive
+- Use the Full YAML in the collapsible section above as reference
+- The editor will highlight syntax errors
 
 **MCP call failing?**
-- Ensure the MCP server is running: `docker ps | grep mcp`
+- Open the [button label="Terminal"](tab-1) tab
+- Check MCP server is running: `docker ps | grep mcp`
 - Check MCP server logs: `docker logs wayfinder-mcp-server`
 
-**Need help?**
-- Review the workflow execution logs in Kibana
-- Check `docs/WORKFLOW_CHEATSHEET.md` in the repo for reference (TODO: add as tab)
+**Workflow not running?**
+- Ensure `enabled: true` is set
+- Click on the failed step to see error details
+- Check the execution logs for more information
 
