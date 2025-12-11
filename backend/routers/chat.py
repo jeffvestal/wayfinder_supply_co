@@ -233,7 +233,24 @@ async def stream_agent_response(message: str, agent_id: str = "trip-planner-agen
                                             "reasoning": reasoning_text
                                         })
                                 
-                                # Handle tool calls
+                                # Handle tool results (MUST check before tool_call_id alone!)
+                                # Tool result events have both "results" AND "tool_call_id"
+                                elif "results" in data and "tool_call_id" in data:
+                                    tool_call_id = data["tool_call_id"]
+                                    results = data["results"]
+                                    
+                                    # Update the corresponding step
+                                    for step in steps:
+                                        if step.get("tool_call_id") == tool_call_id:
+                                            step["results"] = results
+                                            break
+                                    
+                                    yield format_sse_event("tool_result", {
+                                        "tool_call_id": tool_call_id,
+                                        "results": results
+                                    })
+                                
+                                # Handle tool calls (no results field - just the call initiation)
                                 elif "tool_call_id" in data:
                                     tool_call_id = data.get("tool_call_id")
                                     tool_id = data.get("tool_id")
@@ -270,22 +287,6 @@ async def stream_agent_response(message: str, agent_id: str = "trip-planner-agen
                                                 "tool_id": tool_id,
                                                 "params": params
                                             })
-                                
-                                # Handle tool results
-                                elif "results" in data and "tool_call_id" in data:
-                                    tool_call_id = data["tool_call_id"]
-                                    results = data["results"]
-                                    
-                                    # Update the corresponding step
-                                    for step in steps:
-                                        if step.get("tool_call_id") == tool_call_id:
-                                            step["results"] = results
-                                            break
-                                    
-                                    yield format_sse_event("tool_result", {
-                                        "tool_call_id": tool_call_id,
-                                        "results": results
-                                    })
                                 
                                 # Handle text chunks (message content)
                                 elif "text_chunk" in data:
