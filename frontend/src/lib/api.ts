@@ -416,4 +416,57 @@ export const api = {
 
     return response.json();
   },
+
+  async lexicalSearch(query: string, limit = 10): Promise<{ products: any[]; total: number }> {
+    const url = createApiUrl('/api/products/search/lexical');
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', limit.toString());
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  async hybridSearch(query: string, limit = 10): Promise<{ products: any[]; total: number }> {
+    const url = createApiUrl('/api/products/search/hybrid');
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', limit.toString());
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  async generateTripReportPdf(
+    userName: string,
+    destination: string,
+    dates: string,
+    itinerary: any[],
+    suggestedProducts: any[],
+    otherRecommendedItems: string[]
+  ): Promise<Response> {
+    const response = await fetch(`${API_URL}/api/reports/trip-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_name: userName,
+        destination,
+        dates,
+        itinerary,
+        suggested_products: suggestedProducts,
+        other_recommended_items: otherRecommendedItems,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response;
+  },
 };

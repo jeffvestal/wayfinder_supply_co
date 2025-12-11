@@ -172,7 +172,7 @@ def check_mcp_server() -> Tuple[bool, List[str]]:
     """Check MCP server connectivity."""
     issues = []
     
-    mcp_url = os.getenv("MCP_SERVER_URL", "http://host-1:8002")
+    mcp_url = os.getenv("MCP_SERVER_URL", "http://host-1:8001")
     
     try:
         response = requests.get(

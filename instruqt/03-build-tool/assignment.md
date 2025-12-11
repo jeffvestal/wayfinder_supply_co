@@ -9,7 +9,7 @@ tabs:
   title: Kibana Agent Builder
   type: service
   hostname: kubernetes-vm
-  path: /app/agent_builder
+  path: /app/chat
   port: 30001
 - id: jxurvygvav1x
   title: Terminal
@@ -47,87 +47,92 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
 
 ---
 
-## Step 1: Get Your Workflow ID
+## Step 1: Navigate to Agent Builder
 
-First, you need the ID of the workflow you created in Challenge 2:
+1. Click the [button label="Kibana Agent Builder"](tab-0) tab
 
-1. Open the [button label="Terminal"](tab-1) tab
+2. In the left sidebar, click **Tools**
+   <!-- SCREENSHOT: Kibana left sidebar with "Tools" highlighted under AI Assistant section -->
 
-2. Get the workflow ID:
-
-```bash
-export KIBANA_URL="http://kubernetes-vm:30001"
-export ES_APIKEY="${STANDALONE_ELASTICSEARCH_APIKEY}"
-
-WORKFLOW_ID=$(curl -s -X GET "$KIBANA_URL/api/workflows" \
-  -H "Authorization: ApiKey $ES_APIKEY" \
-  -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana" \
-  | jq -r '.data[] | select(.name=="get_customer_profile") | .id')
-
-echo "Workflow ID: $WORKFLOW_ID"
-```
-
-Save this ID - you'll need it in the next step!
+3. You'll see a list of existing tools (some were pre-created for the workshop)
+   <!-- SCREENSHOT: Tools list showing pre-existing tools like product_search -->
 
 ---
 
-## Step 2: Create the Tool
+## Step 2: Create a New Tool
 
-Create a workflow tool using the Agent Builder API:
+1. Click the **Create tool** button in the upper right
+   <!-- SCREENSHOT: "Create tool" button location -->
 
-```bash
-curl -X POST "$KIBANA_URL/api/agent_builder/tools" \
-  -H "Authorization: ApiKey $ES_APIKEY" \
-  -H "Content-Type: application/json" \
-  -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana" \
-  -d "{
-    \"id\": \"tool-workflow-get-customer-profile\",
-    \"type\": \"workflow\",
-    \"description\": \"Retrieve customer profile including purchase history and loyalty tier from CRM\",
-    \"configuration\": {
-      \"workflow_id\": \"$WORKFLOW_ID\"
-    }
-  }"
-```
-
-**Key Fields:**
-- `id`: Unique identifier for the tool (use `tool-workflow-` prefix)
-- `type`: Must be `"workflow"` for workflow tools
-- `description`: What the tool does (agents use this to decide when to call it)
-- `configuration.workflow_id`: The ID of your workflow from Step 1
+2. You'll see the tool creation form with several options
 
 ---
 
-## Step 3: Verify the Tool
+## Step 3: Configure the Tool
 
-Check that your tool was created successfully:
+Fill in the tool configuration:
 
-```bash
-curl -s -X GET "$KIBANA_URL/api/agent_builder/tools" \
-  -H "Authorization: ApiKey $ES_APIKEY" \
-  -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana" \
-  | jq '.data[] | select(.id=="tool-workflow-get-customer-profile")'
-```
+**Basic Information:**
 
-You should see your tool in the response!
+| Field | Value |
+|-------|-------|
+| **Tool ID** | `tool-workflow-get-customer-profile` |
+| **Tool Type** | Select **Workflow** from the dropdown |
+| **Description** | `Retrieve customer profile including purchase history and loyalty tier from CRM` |
+
+<!-- SCREENSHOT: Tool creation form with basic fields filled in -->
 
 ---
 
-## Step 4: View in Agent Builder UI
+## Step 4: Select the Workflow
 
-1. Open the [button label="Kibana Agent Builder"](tab-0) tab
+1. In the **Workflow** dropdown, select `get_customer_profile`
+   <!-- SCREENSHOT: Workflow dropdown showing get_customer_profile option -->
 
-2. Navigate to **Machine Learning** → **Agent Builder** → **Tools**
+2. If you don't see it:
+   - Go back to Challenge 2 and ensure the workflow was saved
+   - Refresh the page and try again
 
-3. You should see your tool listed:
-   - **ID**: `tool-workflow-get-customer-profile`
+---
+
+## Step 5: Save the Tool
+
+1. Click **Save tool** (or **Create** depending on UI version)
+   <!-- SCREENSHOT: Save/Create button highlighted -->
+
+2. You should see a success message
+
+3. Your tool now appears in the tools list!
+   <!-- SCREENSHOT: Tools list showing the newly created tool -->
+
+---
+
+## Step 6: Verify the Tool
+
+1. Find your tool in the list: `tool-workflow-get-customer-profile`
+
+2. Click on it to view its configuration
+
+3. Verify:
    - **Type**: Workflow
-   - **Description**: Retrieve customer profile...
+   - **Workflow**: get_customer_profile
+   - **Description**: Mentions customer profile and CRM
+   <!-- SCREENSHOT: Tool detail view showing configuration -->
 
-4. Click on your tool to see its configuration
+---
+
+## Understanding Tool Descriptions
+
+The tool description is **critical** for agent behavior!
+
+Agents read descriptions to decide when to use a tool. A good description:
+- Clearly states what data the tool returns
+- Mentions keywords agents will recognize
+- Is specific about the tool's purpose
+
+**Good**: "Retrieve customer profile including purchase history and loyalty tier from CRM"
+
+**Bad**: "Gets customer data" (too vague)
 
 ---
 
@@ -136,77 +141,64 @@ You should see your tool in the response!
 While you built a workflow tool, the system also includes:
 
 **Index Search Tool** (`product_search`):
-```json
-{
-  "id": "tool-search-product-search",
-  "type": "index_search",
-  "description": "Search the product catalog for gear recommendations",
-  "configuration": {
-    "pattern": "product-catalog"
-  }
-}
-```
+- Type: Index Search
 - Searches the `product-catalog` index
-- Used by agents to find products
+- Used by agents to find and recommend products
 
 **ES|QL Tool** (`get_user_affinity`):
-```json
-{
-  "id": "tool-esql-get-user-affinity",
-  "type": "esql",
-  "description": "Get top gear preference tags from user browsing behavior",
-  "configuration": {
-    "query": "FROM user-clickstream | WHERE meta_tags IS NOT NULL | STATS count = COUNT(*) BY meta_tags | SORT count DESC | LIMIT 5"
-  }
-}
-```
-- Executes ES|QL queries directly
-- Used for analytics and aggregations
+- Type: ES|QL
+- Executes a query to analyze browsing behavior
+- Returns top preference tags for personalization
+
+You can click on these tools to see their configuration!
 
 ---
 
 ## How Agents Use Tools
 
 When an agent needs customer information, it will:
-1. See your tool in its available tools list
-2. Read the description: "Retrieve customer profile..."
-3. Decide to call it when the user asks about their account or preferences
-4. Pass the `user_id` parameter
-5. Receive the customer profile data
-6. Use that data to personalize recommendations
+
+1. **See your tool** in its available tools list
+2. **Read the description**: "Retrieve customer profile..."
+3. **Decide to call it** when the user asks about their account
+4. **Pass parameters**: The `user_id` input
+5. **Receive results**: Customer profile data from the workflow
+6. **Use the data**: Personalize recommendations based on loyalty tier
+
+This is the power of agentic search - the agent automatically knows when and how to get customer context!
 
 ---
 
-## Verification
+## Verification Checklist
 
 Your tool should:
-- ✅ Be created and visible in Agent Builder
-- ✅ Have the correct workflow_id configured
-- ✅ Have a clear description
-- ✅ Appear in the tools list
+- ✅ Be created and visible in Agent Builder Tools
+- ✅ Have type "Workflow"
+- ✅ Be linked to `get_customer_profile` workflow
+- ✅ Have a clear, descriptive description
 
-Once verified, you're ready for the next challenge: **Building an Agent** that uses your tool!
+Once verified, click **Check** to proceed to the next challenge: **Building an Agent** that uses your tool!
 
 ---
 
 ## Troubleshooting
 
-**Tool not appearing?**
-- Verify the workflow exists: `curl -s "$KIBANA_URL/api/workflows" ... | jq '.data[] | .name'`
-- Check that you used the correct workflow_id
-- Ensure you included the `x-elastic-internal-origin: kibana` header
+**Tool not appearing in list?**
+- Refresh the page
+- Check that you clicked Save/Create
+- Verify there were no validation errors
 
-**API errors?**
-- Check that your API key has the correct permissions
-- Verify Kibana URL is correct: `echo $KIBANA_URL`
+**Workflow not in dropdown?**
+- Return to Kibana Workflows and verify it's saved
+- The workflow name should be `get_customer_profile`
+- Wait a moment and refresh - there may be a sync delay
 
-**Need help?**
-- Review tool examples in Agent Builder UI
-- Check `docs/TOOL_CHEATSHEET.md` in the repo for reference (TODO: add as tab)
+**Need to see existing tools?**
+- Click on `tool-search-product-search` to see how an index search tool is configured
+- Click on `tool-esql-get-user-affinity` to see an ES|QL tool example
 
 ---
 
 ## Next Steps
 
 In the next challenge, you'll create an agent that uses this tool (along with others) to orchestrate trip planning. The agent will automatically call your tool when it needs customer information!
-

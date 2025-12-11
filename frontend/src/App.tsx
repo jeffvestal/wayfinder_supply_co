@@ -4,10 +4,10 @@ import { TripPlanner } from './components/TripPlanner'
 import { CartView } from './components/CartView'
 import { CheckoutPage } from './components/CheckoutPage'
 import { OrderConfirmation } from './components/OrderConfirmation'
-import { ChatModal } from './components/ChatModal'
+import { SearchPanel } from './components/SearchPanel'
 import { UserMenu } from './components/UserMenu'
 import { UserAccountPage } from './components/UserAccountPage'
-import { ShoppingCart, MapPin, Home, MessageSquare, Menu, X } from 'lucide-react'
+import { ShoppingCart, MapPin, Home, Search, Menu, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
 import { UserPersona } from './types'
@@ -26,7 +26,7 @@ function App() {
   const [currentPersona, setCurrentPersona] = useState<UserPersona | null>(null)
   const [personas, setPersonas] = useState<UserPersona[]>([])
   const [currentView, setCurrentView] = useState<View>('storefront')
-  const [chatModalOpen, setChatModalOpen] = useState(false)
+  const [searchPanelOpen, setSearchPanelOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>()
   const [orderId, setOrderId] = useState<string | null>(null)
@@ -94,7 +94,7 @@ function App() {
   // Handle opening chat with context from product tags
   const handleStartChatWithContext = (productName: string, tag: string) => {
     setChatInitialMessage(`I'm looking at the **${productName}** and I'm interested in other **${tag}** gear. What do you recommend?`)
-    setChatModalOpen(true)
+    setSearchPanelOpen(true)
   }
 
   useEffect(() => {
@@ -192,11 +192,11 @@ function App() {
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setChatModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
+                onClick={() => setSearchPanelOpen(true)}
+                className="flex items-center justify-center w-10 h-10 bg-primary/20 hover:bg-primary/30 text-primary rounded-full transition-all border border-primary/30 shadow-lg shadow-primary/20 hover:scale-105"
+                title="Search & Chat"
               >
-                <MessageSquare className="w-4 h-4" />
-                <span className="hidden sm:inline text-sm font-medium">Quick Chat</span>
+                <Search className="w-5 h-5" />
               </button>
               <UserMenu
                 currentUserId={currentUser}
@@ -367,18 +367,18 @@ function App() {
         </AnimatePresence>
       </main>
 
-      {/* Floating Chat Button (only on very small screens where header might be cramped) */}
+      {/* Floating Search Button (only on very small screens where header might be cramped) */}
       <button
-        onClick={() => setChatModalOpen(true)}
+        onClick={() => setSearchPanelOpen(true)}
         className="fixed bottom-6 right-6 sm:hidden w-14 h-14 bg-primary rounded-full shadow-lg shadow-primary/50 flex items-center justify-center text-white hover:scale-110 transition-transform z-40"
       >
-        <MessageSquare className="w-6 h-6" />
+        <Search className="w-6 h-6" />
       </button>
 
-      {/* Chat Modal */}
-      <ChatModal
-        isOpen={chatModalOpen}
-        onClose={() => setChatModalOpen(false)}
+      {/* Search Panel (slide from right) */}
+      <SearchPanel
+        isOpen={searchPanelOpen}
+        onClose={() => setSearchPanelOpen(false)}
         userId={currentUser}
         onOpenTripPlanner={() => setCurrentView('trip-planner')}
         initialMessage={chatInitialMessage}

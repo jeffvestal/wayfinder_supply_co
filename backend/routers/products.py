@@ -86,6 +86,104 @@ async def search_products(
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 
+@router.get("/products/search/lexical")
+async def lexical_search(
+    q: str,
+    limit: int = 20
+):
+    """
+    Pure BM25 keyword search - no semantic matching.
+    Uses simple match query for basic keyword-based search.
+    """
+    es = get_elastic_client()
+    
+    try:
+        response = es.search(
+            index="product-catalog",
+            query={
+                "match": {
+                    "title": {
+                        "query": q,
+                        "fuzziness": "AUTO"
+                    }
+                }
+            },
+            highlight={
+                "fields": {
+                    "title": {},
+                    "description": {}
+                }
+            },
+            size=limit
+        )
+        
+        products = []
+        for hit in response["hits"]["hits"]:
+            product = hit["_source"]
+            product["id"] = hit["_id"]
+            product["_score"] = hit["_score"]
+            product["_highlight"] = hit.get("highlight", {})
+            products.append(product)
+        
+        return {
+            "products": products,
+            "total": response["hits"]["total"]["value"],
+            "query": q,
+            "search_type": "lexical"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lexical search error: {str(e)}")
+
+
+@router.get("/products/search/hybrid")
+async def hybrid_search(
+    q: str,
+    limit: int = 20
+):
+    """
+    Hybrid search combining semantic and lexical matching.
+    Uses multi_match with best_fields for combined scoring.
+    """
+    es = get_elastic_client()
+    
+    try:
+        response = es.search(
+            index="product-catalog",
+            query={
+                "multi_match": {
+                    "query": q,
+                    "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
+                    "type": "best_fields",
+                    "fuzziness": "AUTO"
+                }
+            },
+            highlight={
+                "fields": {
+                    "title": {},
+                    "description": {}
+                }
+            },
+            size=limit
+        )
+        
+        products = []
+        for hit in response["hits"]["hits"]:
+            product = hit["_source"]
+            product["id"] = hit["_id"]
+            product["_score"] = hit["_score"]
+            product["_highlight"] = hit.get("highlight", {})
+            products.append(product)
+        
+        return {
+            "products": products,
+            "total": response["hits"]["total"]["value"],
+            "query": q,
+            "search_type": "hybrid"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Hybrid search error: {str(e)}")
+
+
 @router.get("/products/{product_id}")
 async def get_product(product_id: str):
     """

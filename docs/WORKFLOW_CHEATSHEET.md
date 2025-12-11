@@ -41,7 +41,7 @@ steps:
 - name: call_api
   type: http
   with:
-    url: "http://host-1:8002/api"
+    url: "http://host-1:8001/api"
     method: POST
     headers:
       Content-Type: application/json
@@ -136,7 +136,7 @@ steps:
 - name: call_mcp
   type: http
   with:
-    url: "http://host-1:8002/mcp"
+    url: "http://host-1:8001/mcp"
     method: POST
     headers:
       Content-Type: application/json
