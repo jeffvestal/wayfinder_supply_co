@@ -88,14 +88,27 @@ def create_product_catalog_index(force: bool = False):
 
 
 def create_product_reviews_index(force: bool = False):
-    """Create product-reviews index."""
+    """Create product-reviews index with semantic_text mapping."""
     mapping = {
         "properties": {
             "product_id": {"type": "keyword"},
             "user_id": {"type": "keyword"},
             "rating": {"type": "integer"},
             "title": {"type": "text"},
-            "text": {"type": "text"},
+            "text": {
+                "type": "text",
+                "fields": {
+                    "semantic": {
+                        "type": "semantic_text",
+                        "inference_id": ".elser-2-elastic",
+                        "search_inference_id": ".elser-2-elasticsearch",
+                        "model_settings": {
+                            "service": "elastic",
+                            "task_type": "sparse_embedding"
+                        }
+                    }
+                }
+            },
             "timestamp": {"type": "date"},
             "verified_purchase": {"type": "boolean"}
         }

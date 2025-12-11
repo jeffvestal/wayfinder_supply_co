@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Product, ChatMessage, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
-import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database } from 'lucide-react'
+import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ProductDetailModal } from './ProductDetailModal'
 
@@ -74,6 +74,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const [demoLexicalResults, setDemoLexicalResults] = useState<Product[]>([])
   const [demoHybridResults, setDemoHybridResults] = useState<Product[]>([])
   const [demoAgenticMessage, setDemoAgenticMessage] = useState<ExtendedChatMessage | null>(null)
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(false)
   const dragStartX = useRef(0)
   const dragStartWidth = useRef(50)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -271,11 +272,12 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setSearchResults([])
 
     try {
-      let results: { products: Product[]; total: number }
+      let results: { products: Product[]; total: number; personalized?: boolean }
+      const userIdForSearch = personalizationEnabled ? userId : undefined
       if (searchMode === 'lexical') {
-        results = await api.lexicalSearch(query)
+        results = await api.lexicalSearch(query, 10, userIdForSearch)
       } else {
-        results = await api.hybridSearch(query)
+        results = await api.hybridSearch(query, 10, userIdForSearch)
       }
       setSearchResults(results.products)
     } catch (error) {
@@ -748,6 +750,21 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               <div className="flex items-center justify-between p-4 border-b border-slate-700">
                 <h2 className="text-xl font-display font-bold text-white">Search & Chat</h2>
                 <div className="flex items-center gap-2">
+                  {/* Personalization Toggle - only show for search modes */}
+                  {(mode === 'hybrid' || mode === 'lexical') && !isDemoRunning && (
+                    <button
+                      onClick={() => setPersonalizationEnabled(!personalizationEnabled)}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-all flex items-center gap-1.5 ${
+                        personalizationEnabled
+                          ? 'bg-primary text-white shadow-md shadow-primary/30'
+                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                      }`}
+                      title={personalizationEnabled ? 'Disable personalization' : 'Enable personalization based on your browsing history'}
+                    >
+                      <Target className={`w-4 h-4 ${personalizationEnabled ? 'animate-pulse' : ''}`} />
+                      <span className="hidden sm:inline">Personalize</span>
+                    </button>
+                  )}
                   {/* Watch This Demo Button */}
                   <button
                     onClick={runDemo}
@@ -767,7 +784,15 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
 
               {/* Mode Selector */}
               {!isDemoRunning && (
-                <div className="p-4 border-b border-slate-700">
+                <div className="p-4 border-b border-slate-700 space-y-2">
+                  {/* Personalization Indicator */}
+                  {personalizationEnabled && (mode === 'hybrid' || mode === 'lexical') && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-lg">
+                      <Target className="w-4 h-4 text-primary" />
+                      <span className="text-sm text-primary font-medium">Personalization enabled</span>
+                      <span className="text-xs text-gray-400">Results tailored to your browsing history</span>
+                    </div>
+                  )}
                   <div className="flex bg-slate-800 rounded-full p-1">
                     <button
                       onClick={() => { setMode('chat'); setSearchResults([]) }}

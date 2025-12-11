@@ -417,10 +417,13 @@ export const api = {
     return response.json();
   },
 
-  async lexicalSearch(query: string, limit = 10): Promise<{ products: any[]; total: number }> {
+  async lexicalSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean }> {
     const url = createApiUrl('/api/products/search/lexical');
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
+    if (userId) {
+      url.searchParams.set('user_id', userId);
+    }
 
     const response = await fetch(url.toString());
     if (!response.ok) {
@@ -429,10 +432,13 @@ export const api = {
     return response.json();
   },
 
-  async hybridSearch(query: string, limit = 10): Promise<{ products: any[]; total: number }> {
+  async hybridSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean }> {
     const url = createApiUrl('/api/products/search/hybrid');
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
+    if (userId) {
+      url.searchParams.set('user_id', userId);
+    }
 
     const response = await fetch(url.toString());
     if (!response.ok) {
