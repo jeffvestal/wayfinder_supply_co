@@ -121,44 +121,48 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       }
     }
     
-    console.log('Extracting products from steps:', steps)
-    
-    for (const step of steps) {
-      if (step.type === 'tool_call' && step.results) {
-        console.log('Tool results:', step.tool_id, step.results)
-        
-        for (const result of step.results) {
-          // Results might be the direct array of products
-          if (Array.isArray(result)) {
-            result.forEach(addProduct)
-          }
-          // Single product object
-          else if (result && typeof result === 'object') {
-            // Direct product
-            if (result.id && result.title) {
-              addProduct(result)
-            }
-            // Nested in .products
-            if (result.products && Array.isArray(result.products)) {
-              result.products.forEach(addProduct)
-            }
-            // Nested in .hits or .results
-            if (result.hits && Array.isArray(result.hits)) {
-              result.hits.forEach(addProduct)
-            }
-            if (result.results && Array.isArray(result.results)) {
-              result.results.forEach(addProduct)
-            }
-            // Elasticsearch-style response
-            if (result._source && result._source.id) {
-              addProduct(result._source)
-            }
+    const processValue = (value: any, depth = 0): void => {
+      if (depth > 5) return // Prevent infinite recursion
+      
+      if (Array.isArray(value)) {
+        value.forEach(item => processValue(item, depth + 1))
+      } else if (value && typeof value === 'object') {
+        // Check if it looks like a product
+        if (value.id && value.title) {
+          addProduct(value)
+        }
+        // Check _source (Elasticsearch hit)
+        if (value._source) {
+          processValue(value._source, depth + 1)
+        }
+        // Check nested arrays that might contain products
+        for (const key of ['products', 'hits', 'results', 'data', 'items', 'documents']) {
+          if (value[key] && Array.isArray(value[key])) {
+            processValue(value[key], depth + 1)
           }
         }
       }
     }
     
-    console.log('Extracted products:', products)
+    console.log('=== PRODUCT EXTRACTION ===')
+    console.log('Steps count:', steps.length)
+    
+    for (const step of steps) {
+      console.log('Step type:', step.type, 'tool_id:', step.tool_id)
+      
+      if (step.type === 'tool_call' && step.results) {
+        console.log('Tool results (raw):', step.results)
+        console.log('Tool results type:', typeof step.results)
+        console.log('Tool results is array:', Array.isArray(step.results))
+        
+        // Try to extract from results
+        processValue(step.results)
+      }
+    }
+    
+    console.log('=== EXTRACTED PRODUCTS:', products.length, '===')
+    products.forEach(p => console.log('  -', p.title, p.id))
+    
     return products.slice(0, 5) // Limit to top 5
   }
 
@@ -174,6 +178,19 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       setAddingToCart(null)
     }
   }
+
+  // Extract products when demo agentic message completes
+  useEffect(() => {
+    if (demoAgenticMessage?.status === 'complete' && demoAgenticMessage?.steps) {
+      console.log('Demo message complete, attempting product extraction')
+      console.log('Steps:', JSON.stringify(demoAgenticMessage.steps, null, 2))
+      const extracted = extractProductsFromSteps(demoAgenticMessage.steps)
+      console.log('Extracted products:', extracted)
+      if (extracted.length > 0) {
+        setDemoAgenticProducts(extracted)
+      }
+    }
+  }, [demoAgenticMessage?.status, demoAgenticMessage?.steps])
 
   // Scroll to bottom when messages change
   useEffect(() => {
