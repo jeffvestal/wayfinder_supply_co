@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Product, ChatMessage, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
-import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target, FileText, Plus, ShoppingCart } from 'lucide-react'
+import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target, FileText, Plus, ShoppingCart, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ProductDetailModal } from './ProductDetailModal'
 
@@ -76,6 +76,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const [demoAgenticMessage, setDemoAgenticMessage] = useState<ExtendedChatMessage | null>(null)
   const [demoAgenticProducts, setDemoAgenticProducts] = useState<Product[]>([])
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
+  const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
   const [demoLexicalQuery, setDemoLexicalQuery] = useState<any>(null)
   const [demoLexicalRawHits, setDemoLexicalRawHits] = useState<any[]>([])
   const [demoHybridQuery, setDemoHybridQuery] = useState<any>(null)
@@ -99,71 +100,81 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     return personas[id] || id
   }
 
-  // Extract products from agent tool results
-  const extractProductsFromSteps = (steps: AgentStep[]): Product[] => {
-    const products: Product[] = []
+  // Extract product IDs from agent tool results (Agent Builder returns "resource" format)
+  const extractProductIdsFromSteps = (steps: AgentStep[]): string[] => {
+    const productIds: string[] = []
     const seenIds = new Set<string>()
     
-    const addProduct = (item: any) => {
-      if (item && item.id && item.title && !seenIds.has(item.id)) {
-        seenIds.add(item.id)
-        products.push({
-          id: item.id,
-          title: item.title,
-          price: item.price,
-          description: item.description,
-          category: item.category,
-          image_url: item.image_url,
-          tags: item.tags,
-          average_rating: item.average_rating,
-          review_count: item.review_count
-        } as Product)
-      }
-    }
-    
-    const processValue = (value: any, depth = 0): void => {
-      if (depth > 5) return // Prevent infinite recursion
-      
-      if (Array.isArray(value)) {
-        value.forEach(item => processValue(item, depth + 1))
-      } else if (value && typeof value === 'object') {
-        // Check if it looks like a product
-        if (value.id && value.title) {
-          addProduct(value)
-        }
-        // Check _source (Elasticsearch hit)
-        if (value._source) {
-          processValue(value._source, depth + 1)
-        }
-        // Check nested arrays that might contain products
-        for (const key of ['products', 'hits', 'results', 'data', 'items', 'documents']) {
-          if (value[key] && Array.isArray(value[key])) {
-            processValue(value[key], depth + 1)
-          }
-        }
-      }
-    }
-    
-    console.log('=== PRODUCT EXTRACTION ===')
+    console.log('=== PRODUCT ID EXTRACTION ===')
     console.log('Steps count:', steps.length)
     
     for (const step of steps) {
       console.log('Step type:', step.type, 'tool_id:', step.tool_id)
       
-      if (step.type === 'tool_call' && step.results) {
-        console.log('Tool results (raw):', step.results)
-        console.log('Tool results type:', typeof step.results)
-        console.log('Tool results is array:', Array.isArray(step.results))
+      if (step.type === 'tool_call' && step.results && Array.isArray(step.results)) {
+        console.log('Tool results count:', step.results.length)
         
-        // Try to extract from results
-        processValue(step.results)
+        for (const result of step.results) {
+          // Handle Agent Builder "resource" format
+          // Structure: { type: "resource", data: { reference: { id, index }, partial: true, content: { highlights } } }
+          if (result.type === 'resource' && result.data?.reference?.id) {
+            const id = result.data.reference.id
+            console.log('Found resource ID:', id)
+            if (!seenIds.has(id)) {
+              seenIds.add(id)
+              productIds.push(id)
+            }
+          }
+          // Also check for direct product objects (legacy/other formats)
+          else if (result.id && result.title) {
+            console.log('Found direct product:', result.id)
+            if (!seenIds.has(result.id)) {
+              seenIds.add(result.id)
+              productIds.push(result.id)
+            }
+          }
+        }
       }
     }
     
-    console.log('=== EXTRACTED PRODUCTS:', products.length, '===')
-    products.forEach(p => console.log('  -', p.title, p.id))
+    console.log('=== EXTRACTED PRODUCT IDS:', productIds.length, '===')
+    productIds.forEach(id => console.log('  -', id))
     
-    return products.slice(0, 5) // Limit to top 5
+    return productIds.slice(0, 5) // Limit to top 5
+  }
+  
+  // Fetch full product details for extracted IDs
+  const fetchProductsFromIds = async (ids: string[]): Promise<Product[]> => {
+    if (ids.length === 0) return []
+    
+    console.log('=== FETCHING PRODUCTS ===')
+    const products: Product[] = []
+    
+    // Fetch products in parallel
+    const results = await Promise.allSettled(
+      ids.map(id => api.getProduct(id))
+    )
+    
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        console.log('Fetched product:', result.value.title)
+        products.push(result.value as Product)
+      }
+    }
+    
+    console.log('=== FETCHED PRODUCTS:', products.length, '===')
+    return products
+  }
+  
+  // Helper to extract IDs and fetch products in one call
+  const extractAndFetchProducts = async (steps: AgentStep[]) => {
+    const productIds = extractProductIdsFromSteps(steps)
+    if (productIds.length > 0) {
+      const products = await fetchProductsFromIds(productIds)
+      if (products.length > 0) {
+        setDemoAgenticProducts(products)
+      }
+    }
   }
 
   // Add to cart handler for demo products
@@ -171,7 +182,10 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setAddingToCart(product.id)
     try {
       await api.addToCart(userId, product.id)
-      // Could add a toast notification here
+      // Show success state
+      setJustAddedToCart(product.id)
+      // Reset after animation
+      setTimeout(() => setJustAddedToCart(null), 1500)
     } catch (error) {
       console.error('Failed to add to cart:', error)
     } finally {
@@ -181,15 +195,27 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
 
   // Extract products when demo agentic message completes
   useEffect(() => {
-    if (demoAgenticMessage?.status === 'complete' && demoAgenticMessage?.steps) {
-      console.log('Demo message complete, attempting product extraction')
-      console.log('Steps:', JSON.stringify(demoAgenticMessage.steps, null, 2))
-      const extracted = extractProductsFromSteps(demoAgenticMessage.steps)
-      console.log('Extracted products:', extracted)
-      if (extracted.length > 0) {
-        setDemoAgenticProducts(extracted)
+    const extractProducts = async () => {
+      if (demoAgenticMessage?.status === 'complete' && demoAgenticMessage?.steps) {
+        console.log('Demo message complete, attempting product extraction')
+        console.log('Steps:', JSON.stringify(demoAgenticMessage.steps, null, 2))
+        
+        // Extract product IDs from Agent Builder "resource" format
+        const productIds = extractProductIdsFromSteps(demoAgenticMessage.steps)
+        console.log('Extracted product IDs:', productIds)
+        
+        if (productIds.length > 0) {
+          // Fetch full product details
+          const products = await fetchProductsFromIds(productIds)
+          console.log('Fetched products:', products)
+          if (products.length > 0) {
+            setDemoAgenticProducts(products)
+          }
+        }
       }
     }
+    
+    extractProducts()
   }, [demoAgenticMessage?.status, demoAgenticMessage?.steps])
 
   // Scroll to bottom when messages change
@@ -310,8 +336,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     try {
       let currentSteps: AgentStep[] = []
       let currentContent = ''
+      
+      // Use generic user when personalization is off
+      const chatUserIdForPersonalization = personalizationEnabled ? userId : 'user_new'
 
-      await api.streamChat(messageText.trim(), userId, (event: StreamEvent) => {
+      await api.streamChat(messageText.trim(), chatUserIdForPersonalization, (event: StreamEvent) => {
         const { type, data } = event
 
         switch (type) {
@@ -432,11 +461,15 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const advanceDemo = async () => {
     if (isLoading) return
 
+    // User ID for personalized searches (only pass when enabled)
+    const personalizedUserId = personalizationEnabled ? userId : undefined
+    const chatUserId = personalizationEnabled ? userId : 'user_new'  // Use generic user when personalization off
+    
     if (demoStep === 'intro') {
       setDemoStep('lexical')
       setIsLoading(true)
       try {
-        const results = await api.lexicalSearch(DEMO_QUERY)
+        const results = await api.lexicalSearch(DEMO_QUERY, 10, personalizedUserId)
         setDemoLexicalResults(results.products)
         setDemoLexicalQuery(results.es_query || null)
         setDemoLexicalRawHits(results.raw_hits || [])
@@ -449,7 +482,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       setDemoStep('hybrid')
       setIsLoading(true)
       try {
-        const results = await api.hybridSearch(DEMO_QUERY)
+        const results = await api.hybridSearch(DEMO_QUERY, 10, personalizedUserId)
         setDemoHybridResults(results.products)
         setDemoHybridQuery(results.es_query || null)
         setDemoHybridRawHits(results.raw_hits || [])
@@ -477,7 +510,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
         let currentSteps: AgentStep[] = []
         let currentContent = ''
 
-        await api.streamChat(DEMO_QUERY, userId, (event: StreamEvent) => {
+        await api.streamChat(DEMO_QUERY, chatUserId, (event: StreamEvent) => {
           const { type, data } = event
 
           switch (type) {
@@ -522,16 +555,18 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
             case 'message_complete':
               currentContent = data.message_content || currentContent
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'complete' } : null)
-              // Extract products when message completes
+              // Product extraction handled by useEffect watching for 'complete' status
               console.log('Message complete, extracting products from steps:', currentSteps)
-              setDemoAgenticProducts(extractProductsFromSteps(currentSteps))
+              // Async extraction
+              extractAndFetchProducts(currentSteps)
               break
 
             case 'completion':
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'complete' } : null)
-              // Also extract products on completion event
+              // Product extraction handled by useEffect watching for 'complete' status
               console.log('Completion event, extracting products from steps:', currentSteps)
-              setDemoAgenticProducts(extractProductsFromSteps(currentSteps))
+              // Async extraction
+              extractAndFetchProducts(currentSteps)
               break
 
             case 'error':
@@ -540,8 +575,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               break
           }
         })
-        // Also extract products after stream completes
-        setDemoAgenticProducts(extractProductsFromSteps(currentSteps))
+        // Also extract products after stream completes (async)
+        extractAndFetchProducts(currentSteps)
       } catch (error) {
         console.error('Demo agentic search failed:', error)
         setDemoAgenticMessage(prev => prev ? { ...prev, content: `Error: ${error instanceof Error ? error.message : 'Failed'}`, status: 'complete' } : null)
@@ -640,10 +675,21 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
           <h3 className="text-lg font-semibold text-white mb-2">🎯 Demo Query</h3>
           <p className="text-primary font-medium mb-3">"{DEMO_QUERY}"</p>
-          <div className="flex items-center gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
-            <span>Persona:</span>
-            <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
-            <span className="text-xs text-gray-500">(has personalized clickstream data)</span>
+          <div className="flex flex-col gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
+            <div className="flex items-center gap-2">
+              <span>Persona:</span>
+              <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>Personalization:</span>
+              {personalizationEnabled ? (
+                <span className="flex items-center gap-1 text-green-400 font-medium">
+                  <Target className="w-3 h-3" /> ON - results boosted by browsing history
+                </span>
+              ) : (
+                <span className="text-gray-500">OFF - generic results</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -880,18 +926,26 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                   </div>
                 )}
                 
-                {/* Product Cards */}
+                {/* Product Cards with Intro Text */}
                 {demoAgenticProducts.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
+                    {/* Intro text extracted from agent response */}
+                    {demoAgenticMessage.content && (
+                      <p className="text-sm text-gray-300">
+                        {/* Extract first sentence/intro before product listings */}
+                        {demoAgenticMessage.content.split(/\n\n|\*\*[A-Z]/)[0].replace(/[*#]/g, '').trim()}
+                      </p>
+                    )}
+                    
                     <div className="text-xs font-semibold text-primary/70 uppercase tracking-wide">Recommended Products</div>
                     <div className="grid gap-2">
                       {demoAgenticProducts.map((product) => (
                         <div
                           key={product.id}
-                          className="flex items-center gap-3 bg-slate-800/80 rounded-lg p-3 border border-primary/20 hover:border-primary/40 transition-colors"
+                          className="flex gap-3 bg-slate-800/80 rounded-lg p-3 border border-primary/20 hover:border-primary/40 transition-colors"
                         >
                           {/* Product Image */}
-                          <div className="flex-shrink-0 w-12 h-12 bg-slate-700 rounded-lg overflow-hidden">
+                          <div className="flex-shrink-0 w-14 h-14 bg-slate-700 rounded-lg overflow-hidden">
                             {product.image_url ? (
                               <img
                                 src={product.image_url}
@@ -908,39 +962,52 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                             )}
                           </div>
                           
-                          {/* Product Info */}
+                          {/* Product Info with Description */}
                           <div className="flex-1 min-w-0">
-                            <h5 
-                              className="font-medium text-white text-sm truncate cursor-pointer hover:text-primary transition-colors"
-                              onClick={() => handleProductClick(product)}
-                            >
-                              {product.title}
-                            </h5>
-                            <p className="text-xs text-gray-400">${product.price?.toFixed(2)}</p>
-                          </div>
-                          
-                          {/* Add to Cart Button */}
-                          <button
-                            onClick={() => handleAddToCart(product)}
-                            disabled={addingToCart === product.id}
-                            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
-                          >
-                            {addingToCart === product.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Plus className="w-3 h-3" />
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <h5 
+                                  className="font-medium text-white text-sm cursor-pointer hover:text-primary transition-colors"
+                                  onClick={() => handleProductClick(product)}
+                                >
+                                  {product.title}
+                                </h5>
+                                <p className="text-xs text-primary font-medium">${product.price?.toFixed(2)}</p>
+                              </div>
+                              {/* Add to Cart Button */}
+                              <button
+                                onClick={() => handleAddToCart(product)}
+                                disabled={addingToCart === product.id || justAddedToCart === product.id}
+                                className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 text-white text-xs font-medium rounded transition-all duration-300 ${
+                                  justAddedToCart === product.id 
+                                    ? 'bg-green-500 scale-110 animate-pulse' 
+                                    : 'bg-primary hover:bg-primary-dark disabled:opacity-50'
+                                }`}
+                              >
+                                {addingToCart === product.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : justAddedToCart === product.id ? (
+                                  <Check className="w-3 h-3" />
+                                ) : (
+                                  <Plus className="w-3 h-3" />
+                                )}
+                                <span>{justAddedToCart === product.id ? 'Added!' : 'Add'}</span>
+                              </button>
+                            </div>
+                            {/* Product Description - truncated to 2 lines */}
+                            {product.description && (
+                              <p className="text-xs text-gray-400 mt-1 line-clamp-2">{product.description}</p>
                             )}
-                            <span>Add</span>
-                          </button>
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
                 
-                {/* Response Text (collapsed if products shown) */}
-                {demoAgenticMessage.content && (
-                  <div className={`bg-slate-800/50 rounded-lg p-3 ${demoAgenticProducts.length > 0 ? 'border border-slate-700' : ''}`}>
+                {/* Response Text - only show if NO products (fallback) */}
+                {demoAgenticMessage.content && demoAgenticProducts.length === 0 && (
+                  <div className="bg-slate-800/50 rounded-lg p-3">
                     <div className="prose prose-invert prose-sm max-w-none text-gray-300">
                       <ReactMarkdown>{demoAgenticMessage.content}</ReactMarkdown>
                     </div>
@@ -1035,21 +1102,19 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               <div className="flex items-center justify-between p-4 border-b border-slate-700">
                 <h2 className="text-xl font-display font-bold text-white">Search & Chat</h2>
                 <div className="flex items-center gap-2">
-                  {/* Personalization Toggle - only show for search modes */}
-                  {(mode === 'hybrid' || mode === 'lexical') && !isDemoRunning && (
-                    <button
-                      onClick={() => setPersonalizationEnabled(!personalizationEnabled)}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-all flex items-center gap-1.5 ${
-                        personalizationEnabled
-                          ? 'bg-primary text-white shadow-md shadow-primary/30'
-                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                      }`}
-                      title={personalizationEnabled ? 'Disable personalization' : 'Enable personalization based on your browsing history'}
-                    >
-                      <Target className={`w-4 h-4 ${personalizationEnabled ? 'animate-pulse' : ''}`} />
-                      <span className="hidden sm:inline">Personalize</span>
-                    </button>
-                  )}
+                  {/* Personalization Toggle - always visible */}
+                  <button
+                    onClick={() => setPersonalizationEnabled(!personalizationEnabled)}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-all flex items-center gap-1.5 ${
+                      personalizationEnabled
+                        ? 'bg-green-600 text-white shadow-md shadow-green-500/30'
+                        : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
+                    }`}
+                    title={personalizationEnabled ? 'Personalization ON - results tailored to browsing history' : 'Personalization OFF - generic results'}
+                  >
+                    <Target className={`w-4 h-4 ${personalizationEnabled ? 'animate-pulse' : ''}`} />
+                    <span className="hidden sm:inline">{personalizationEnabled ? 'Personal' : 'Generic'}</span>
+                  </button>
                   {/* Watch This Demo Button */}
                   <button
                     onClick={runDemo}
@@ -1070,14 +1135,6 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               {/* Mode Selector */}
               {!isDemoRunning && (
                 <div className="p-4 border-b border-slate-700 space-y-2">
-                  {/* Personalization Indicator */}
-                  {personalizationEnabled && (mode === 'hybrid' || mode === 'lexical') && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-lg">
-                      <Target className="w-4 h-4 text-primary" />
-                      <span className="text-sm text-primary font-medium">Personalization enabled</span>
-                      <span className="text-xs text-gray-400">Results tailored to your browsing history</span>
-                    </div>
-                  )}
                   <div className="flex bg-slate-800 rounded-full p-1">
                     <button
                       onClick={() => { setMode('chat'); setSearchResults([]) }}
