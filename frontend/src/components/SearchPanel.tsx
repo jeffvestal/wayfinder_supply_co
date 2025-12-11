@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Product, ChatMessage, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
-import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target, FileText } from 'lucide-react'
+import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target, FileText, Plus, ShoppingCart } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ProductDetailModal } from './ProductDetailModal'
 
@@ -74,6 +74,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const [demoLexicalResults, setDemoLexicalResults] = useState<Product[]>([])
   const [demoHybridResults, setDemoHybridResults] = useState<Product[]>([])
   const [demoAgenticMessage, setDemoAgenticMessage] = useState<ExtendedChatMessage | null>(null)
+  const [demoAgenticProducts, setDemoAgenticProducts] = useState<Product[]>([])
+  const [addingToCart, setAddingToCart] = useState<string | null>(null)
   const [demoLexicalQuery, setDemoLexicalQuery] = useState<any>(null)
   const [demoLexicalRawHits, setDemoLexicalRawHits] = useState<any[]>([])
   const [demoHybridQuery, setDemoHybridQuery] = useState<any>(null)
@@ -95,6 +97,56 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       'user_new': '🆕 New Visitor'
     }
     return personas[id] || id
+  }
+
+  // Extract products from agent tool results
+  const extractProductsFromSteps = (steps: AgentStep[]): Product[] => {
+    const products: Product[] = []
+    const seenIds = new Set<string>()
+    
+    for (const step of steps) {
+      if (step.type === 'tool_call' && step.results) {
+        for (const result of step.results) {
+          // Handle product search results (array of products)
+          if (Array.isArray(result)) {
+            for (const item of result) {
+              if (item.id && item.title && !seenIds.has(item.id)) {
+                seenIds.add(item.id)
+                products.push(item as Product)
+              }
+            }
+          }
+          // Handle single product result
+          if (result.id && result.title && !seenIds.has(result.id)) {
+            seenIds.add(result.id)
+            products.push(result as Product)
+          }
+          // Handle nested results structure
+          if (result.products && Array.isArray(result.products)) {
+            for (const item of result.products) {
+              if (item.id && item.title && !seenIds.has(item.id)) {
+                seenIds.add(item.id)
+                products.push(item as Product)
+              }
+            }
+          }
+        }
+      }
+    }
+    return products.slice(0, 5) // Limit to top 5
+  }
+
+  // Add to cart handler for demo products
+  const handleAddToCart = async (product: Product) => {
+    setAddingToCart(product.id)
+    try {
+      await api.addToCart(userId, product.id)
+      // Could add a toast notification here
+    } catch (error) {
+      console.error('Failed to add to cart:', error)
+    } finally {
+      setAddingToCart(null)
+    }
   }
 
   // Scroll to bottom when messages change
@@ -122,6 +174,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       setDemoLexicalResults([])
       setDemoHybridResults([])
       setDemoAgenticMessage(null)
+      setDemoAgenticProducts([])
       setDemoLexicalQuery(null)
       setDemoLexicalRawHits([])
       setDemoHybridQuery(null)
@@ -323,6 +376,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setDemoLexicalResults([])
     setDemoHybridResults([])
     setDemoAgenticMessage(null)
+    setDemoAgenticProducts([])
     setDemoLexicalQuery(null)
     setDemoLexicalRawHits([])
     setDemoHybridQuery(null)
@@ -429,6 +483,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
 
             case 'completion':
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'complete' } : null)
+              // Extract products from tool results
+              setDemoAgenticProducts(extractProductsFromSteps(currentSteps))
               break
 
             case 'error':
@@ -437,6 +493,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               break
           }
         })
+        // Also extract products after stream completes
+        setDemoAgenticProducts(extractProductsFromSteps(currentSteps))
       } catch (error) {
         console.error('Demo agentic search failed:', error)
         setDemoAgenticMessage(prev => prev ? { ...prev, content: `Error: ${error instanceof Error ? error.message : 'Failed'}`, status: 'complete' } : null)
@@ -775,10 +833,68 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                   </div>
                 )}
                 
-                {/* Response */}
+                {/* Product Cards */}
+                {demoAgenticProducts.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-primary/70 uppercase tracking-wide">Recommended Products</div>
+                    <div className="grid gap-2">
+                      {demoAgenticProducts.map((product) => (
+                        <div
+                          key={product.id}
+                          className="flex items-center gap-3 bg-slate-800/80 rounded-lg p-3 border border-primary/20 hover:border-primary/40 transition-colors"
+                        >
+                          {/* Product Image */}
+                          <div className="flex-shrink-0 w-12 h-12 bg-slate-700 rounded-lg overflow-hidden">
+                            {product.image_url ? (
+                              <img
+                                src={product.image_url}
+                                alt={product.title}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = '/images/products/placeholder.jpg'
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-500">
+                                <ShoppingCart className="w-5 h-5" />
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Product Info */}
+                          <div className="flex-1 min-w-0">
+                            <h5 
+                              className="font-medium text-white text-sm truncate cursor-pointer hover:text-primary transition-colors"
+                              onClick={() => handleProductClick(product)}
+                            >
+                              {product.title}
+                            </h5>
+                            <p className="text-xs text-gray-400">${product.price?.toFixed(2)}</p>
+                          </div>
+                          
+                          {/* Add to Cart Button */}
+                          <button
+                            onClick={() => handleAddToCart(product)}
+                            disabled={addingToCart === product.id}
+                            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                          >
+                            {addingToCart === product.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Plus className="w-3 h-3" />
+                            )}
+                            <span>Add</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Response Text (collapsed if products shown) */}
                 {demoAgenticMessage.content && (
-                  <div className="bg-slate-800 rounded-lg p-4">
-                    <div className="prose prose-invert prose-sm max-w-none">
+                  <div className={`bg-slate-800/50 rounded-lg p-3 ${demoAgenticProducts.length > 0 ? 'border border-slate-700' : ''}`}>
+                    <div className="prose prose-invert prose-sm max-w-none text-gray-300">
                       <ReactMarkdown>{demoAgenticMessage.content}</ReactMarkdown>
                     </div>
                   </div>
