@@ -253,42 +253,46 @@ async def hybrid_search(
     user_id: Optional[str] = Query(None, description="User ID for personalization")
 ):
     """
-    Real hybrid search combining semantic (ELSER) and lexical (BM25) using retrievers with RRF.
-    Uses linear combination via RRF to merge results from both search types.
+    Real hybrid search combining semantic (ELSER) and lexical (BM25) using linear combination.
+    Uses weighted linear combination to merge results from both search types.
     """
     es = get_elastic_client()
     
-    # Build retriever config for RRF (Reciprocal Rank Fusion)
+    # Build retriever config for Linear combination (weighted)
     retriever_config = {
-        "rrf": {
+        "linear": {
             "retrievers": [
-                # Lexical retriever (BM25)
+                # Semantic retriever (ELSER via semantic_text) - higher weight for meaning
                 {
-                    "standard": {
-                        "query": {
-                            "multi_match": {
-                                "query": q,
-                                "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
-                                "type": "best_fields",
-                                "fuzziness": "AUTO"
+                    "retriever": {
+                        "standard": {
+                            "query": {
+                                "semantic": {
+                                    "field": "description.semantic",
+                                    "query": q
+                                }
                             }
                         }
-                    }
+                    },
+                    "weight": 0.7  # Semantic gets higher weight
                 },
-                # Semantic retriever (ELSER via semantic_text)
+                # Lexical retriever (BM25) - for exact matches
                 {
-                    "standard": {
-                        "query": {
-                            "semantic": {
-                                "field": "description.semantic",
-                                "query": q
+                    "retriever": {
+                        "standard": {
+                            "query": {
+                                "multi_match": {
+                                    "query": q,
+                                    "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
+                                    "type": "best_fields",
+                                    "fuzziness": "AUTO"
+                                }
                             }
                         }
-                    }
+                    },
+                    "weight": 0.3  # Lexical for keyword boost
                 }
-            ],
-            "rank_window_size": 50,
-            "rank_constant": 20
+            ]
         }
     }
     
@@ -342,7 +346,7 @@ async def hybrid_search(
             "query": q,
             "es_query": es_query_display,
             "raw_hits": raw_hits,
-            "search_type": "hybrid_rrf",
+            "search_type": "hybrid_linear",
             "personalized": personalized
         }
     except Exception as e:
