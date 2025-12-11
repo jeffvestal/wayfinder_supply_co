@@ -22,72 +22,88 @@ class TripReportRequest(BaseModel):
 @router.post("/reports/trip-pdf")
 async def generate_trip_report_pdf(request: TripReportRequest):
     """
-    Generates a PDF trip report with itinerary and suggested gear.
-    
-    Uses reportlab for PDF generation. Falls back to a simple text-based
-    PDF if reportlab styling fails.
+    Generates a professional PDF trip report with itinerary and suggested gear.
+    Styled to match Wayfinder Supply Co. branding.
     """
     try:
         from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+            HRFlowable, KeepTogether
+        )
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
-        from reportlab.lib.colors import HexColor
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        from reportlab.lib.colors import HexColor, Color
+        
+        # Brand colors
+        PRIMARY = HexColor('#14b8a6')      # Teal
+        PRIMARY_DARK = HexColor('#0d9488')
+        SLATE_900 = HexColor('#0f172a')    # Dark navy
+        SLATE_700 = HexColor('#334155')
+        SLATE_500 = HexColor('#64748b')
+        SLATE_300 = HexColor('#cbd5e1')
+        SLATE_100 = HexColor('#f1f5f9')
+        WHITE = HexColor('#ffffff')
+        AMBER = HexColor('#f59e0b')
         
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer, 
             pagesize=letter,
-            rightMargin=0.75*inch,
-            leftMargin=0.75*inch,
-            topMargin=0.75*inch,
-            bottomMargin=0.75*inch
+            rightMargin=0.6*inch,
+            leftMargin=0.6*inch,
+            topMargin=0.5*inch,
+            bottomMargin=0.5*inch
         )
         
         # Custom styles
         styles = getSampleStyleSheet()
         
-        # Header style - large centered title
-        header_style = ParagraphStyle(
-            'Header',
+        # Main title - large, teal, centered
+        title_style = ParagraphStyle(
+            'Title',
             parent=styles['Heading1'],
-            fontSize=24,
-            leading=28,
+            fontSize=28,
+            leading=34,
             alignment=TA_CENTER,
-            textColor=HexColor('#14b8a6'),  # Primary teal color
-            spaceAfter=6
+            textColor=PRIMARY,
+            fontName='Helvetica-Bold',
+            spaceAfter=4
         )
         
-        # Subheader for dates
-        subheader_style = ParagraphStyle(
-            'Subheader',
-            parent=styles['Heading2'],
+        # Subtitle for dates
+        subtitle_style = ParagraphStyle(
+            'Subtitle',
+            parent=styles['Normal'],
             fontSize=14,
             leading=18,
             alignment=TA_CENTER,
-            textColor=HexColor('#64748b'),
-            spaceAfter=20
+            textColor=SLATE_500,
+            fontName='Helvetica',
+            spaceAfter=24
         )
         
-        # Section headers
+        # Section header - bold, dark
         section_style = ParagraphStyle(
             'Section',
             parent=styles['Heading2'],
-            fontSize=16,
-            leading=20,
-            textColor=HexColor('#0f172a'),
-            spaceBefore=20,
-            spaceAfter=10
+            fontSize=18,
+            leading=22,
+            textColor=SLATE_900,
+            fontName='Helvetica-Bold',
+            spaceBefore=24,
+            spaceAfter=12
         )
         
-        # Day title style
-        day_style = ParagraphStyle(
-            'DayTitle',
+        # Subsection header
+        subsection_style = ParagraphStyle(
+            'Subsection',
             parent=styles['Heading3'],
-            fontSize=12,
+            fontSize=13,
             leading=16,
-            textColor=HexColor('#14b8a6'),
+            textColor=PRIMARY_DARK,
+            fontName='Helvetica-Bold',
             spaceBefore=12,
             spaceAfter=6
         )
@@ -98,98 +114,229 @@ async def generate_trip_report_pdf(request: TripReportRequest):
             parent=styles['Normal'],
             fontSize=10,
             leading=14,
-            textColor=HexColor('#334155')
+            textColor=SLATE_700,
+            fontName='Helvetica'
         )
         
-        # Bullet style
-        bullet_style = ParagraphStyle(
-            'Bullet',
+        # Activity bullet style
+        activity_style = ParagraphStyle(
+            'Activity',
             parent=styles['Normal'],
             fontSize=10,
             leading=14,
-            textColor=HexColor('#475569'),
-            leftIndent=20,
-            bulletIndent=10
+            textColor=SLATE_700,
+            fontName='Helvetica',
+            leftIndent=15,
+            spaceBefore=2,
+            spaceAfter=2
+        )
+        
+        # Weather label style
+        weather_style = ParagraphStyle(
+            'Weather',
+            parent=styles['Normal'],
+            fontSize=9,
+            leading=12,
+            textColor=SLATE_500,
+            fontName='Helvetica-Oblique',
+            leftIndent=15,
+            spaceBefore=4
+        )
+        
+        # Table header style
+        table_header_style = ParagraphStyle(
+            'TableHeader',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=12,
+            textColor=WHITE,
+            fontName='Helvetica-Bold'
+        )
+        
+        # Table cell style
+        table_cell_style = ParagraphStyle(
+            'TableCell',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=13,
+            textColor=SLATE_700,
+            fontName='Helvetica'
         )
         
         # Footer style
         footer_style = ParagraphStyle(
             'Footer',
             parent=styles['Normal'],
-            fontSize=8,
-            leading=10,
+            fontSize=9,
+            leading=12,
             alignment=TA_CENTER,
-            textColor=HexColor('#94a3b8'),
+            textColor=SLATE_500,
+            fontName='Helvetica',
             spaceBefore=30
         )
         
         story = []
         
-        # Header
+        # === HEADER SECTION ===
         story.append(Paragraph(
             f"{request.user_name}'s Trip to {request.destination}",
-            header_style
+            title_style
         ))
-        story.append(Paragraph(request.dates, subheader_style))
+        story.append(Paragraph(request.dates, subtitle_style))
         
-        # Itinerary Section
+        # Divider line
+        story.append(HRFlowable(
+            width="100%",
+            thickness=2,
+            color=PRIMARY,
+            spaceAfter=20
+        ))
+        
+        # === TRIP OVERVIEW TABLE ===
+        story.append(Paragraph("Trip Overview", section_style))
+        
+        # Calculate duration from itinerary
+        duration = f"{len(request.itinerary)} day{'s' if len(request.itinerary) != 1 else ''}" if request.itinerary else "N/A"
+        
+        overview_data = [
+            [Paragraph("<b>Destination:</b>", body_style), Paragraph(request.destination, body_style)],
+            [Paragraph("<b>Dates:</b>", body_style), Paragraph(request.dates, body_style)],
+            [Paragraph("<b>Duration:</b>", body_style), Paragraph(duration, body_style)],
+        ]
+        
+        overview_table = Table(overview_data, colWidths=[1.5*inch, 4.5*inch])
+        overview_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(overview_table)
+        
+        # === ITINERARY SECTION ===
         if request.itinerary:
-            story.append(Paragraph("📅 Trip Itinerary", section_style))
+            story.append(Paragraph("Day-by-Day Itinerary", section_style))
             
             for day in request.itinerary:
                 day_num = day.get('day', '?')
                 day_title = day.get('title', 'Day')
                 weather = day.get('weather', '')
-                
-                title_text = f"Day {day_num}: {day_title}"
-                if weather:
-                    title_text += f" <font color='#64748b' size='9'>({weather})</font>"
-                
-                story.append(Paragraph(title_text, day_style))
-                
                 activities = day.get('activities', [])
-                for activity in activities:
-                    story.append(Paragraph(f"• {activity}", bullet_style))
+                
+                # Day header
+                day_content = []
+                day_content.append(Paragraph(
+                    f"Day {day_num}: {day_title}",
+                    subsection_style
+                ))
+                
+                # Activities as numbered list
+                for i, activity in enumerate(activities, 1):
+                    day_content.append(Paragraph(
+                        f"{i}. {activity}",
+                        activity_style
+                    ))
+                
+                # Weather info
+                if weather:
+                    day_content.append(Paragraph(
+                        f"<b>Weather:</b> {weather}",
+                        weather_style
+                    ))
+                
+                # Keep day content together
+                story.append(KeepTogether(day_content))
+                story.append(Spacer(1, 8))
         
-        story.append(Spacer(1, 20))
-        
-        # Suggested Gear Section
+        # === RECOMMENDED GEAR SECTION ===
         if request.suggested_products or request.other_recommended_items:
-            story.append(Paragraph("🎒 Suggested Gear", section_style))
+            story.append(Paragraph("Recommended Gear", section_style))
             
             if request.suggested_products:
-                story.append(Paragraph(
-                    "<b>From Wayfinder Supply Co.:</b>",
-                    body_style
-                ))
-                story.append(Spacer(1, 6))
+                # Build table data with Paragraph objects for proper rendering
+                gear_data = [[
+                    Paragraph("Item", table_header_style),
+                    Paragraph("Price", table_header_style),
+                    Paragraph("Reason", table_header_style)
+                ]]
+                
+                total_price = 0.0
                 
                 for product in request.suggested_products:
                     title = product.get('title', product.get('name', 'Product'))
-                    price = product.get('price', 0)
+                    price = float(product.get('price', 0))
                     reason = product.get('reason', '')
+                    total_price += price
                     
-                    product_text = f"• <b>{title}</b> - ${price:.2f}"
-                    if reason:
-                        product_text += f"<br/><font color='#64748b' size='9'>&nbsp;&nbsp;&nbsp;{reason}</font>"
+                    gear_data.append([
+                        Paragraph(str(title), table_cell_style),
+                        Paragraph(f"${price:.2f}", table_cell_style),
+                        Paragraph(str(reason), table_cell_style)
+                    ])
+                
+                # Total row
+                gear_data.append([
+                    Paragraph("<b>TOTAL</b>", table_cell_style),
+                    Paragraph(f"<b>${total_price:.2f}</b>", table_cell_style),
+                    Paragraph("", table_cell_style)
+                ])
+                
+                gear_table = Table(gear_data, colWidths=[3*inch, 1*inch, 2.5*inch])
+                gear_table.setStyle(TableStyle([
+                    # Header row styling
+                    ('BACKGROUND', (0, 0), (-1, 0), SLATE_900),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
                     
-                    story.append(Paragraph(product_text, bullet_style))
+                    # All cells
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                    
+                    # Alternating row colors (skip header and total)
+                    ('BACKGROUND', (0, 1), (-1, -2), SLATE_100),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -2), [WHITE, SLATE_100]),
+                    
+                    # Total row styling
+                    ('BACKGROUND', (0, -1), (-1, -1), SLATE_300),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    
+                    # Grid
+                    ('GRID', (0, 0), (-1, -1), 0.5, SLATE_300),
+                    ('LINEBELOW', (0, 0), (-1, 0), 2, PRIMARY),
+                    
+                    # Alignment
+                    ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ]))
+                story.append(gear_table)
             
+            # Other recommended items
             if request.other_recommended_items:
-                story.append(Spacer(1, 12))
+                story.append(Spacer(1, 16))
                 story.append(Paragraph(
-                    "<b>Other Recommended Items:</b>",
-                    body_style
+                    "Additional Items to Consider:",
+                    subsection_style
                 ))
-                story.append(Spacer(1, 6))
                 
                 for item in request.other_recommended_items:
-                    story.append(Paragraph(f"• {item}", bullet_style))
+                    story.append(Paragraph(
+                        f"• {item}",
+                        activity_style
+                    ))
         
-        # Footer
-        story.append(Spacer(1, 40))
+        # === FOOTER ===
+        story.append(Spacer(1, 30))
+        story.append(HRFlowable(
+            width="100%",
+            thickness=1,
+            color=SLATE_300,
+            spaceAfter=12
+        ))
         story.append(Paragraph(
-            "Generated by Wayfinder Supply Co. | Powered by Elastic",
+            "Generated by Wayfinder Supply Co | Powered by Elastic",
             footer_style
         ))
         
@@ -222,4 +369,3 @@ async def generate_trip_report_pdf(request: TripReportRequest):
             status_code=500,
             detail=f"Failed to generate PDF: {str(e)}"
         )
-
