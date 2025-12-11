@@ -87,7 +87,7 @@ Fill in the tool configuration form:
    - This description is critical! Agents read this to decide when to use your tool
    - Be clear and specific about what the tool does
 
-3. **Workflow Selection**: 
+3. **Workflow Selection**:
    - In the workflow dropdown/selector, find and select `get_customer_profile`
    - This is the workflow you created in Challenge 2
    - The UI will automatically link this tool to your workflow

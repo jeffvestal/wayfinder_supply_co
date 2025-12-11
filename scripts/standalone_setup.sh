@@ -27,7 +27,6 @@ FAILURES=0
 # Parse arguments
 LOAD_DATA=false
 DATA_ONLY=false
-FORCE=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --load-data)
@@ -39,16 +38,11 @@ while [[ $# -gt 0 ]]; do
             DATA_ONLY=true
             shift
             ;;
-        --force)
-            FORCE=true
-            shift
-            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Usage: $0 [--load-data] [--data-only] [--force]"
+            echo "Usage: $0 [--load-data] [--data-only]"
             echo "  --load-data  Load data into cluster, then deploy workflows and agents"
             echo "  --data-only  Load data only (skip workflows and agents)"
-            echo "  --force      Delete and recreate indices before loading data (WARNING: deletes data!)"
             exit 1
             ;;
     esac
@@ -98,12 +92,7 @@ if [ "$LOAD_DATA" = true ]; then
     
     # Create indices
     echo -e "${BLUE}1. Creating indices and mappings...${NC}"
-    SETUP_ARGS=""
-    if [ "$FORCE" = true ]; then
-        SETUP_ARGS="--force"
-        echo -e "${YELLOW}   ⚠ Force mode: existing indices will be deleted!${NC}"
-    fi
-    if python scripts/setup_elastic.py $SETUP_ARGS; then
+    if python scripts/setup_elastic.py; then
         echo -e "${GREEN}   ✓ Indices created${NC}"
     else
         echo -e "${RED}   ✗ Failed to create indices${NC}"

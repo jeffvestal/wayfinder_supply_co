@@ -91,14 +91,14 @@ fi
 # finish elastic install
 source /opt/workshops/elastic-start.sh
 
-# Restore snapshot with product catalog, reviews, and clickstream data
+# Restore snapshot with product and clickstream data
 echo "[Workshop] Restoring Elasticsearch snapshot..."
 /opt/workshops/elastic-snapshot.sh \
     -p wayfinder_supply_co \
     -b instruqt-workshop-snapshot-public \
     -c sa \
     -n repo1 \
-    -s catalog_reviews_clicks \
+    -s product_and_clicks \
     -g false || {
     echo "[Workshop] ⚠️  Could not restore snapshot, continuing..."
 }
