@@ -9,7 +9,7 @@ tabs:
   title: Kibana Agent Builder
   type: service
   hostname: kubernetes-vm
-  path: /app/chat
+  path: /app/agent_builder
   port: 30001
 - id: jxurvygvav1x
   title: Terminal
@@ -47,92 +47,69 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
 
 ---
 
-## Step 1: Navigate to Agent Builder
+## Step 1: Navigate to Agent Builder Tools
 
-1. Click the [button label="Kibana Agent Builder"](tab-0) tab
+1. Open the [button label="Kibana Agent Builder"](tab-0) tab
 
-2. In the left sidebar, click **Tools**
-   <!-- SCREENSHOT: Kibana left sidebar with "Tools" highlighted under AI Assistant section -->
+2. Navigate to the Tools section:
+   - Click the **hamburger menu** (☰) in the top-left corner
+   - Go to **Machine Learning** → **Agent Builder** → **Tools**
+   - You should see a list of existing tools (like `product_search`, `get_user_affinity`, etc.)
 
-3. You'll see a list of existing tools (some were pre-created for the workshop)
-   <!-- SCREENSHOT: Tools list showing pre-existing tools like product_search -->
+> **Note:** Screenshot placeholder: Tools list view showing existing tools
 
 ---
 
 ## Step 2: Create a New Tool
 
-1. Click the **Create tool** button in the upper right
-   <!-- SCREENSHOT: "Create tool" button location -->
+1. Click the **"Create tool"** or **"Add tool"** button (usually in the top-right corner)
 
-2. You'll see the tool creation form with several options
+2. Select the tool type:
+   - Choose **"Workflow"** from the tool type options
+   - This tells Agent Builder that this tool wraps an Elastic Workflow
+
+> **Note:** Screenshot placeholder: Create tool form with tool type selection
 
 ---
 
 ## Step 3: Configure the Tool
 
-Fill in the tool configuration:
+Fill in the tool configuration form:
 
-**Basic Information:**
+1. **Tool ID**: Enter `tool-workflow-get-customer-profile`
+   - This is the unique identifier for your tool
+   - Use the `tool-workflow-` prefix to indicate it's a workflow tool
 
-| Field | Value |
-|-------|-------|
-| **Tool ID** | `tool-workflow-get-customer-profile` |
-| **Tool Type** | Select **Workflow** from the dropdown |
-| **Description** | `Retrieve customer profile including purchase history and loyalty tier from CRM` |
+2. **Description**: Enter:
+   ```
+   Retrieve customer profile including purchase history and loyalty tier from CRM
+   ```
+   - This description is critical! Agents read this to decide when to use your tool
+   - Be clear and specific about what the tool does
 
-<!-- SCREENSHOT: Tool creation form with basic fields filled in -->
+3. **Workflow Selection**: 
+   - In the workflow dropdown/selector, find and select `get_customer_profile`
+   - This is the workflow you created in Challenge 2
+   - The UI will automatically link this tool to your workflow
 
----
+> **Note:** Screenshot placeholder: Tool form showing workflow dropdown with `get_customer_profile` selected
 
-## Step 4: Select the Workflow
-
-1. In the **Workflow** dropdown, select `get_customer_profile`
-   <!-- SCREENSHOT: Workflow dropdown showing get_customer_profile option -->
-
-2. If you don't see it:
-   - Go back to Challenge 2 and ensure the workflow was saved
-   - Refresh the page and try again
-
----
-
-## Step 5: Save the Tool
-
-1. Click **Save tool** (or **Create** depending on UI version)
-   <!-- SCREENSHOT: Save/Create button highlighted -->
-
-2. You should see a success message
-
-3. Your tool now appears in the tools list!
-   <!-- SCREENSHOT: Tools list showing the newly created tool -->
+4. Click **"Save"** or **"Create"** to create the tool
 
 ---
 
-## Step 6: Verify the Tool
+## Step 4: Verify Your Tool
 
-1. Find your tool in the list: `tool-workflow-get-customer-profile`
+1. After saving, you should be redirected back to the Tools list
 
-2. Click on it to view its configuration
+2. Find your tool in the list:
+   - Look for **ID**: `tool-workflow-get-customer-profile`
+   - **Type** should show as "Workflow"
+   - **Description** should show your description text
 
-3. Verify:
-   - **Type**: Workflow
-   - **Workflow**: get_customer_profile
-   - **Description**: Mentions customer profile and CRM
-   <!-- SCREENSHOT: Tool detail view showing configuration -->
-
----
-
-## Understanding Tool Descriptions
-
-The tool description is **critical** for agent behavior!
-
-Agents read descriptions to decide when to use a tool. A good description:
-- Clearly states what data the tool returns
-- Mentions keywords agents will recognize
-- Is specific about the tool's purpose
-
-**Good**: "Retrieve customer profile including purchase history and loyalty tier from CRM"
-
-**Bad**: "Gets customer data" (too vague)
+3. Click on your tool to view its details:
+   - You should see the workflow it's connected to (`get_customer_profile`)
+   - Verify all the configuration looks correct
 
 ---
 
@@ -141,64 +118,82 @@ Agents read descriptions to decide when to use a tool. A good description:
 While you built a workflow tool, the system also includes:
 
 **Index Search Tool** (`product_search`):
-- Type: Index Search
+```json
+{
+  "id": "tool-search-product-search",
+  "type": "index_search",
+  "description": "Search the product catalog for gear recommendations",
+  "configuration": {
+    "pattern": "product-catalog"
+  }
+}
+```
 - Searches the `product-catalog` index
-- Used by agents to find and recommend products
+- Used by agents to find products
 
 **ES|QL Tool** (`get_user_affinity`):
-- Type: ES|QL
-- Executes a query to analyze browsing behavior
-- Returns top preference tags for personalization
-
-You can click on these tools to see their configuration!
+```json
+{
+  "id": "tool-esql-get-user-affinity",
+  "type": "esql",
+  "description": "Get top gear preference tags from user browsing behavior",
+  "configuration": {
+    "query": "FROM user-clickstream | WHERE meta_tags IS NOT NULL | STATS count = COUNT(*) BY meta_tags | SORT count DESC | LIMIT 5"
+  }
+}
+```
+- Executes ES|QL queries directly
+- Used for analytics and aggregations
 
 ---
 
 ## How Agents Use Tools
 
 When an agent needs customer information, it will:
-
-1. **See your tool** in its available tools list
-2. **Read the description**: "Retrieve customer profile..."
-3. **Decide to call it** when the user asks about their account
-4. **Pass parameters**: The `user_id` input
-5. **Receive results**: Customer profile data from the workflow
-6. **Use the data**: Personalize recommendations based on loyalty tier
-
-This is the power of agentic search - the agent automatically knows when and how to get customer context!
+1. See your tool in its available tools list
+2. Read the description: "Retrieve customer profile..."
+3. Decide to call it when the user asks about their account or preferences
+4. Pass the `user_id` parameter
+5. Receive the customer profile data
+6. Use that data to personalize recommendations
 
 ---
 
-## Verification Checklist
+## Verification
 
 Your tool should:
-- ✅ Be created and visible in Agent Builder Tools
-- ✅ Have type "Workflow"
-- ✅ Be linked to `get_customer_profile` workflow
-- ✅ Have a clear, descriptive description
+- ✅ Be created and visible in Agent Builder
+- ✅ Have the correct workflow_id configured
+- ✅ Have a clear description
+- ✅ Appear in the tools list
 
-Once verified, click **Check** to proceed to the next challenge: **Building an Agent** that uses your tool!
+Once verified, you're ready for the next challenge: **Building an Agent** that uses your tool!
 
 ---
 
 ## Troubleshooting
 
-**Tool not appearing in list?**
-- Refresh the page
-- Check that you clicked Save/Create
-- Verify there were no validation errors
+**Tool not appearing in the list?**
+- Refresh the Tools page
+- Verify the workflow `get_customer_profile` exists in the Workflows UI
+- Check that you selected the correct workflow in the dropdown
 
-**Workflow not in dropdown?**
-- Return to Kibana Workflows and verify it's saved
-- The workflow name should be `get_customer_profile`
-- Wait a moment and refresh - there may be a sync delay
+**Can't find the workflow in the dropdown?**
+- Go back to the Workflows UI and verify `get_customer_profile` is deployed and enabled
+- The workflow must be saved and enabled before it appears in the tool creation form
 
-**Need to see existing tools?**
-- Click on `tool-search-product-search` to see how an index search tool is configured
-- Click on `tool-esql-get-user-affinity` to see an ES|QL tool example
+**Tool created but not working?**
+- Click on your tool to view its details
+- Verify the workflow connection is correct
+- Check that the workflow ID matches `get_customer_profile`
+
+**Need help?**
+- Review other workflow tools in the Tools list for examples
+- Check the tool details of existing tools like `check_trip_safety` to see the pattern
 
 ---
 
 ## Next Steps
 
 In the next challenge, you'll create an agent that uses this tool (along with others) to orchestrate trip planning. The agent will automatically call your tool when it needs customer information!
+
