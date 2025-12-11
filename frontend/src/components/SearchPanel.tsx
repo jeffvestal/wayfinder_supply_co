@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Product, ChatMessage, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
-import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target } from 'lucide-react'
+import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target, FileText } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ProductDetailModal } from './ProductDetailModal'
 
@@ -74,6 +74,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const [demoLexicalResults, setDemoLexicalResults] = useState<Product[]>([])
   const [demoHybridResults, setDemoHybridResults] = useState<Product[]>([])
   const [demoAgenticMessage, setDemoAgenticMessage] = useState<ExtendedChatMessage | null>(null)
+  const [demoLexicalQuery, setDemoLexicalQuery] = useState<any>(null)
+  const [demoLexicalRawHits, setDemoLexicalRawHits] = useState<any[]>([])
+  const [demoHybridQuery, setDemoHybridQuery] = useState<any>(null)
+  const [demoHybridRawHits, setDemoHybridRawHits] = useState<any[]>([])
+  const [queryExpanded, setQueryExpanded] = useState<{ lexical: boolean; hybrid: boolean }>({ lexical: false, hybrid: false })
   const [personalizationEnabled, setPersonalizationEnabled] = useState(false)
   const dragStartX = useRef(0)
   const dragStartWidth = useRef(50)
@@ -81,6 +86,16 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const initialMessageSentRef = useRef(false)
 
   const DEMO_QUERY = "waterproof hiking boots for rocky terrain"
+
+  // Get persona display name
+  const getPersonaName = (id: UserId) => {
+    const personas: Record<string, string> = {
+      'user_member': '👤 Sarah - Ultralight Hiker',
+      'user_business': '👔 Mike - Family Adventurer', 
+      'user_new': '🆕 New Visitor'
+    }
+    return personas[id] || id
+  }
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -107,6 +122,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       setDemoLexicalResults([])
       setDemoHybridResults([])
       setDemoAgenticMessage(null)
+      setDemoLexicalQuery(null)
+      setDemoLexicalRawHits([])
+      setDemoHybridQuery(null)
+      setDemoHybridRawHits([])
+      setQueryExpanded({ lexical: false, hybrid: false })
     }
   }, [isOpen])
 
@@ -303,6 +323,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setDemoLexicalResults([])
     setDemoHybridResults([])
     setDemoAgenticMessage(null)
+    setDemoLexicalQuery(null)
+    setDemoLexicalRawHits([])
+    setDemoHybridQuery(null)
+    setDemoHybridRawHits([])
+    setQueryExpanded({ lexical: false, hybrid: false })
     setMessages([])
     setSearchResults([])
   }
@@ -316,6 +341,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       try {
         const results = await api.lexicalSearch(DEMO_QUERY)
         setDemoLexicalResults(results.products)
+        setDemoLexicalQuery(results.es_query || null)
+        setDemoLexicalRawHits(results.raw_hits || [])
       } catch (error) {
         console.error('Demo lexical search failed:', error)
       } finally {
@@ -327,6 +354,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       try {
         const results = await api.hybridSearch(DEMO_QUERY)
         setDemoHybridResults(results.products)
+        setDemoHybridQuery(results.es_query || null)
+        setDemoHybridRawHits(results.raw_hits || [])
       } catch (error) {
         console.error('Demo hybrid search failed:', error)
       } finally {
@@ -505,7 +534,12 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       <div className="space-y-6">
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
           <h3 className="text-lg font-semibold text-white mb-2">🎯 Demo Query</h3>
-          <p className="text-primary font-medium">"{DEMO_QUERY}"</p>
+          <p className="text-primary font-medium mb-3">"{DEMO_QUERY}"</p>
+          <div className="flex items-center gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
+            <span>Persona:</span>
+            <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
+            <span className="text-xs text-gray-500">(has personalized clickstream data)</span>
+          </div>
         </div>
 
         {demoStep === 'intro' && (
@@ -549,24 +583,68 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                 <span className="ml-2 text-gray-400">Running keyword search...</span>
               </div>
             ) : (
-              <div className="space-y-2">
-                {demoLexicalResults.length === 0 ? (
-                  <p className="text-gray-500 text-sm">Waiting for search...</p>
-                ) : (
-                  demoLexicalResults.slice(0, 3).map((product) => (
-                    <div
-                      key={product.id}
-                      className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 cursor-pointer hover:border-amber-600/50 transition-colors"
-                      onClick={() => handleProductClick(product)}
+              <div className="space-y-3">
+                {/* Show Query - expandable */}
+                {demoLexicalQuery && demoLexicalRawHits.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setQueryExpanded(prev => ({ ...prev, lexical: !prev.lexical }))}
+                      className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                     >
-                      <h5 className="font-medium text-white text-sm">{product.title}</h5>
-                      <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
-                    </div>
-                  ))
+                      {queryExpanded.lexical ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      <span>Show Query (2 sections)</span>
+                    </button>
+                    
+                    {queryExpanded.lexical && (
+                      <div className="space-y-2">
+                        {/* Query Box */}
+                        <div className="bg-slate-800/50 rounded-lg border border-amber-700/30 overflow-hidden">
+                          <div className="px-3 py-2 border-b border-amber-700/30 flex items-center gap-2">
+                            <Database className="w-4 h-4 text-amber-400" />
+                            <span className="text-xs font-medium text-amber-400 uppercase tracking-wide">QUERY</span>
+                          </div>
+                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-48 overflow-y-auto">
+                            {JSON.stringify(demoLexicalQuery, null, 2)}
+                          </pre>
+                        </div>
+                        
+                        {/* Top Results Box */}
+                        <div className="bg-slate-800/50 rounded-lg border border-amber-700/30 overflow-hidden">
+                          <div className="px-3 py-2 border-b border-amber-700/30 flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-amber-400" />
+                            <span className="text-xs font-medium text-amber-400 uppercase tracking-wide">TOP 3 RESPONSE DOCS</span>
+                          </div>
+                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">
+                            {JSON.stringify(demoLexicalRawHits, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-                {demoLexicalResults.length > 3 && (
-                  <p className="text-xs text-gray-500">+{demoLexicalResults.length - 3} more results</p>
-                )}
+                
+                {/* Product Results */}
+                <div className="space-y-2">
+                  {demoLexicalResults.length === 0 ? (
+                    <p className="text-gray-500 text-sm">Waiting for search...</p>
+                  ) : (
+                    <>
+                      {demoLexicalResults.slice(0, 3).map((product) => (
+                        <div
+                          key={product.id}
+                          className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 cursor-pointer hover:border-amber-600/50 transition-colors"
+                          onClick={() => handleProductClick(product)}
+                        >
+                          <h5 className="font-medium text-white text-sm">{product.title}</h5>
+                          <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
+                        </div>
+                      ))}
+                      {demoLexicalResults.length > 3 && (
+                        <p className="text-xs text-gray-500">+{demoLexicalResults.length - 3} more results</p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </motion.div>
@@ -588,24 +666,68 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                 <span className="ml-2 text-gray-400">Running hybrid search...</span>
               </div>
             ) : (
-              <div className="space-y-2">
-                {demoHybridResults.length === 0 ? (
-                  <p className="text-gray-500 text-sm">Waiting for search...</p>
-                ) : (
-                  demoHybridResults.slice(0, 3).map((product) => (
-                    <div
-                      key={product.id}
-                      className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 cursor-pointer hover:border-cyan-600/50 transition-colors"
-                      onClick={() => handleProductClick(product)}
+              <div className="space-y-3">
+                {/* Show Query - expandable */}
+                {demoHybridQuery && demoHybridRawHits.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setQueryExpanded(prev => ({ ...prev, hybrid: !prev.hybrid }))}
+                      className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                     >
-                      <h5 className="font-medium text-white text-sm">{product.title}</h5>
-                      <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
-                    </div>
-                  ))
+                      {queryExpanded.hybrid ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      <span>Show Query (2 sections)</span>
+                    </button>
+                    
+                    {queryExpanded.hybrid && (
+                      <div className="space-y-2">
+                        {/* Query Box */}
+                        <div className="bg-slate-800/50 rounded-lg border border-cyan-700/30 overflow-hidden">
+                          <div className="px-3 py-2 border-b border-cyan-700/30 flex items-center gap-2">
+                            <Database className="w-4 h-4 text-cyan-400" />
+                            <span className="text-xs font-medium text-cyan-400 uppercase tracking-wide">QUERY</span>
+                          </div>
+                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-48 overflow-y-auto">
+                            {JSON.stringify(demoHybridQuery, null, 2)}
+                          </pre>
+                        </div>
+                        
+                        {/* Top Results Box */}
+                        <div className="bg-slate-800/50 rounded-lg border border-cyan-700/30 overflow-hidden">
+                          <div className="px-3 py-2 border-b border-cyan-700/30 flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-cyan-400" />
+                            <span className="text-xs font-medium text-cyan-400 uppercase tracking-wide">TOP 3 RESPONSE DOCS</span>
+                          </div>
+                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">
+                            {JSON.stringify(demoHybridRawHits, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-                {demoHybridResults.length > 3 && (
-                  <p className="text-xs text-gray-500">+{demoHybridResults.length - 3} more results</p>
-                )}
+                
+                {/* Product Results */}
+                <div className="space-y-2">
+                  {demoHybridResults.length === 0 ? (
+                    <p className="text-gray-500 text-sm">Waiting for search...</p>
+                  ) : (
+                    <>
+                      {demoHybridResults.slice(0, 3).map((product) => (
+                        <div
+                          key={product.id}
+                          className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 cursor-pointer hover:border-cyan-600/50 transition-colors"
+                          onClick={() => handleProductClick(product)}
+                        >
+                          <h5 className="font-medium text-white text-sm">{product.title}</h5>
+                          <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
+                        </div>
+                      ))}
+                      {demoHybridResults.length > 3 && (
+                        <p className="text-xs text-gray-500">+{demoHybridResults.length - 3} more results</p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </motion.div>
@@ -984,18 +1106,18 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
           </motion.div>
 
           {/* Product Detail Modal */}
-          <ProductDetailModal
-            product={selectedProduct}
-            userId={userId}
-            onClose={() => {
-              setIsProductModalOpen(false)
-              setSelectedProduct(null)
-            }}
-            isOpen={isProductModalOpen}
-          />
+          {isProductModalOpen && (
+            <ProductDetailModal
+              product={selectedProduct}
+              userId={userId}
+              onClose={() => {
+                setIsProductModalOpen(false)
+                setSelectedProduct(null)
+              }}
+            />
+          )}
         </>
       )}
     </AnimatePresence>
   )
 }
-

@@ -417,7 +417,7 @@ export const api = {
     return response.json();
   },
 
-  async lexicalSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean }> {
+  async lexicalSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[] }> {
     const url = createApiUrl('/api/products/search/lexical');
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
@@ -432,7 +432,7 @@ export const api = {
     return response.json();
   },
 
-  async hybridSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean }> {
+  async hybridSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[] }> {
     const url = createApiUrl('/api/products/search/hybrid');
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());

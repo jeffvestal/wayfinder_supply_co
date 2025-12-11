@@ -15,9 +15,9 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
     
     try:
         # Get top tags from clickstream
-        tag_query = {
-            "size": 0,
-            "query": {
+        tag_response = es.search(
+            index="user-clickstream",
+            query={
                 "bool": {
                     "must": [
                         {"term": {"user_id": user_id}},
@@ -25,7 +25,8 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                     ]
                 }
             },
-            "aggs": {
+            size=0,
+            aggs={
                 "top_tags": {
                     "terms": {
                         "field": "meta_tags",
@@ -33,15 +34,13 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                     }
                 }
             }
-        }
-        
-        tag_response = es.search(index="user-clickstream", **tag_query)
+        )
         tags = [bucket["key"] for bucket in tag_response.get("aggregations", {}).get("top_tags", {}).get("buckets", [])]
         
         # Get top categories by looking at products user viewed
-        category_query = {
-            "size": 0,
-            "query": {
+        category_response = es.search(
+            index="user-clickstream",
+            query={
                 "bool": {
                     "must": [
                         {"term": {"user_id": user_id}},
@@ -49,7 +48,8 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                     ]
                 }
             },
-            "aggs": {
+            size=0,
+            aggs={
                 "product_ids": {
                     "terms": {
                         "field": "product_id",
@@ -57,9 +57,7 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                     }
                 }
             }
-        }
-        
-        category_response = es.search(index="user-clickstream", **category_query)
+        )
         product_ids = [bucket["key"] for bucket in category_response.get("aggregations", {}).get("product_ids", {}).get("buckets", [])]
         
         categories = []
@@ -219,17 +217,28 @@ async def lexical_search(
         )
         
         products = []
+        raw_hits = []
         for hit in response["hits"]["hits"]:
             product = hit["_source"]
             product["id"] = hit["_id"]
             product["_score"] = hit["_score"]
             product["_highlight"] = hit.get("highlight", {})
             products.append(product)
+            # Store raw hit for query viewer (top 3 only)
+            if len(raw_hits) < 3:
+                raw_hits.append({
+                    "_id": hit["_id"],
+                    "_score": hit["_score"],
+                    "_source": hit["_source"],
+                    "highlight": hit.get("highlight", {})
+                })
         
         return {
             "products": products,
             "total": response["hits"]["total"]["value"],
             "query": q,
+            "es_query": query,  # The actual Elasticsearch query
+            "raw_hits": raw_hits,  # Top 3 raw response documents
             "search_type": "lexical",
             "personalized": user_id is not None
         }
@@ -319,17 +328,28 @@ async def hybrid_search(
         )
         
         products = []
+        raw_hits = []
         for hit in response["hits"]["hits"]:
             product = hit["_source"]
             product["id"] = hit["_id"]
             product["_score"] = hit["_score"]
             product["_highlight"] = hit.get("highlight", {})
             products.append(product)
+            # Store raw hit for query viewer (top 3 only)
+            if len(raw_hits) < 3:
+                raw_hits.append({
+                    "_id": hit["_id"],
+                    "_score": hit["_score"],
+                    "_source": hit["_source"],
+                    "highlight": hit.get("highlight", {})
+                })
         
         return {
             "products": products,
             "total": response["hits"]["total"]["value"],
             "query": q,
+            "es_query": query,  # The actual Elasticsearch query
+            "raw_hits": raw_hits,  # Top 3 raw response documents
             "search_type": "hybrid",
             "personalized": user_id is not None
         }
@@ -357,17 +377,35 @@ async def hybrid_search(
             )
             
             products = []
+            raw_hits = []
             for hit in response["hits"]["hits"]:
                 product = hit["_source"]
                 product["id"] = hit["_id"]
                 product["_score"] = hit["_score"]
                 product["_highlight"] = hit.get("highlight", {})
                 products.append(product)
+                # Store raw hit for query viewer (top 3 only)
+                if len(raw_hits) < 3:
+                    raw_hits.append({
+                        "_id": hit["_id"],
+                        "_score": hit["_score"],
+                        "_source": hit["_source"],
+                        "highlight": hit.get("highlight", {})
+                    })
             
             return {
                 "products": products,
                 "total": response["hits"]["total"]["value"],
                 "query": q,
+                "es_query": {
+                    "multi_match": {
+                        "query": q,
+                        "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
+                        "type": "best_fields",
+                        "fuzziness": "AUTO"
+                    }
+                },
+                "raw_hits": raw_hits,
                 "search_type": "hybrid_fallback",
                 "personalized": False
             }
@@ -389,3 +427,5 @@ async def get_product(product_id: str):
         return product
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Product not found: {str(e)}")
+
+
