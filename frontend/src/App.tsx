@@ -7,7 +7,7 @@ import { OrderConfirmation } from './components/OrderConfirmation'
 import { SearchPanel } from './components/SearchPanel'
 import { UserMenu } from './components/UserMenu'
 import { UserAccountPage } from './components/UserAccountPage'
-import { ShoppingCart, MapPin, Home, Search, Menu, X } from 'lucide-react'
+import { ShoppingCart, MapPin, Home, MessageSquare, Menu, X, Search } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
 import { UserPersona } from './types'
@@ -94,7 +94,7 @@ function App() {
   // Handle opening chat with context from product tags
   const handleStartChatWithContext = (productName: string, tag: string) => {
     setChatInitialMessage(`I'm looking at the **${productName}** and I'm interested in other **${tag}** gear. What do you recommend?`)
-    setSearchPanelOpen(true)
+    setChatModalOpen(true)
   }
 
   useEffect(() => {
@@ -193,7 +193,7 @@ function App() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSearchPanelOpen(true)}
-                className="flex items-center justify-center w-10 h-10 bg-primary/20 hover:bg-primary/30 text-primary rounded-full transition-all border border-primary/30 shadow-lg shadow-primary/20 hover:scale-105"
+                className="flex items-center justify-center w-10 h-10 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
                 title="Search & Chat"
               >
                 <Search className="w-5 h-5" />
@@ -375,7 +375,7 @@ function App() {
         <Search className="w-6 h-6" />
       </button>
 
-      {/* Search Panel (slide from right) */}
+      {/* Search Panel */}
       <SearchPanel
         isOpen={searchPanelOpen}
         onClose={() => setSearchPanelOpen(false)}
