@@ -7,7 +7,7 @@ import { OrderConfirmation } from './components/OrderConfirmation'
 import { SearchPanel } from './components/SearchPanel'
 import { UserMenu } from './components/UserMenu'
 import { UserAccountPage } from './components/UserAccountPage'
-import { ShoppingCart, MapPin, Home, MessageSquare, Menu, X, Search } from 'lucide-react'
+import { ShoppingCart, MapPin, Home, Menu, X, Search } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
 import { UserPersona } from './types'
@@ -94,7 +94,7 @@ function App() {
   // Handle opening chat with context from product tags
   const handleStartChatWithContext = (productName: string, tag: string) => {
     setChatInitialMessage(`I'm looking at the **${productName}** and I'm interested in other **${tag}** gear. What do you recommend?`)
-    setChatModalOpen(true)
+    setSearchPanelOpen(true)
   }
 
   useEffect(() => {

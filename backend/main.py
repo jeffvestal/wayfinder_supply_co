@@ -9,6 +9,16 @@ from services.error_handler import global_exception_handler, http_exception_hand
 import os
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+# Look for .env in the project root (one level up from backend/)
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    # Fallback to looking in current directory
+    load_dotenv()
 
 # Configure logging
 logging.basicConfig(
