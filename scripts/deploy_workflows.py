@@ -93,6 +93,12 @@ def main() -> int:
         default="config/workflows",
         help="Directory containing workflow YAML files"
     )
+    parser.add_argument(
+        "--exclude",
+        nargs="*",
+        default=[],
+        help="Workflow names to exclude from deployment (e.g., get_customer_profile)"
+    )
     args = parser.parse_args()
     
     workflows_dir = Path(args.workflows_dir)
@@ -111,17 +117,25 @@ def main() -> int:
         return 1
     
     success_count = 0
+    skipped_count = 0
     workflow_ids = {}
     for workflow_file in sorted(workflow_files):
+        workflow_name = workflow_file.stem
+        if workflow_name in args.exclude:
+            print(f"⊘ Skipping {workflow_name} (excluded)")
+            skipped_count += 1
+            continue
         workflow_id = deploy_workflow(str(workflow_file))
         if workflow_id:
             success_count += 1
             workflow_ids[workflow_file.stem] = workflow_id
     
-    failures = len(workflow_files) - success_count
+    failures = len(workflow_files) - success_count - skipped_count
     
     print("\n" + "=" * 60)
     print(f"Deployed {success_count}/{len(workflow_files)} workflows")
+    if skipped_count > 0:
+        print(f"Skipped {skipped_count} workflow(s)")
     if workflow_ids:
         print("\nWorkflow IDs:")
         for name, wf_id in workflow_ids.items():

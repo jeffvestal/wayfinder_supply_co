@@ -59,22 +59,22 @@
         <div class="diagram">
             <div class="mermaid">
 flowchart TB
-    subgraph UI["User Interface"]
-        Frontend["React Frontend<br/>- Storefront View<br/>- Chat Interface (SSE)<br/>- Thought Trace Panel<br/>- Cart View"]
+    subgraph UI [User Interface]
+        Frontend[React Frontend]
     end
     
-    subgraph Backend["Backend Proxy"]
-        FastAPI["FastAPI Backend<br/>- Chat Endpoint (SSE proxy)<br/>- Product API<br/>- Cart Management"]
+    subgraph Backend [Backend Proxy]
+        FastAPI[FastAPI Backend]
     end
     
-    subgraph Elastic["Elastic Stack"]
-        AgentBuilder["Agent Builder<br/>- Trip Planner Agent<br/>- Itinerary Agent"]
-        Workflows["Workflows<br/>- check_trip_safety<br/>- get_customer_profile<br/>- get_user_affinity"]
-        Elasticsearch["Elasticsearch<br/>- product-catalog<br/>- user-clickstream"]
+    subgraph Elastic [Elastic Stack]
+        AgentBuilder[Agent Builder]
+        Workflows[Workflows]
+        Elasticsearch[Elasticsearch]
     end
     
-    subgraph MCP["MCP Server"]
-        MCPServer["FastAPI MCP Server<br/>- Weather Service<br/>- CRM Service"]
+    subgraph MCP [MCP Server]
+        MCPServer[Weather and CRM Services]
     end
     
     Frontend -->|HTTP/SSE| FastAPI
@@ -82,12 +82,7 @@ flowchart TB
     AgentBuilder -->|Uses| Workflows
     AgentBuilder -->|Queries| Elasticsearch
     Workflows -->|HTTP JSON-RPC| MCPServer
-    Workflows -->|ES|QL| Elasticsearch
-    
-    style UI fill:#2d5aa0
-    style Backend fill:#006bb3
-    style Elastic fill:#00bfb3
-    style MCP fill:#fec514
+    Workflows -->|ESQL| Elasticsearch
             </div>
         </div>
 

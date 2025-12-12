@@ -157,7 +157,7 @@ ls -la /opt/workshop-assets/
 
 export ELASTICSEARCH_URL="http://kubernetes-vm:30920"
 export KIBANA_URL="http://kubernetes-vm:30001"
-export MCP_SERVER_URL="http://localhost:8001"
+export MCP_SERVER_URL="http://localhost:8002"
 
 # Get API key from kubernetes-vm's environment (passed via instruqt)
 export ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
@@ -181,8 +181,8 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # Start MCP server in background
-echo "[Workshop] Starting MCP server on port 8001..."
-nohup /opt/workshop-assets/mcp_server/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8001 > /var/log/mcp-server.log 2>&1 &
+echo "[Workshop] Starting MCP server on port 8002..."
+nohup /opt/workshop-assets/mcp_server/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002 > /var/log/mcp-server.log 2>&1 &
 MCP_PID=$!
 echo "[Workshop] MCP server started (PID: $MCP_PID)"
 
@@ -383,7 +383,7 @@ echo "[Workshop] host-1 setup complete"
 echo "========================================="
 echo "Services (unified on port 8000):"
 echo "  - Wayfinder UI + API: http://host-1:8000"
-echo "  - MCP Server: http://host-1:8001"
+echo "  - MCP Server: http://host-1:8002"
 echo ""
 echo "Pre-deployed components:"
 echo "  - check_trip_safety workflow"

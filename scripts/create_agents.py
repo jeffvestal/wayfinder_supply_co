@@ -530,8 +530,36 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
 
 def main() -> int:
     """Main function. Returns number of failures (0 = success)."""
+    import argparse
+    parser = argparse.ArgumentParser(description="Create Wayfinder Supply Co. Agents, Tools, and Workflows")
+    parser.add_argument(
+        "--skip-workflows",
+        nargs="*",
+        default=[],
+        help="Workflow names to skip (e.g., get_customer_profile)"
+    )
+    parser.add_argument(
+        "--skip-tools",
+        nargs="*",
+        default=[],
+        help="Tool names to skip (e.g., tool-workflow-get-customer-profile)"
+    )
+    parser.add_argument(
+        "--skip-agents",
+        nargs="*",
+        default=[],
+        help="Agent names to skip (e.g., trip-planner-agent)"
+    )
+    args = parser.parse_args()
+    
     print("Creating Wayfinder Supply Co. Agents and Workflows...")
     print("=" * 60)
+    if args.skip_workflows:
+        print(f"Skipping workflows: {', '.join(args.skip_workflows)}")
+    if args.skip_tools:
+        print(f"Skipping tools: {', '.join(args.skip_tools)}")
+    if args.skip_agents:
+        print(f"Skipping agents: {', '.join(args.skip_agents)}")
     
     # Determine the correct path to config/workflows
     # Works whether run from repo root or from scripts directory
@@ -569,6 +597,9 @@ def main() -> int:
     
     workflow_ids = {}
     for name, path in workflows.items():
+        if name in args.skip_workflows:
+            print(f"⊘ Skipping workflow: {name}")
+            continue
         if os.path.exists(path):
             workflow_id = deploy_workflow(path)
             if workflow_id:
@@ -600,6 +631,10 @@ def main() -> int:
     # Create workflow tools
     workflow_tool_ids = {}
     for name, workflow_id in workflow_ids.items():
+        tool_name = f"tool-workflow-{name.replace('_', '-')}"
+        if tool_name in args.skip_tools:
+            print(f"⊘ Skipping tool: {tool_name}")
+            continue
         descriptions = {
             "check_trip_safety": "Get weather conditions and road alerts for a trip destination",
             "get_customer_profile": "Retrieve customer profile including purchase history and loyalty tier",
@@ -636,8 +671,12 @@ def main() -> int:
     itinerary_extractor_id = create_itinerary_extractor_agent()
     time.sleep(1)
     
-    trip_planner_id = create_trip_planner_agent(tool_ids=tool_ids)
-    time.sleep(1)
+    trip_planner_id = None
+    if "trip-planner-agent" not in args.skip_agents:
+        trip_planner_id = create_trip_planner_agent(tool_ids=tool_ids)
+        time.sleep(1)
+    else:
+        print("⊘ Skipping agent: trip-planner-agent")
     
     trip_itinerary_id = create_trip_itinerary_agent()
     time.sleep(1)

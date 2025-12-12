@@ -1,3 +1,15 @@
+# Load environment variables FIRST, before any other imports that use os.getenv()
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    load_dotenv()
+
+# Now import everything else (routers will see the loaded env vars)
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import HTTPException
@@ -6,19 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from routers import chat, products, cart, reviews, orders, users, clickstream, reports
 from middleware.logging import LoggingMiddleware
 from services.error_handler import global_exception_handler, http_exception_handler
-import os
 import logging
-from pathlib import Path
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-# Look for .env in the project root (one level up from backend/)
-env_path = Path(__file__).resolve().parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    # Fallback to looking in current directory
-    load_dotenv()
 
 # Configure logging
 logging.basicConfig(

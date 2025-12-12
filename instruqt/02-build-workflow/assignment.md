@@ -274,8 +274,9 @@ Once verified, you're ready for the next challenge: **Building a Tool** that wra
 
 **MCP call failing?**
 - Open the [button label="Terminal"](tab-1) tab
-- Check MCP server is running: `docker ps | grep mcp`
-- Check MCP server logs: `docker logs wayfinder-mcp-server`
+- Check MCP server is running: `ps aux | grep uvicorn | grep 8002`
+- Check MCP server logs: `tail -f /var/log/mcp-server.log`
+- Test MCP endpoint: `curl http://localhost:8002/health`
 
 **Workflow not running?**
 - Ensure `enabled: true` is set

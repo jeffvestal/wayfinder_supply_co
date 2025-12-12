@@ -73,6 +73,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const [stepsExpanded, setStepsExpanded] = useState<Record<string, boolean>>({})
   const [isDemoRunning, setIsDemoRunning] = useState(false)
   const [demoStep, setDemoStep] = useState<'intro' | 'lexical' | 'hybrid' | 'agentic' | 'complete'>('intro')
+  const [selectedDemoQuery, setSelectedDemoQuery] = useState<DemoQueryType | null>(null)
   const [demoLexicalResults, setDemoLexicalResults] = useState<Product[]>([])
   const [demoHybridResults, setDemoHybridResults] = useState<Product[]>([])
   const [demoAgenticMessage, setDemoAgenticMessage] = useState<ExtendedChatMessage | null>(null)
@@ -90,7 +91,32 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialMessageSentRef = useRef(false)
 
-  const DEMO_QUERY = "waterproof hiking boots for rocky terrain"
+  // Demo query options - each highlights different search strengths
+  type DemoQueryType = 'keyword' | 'semantic' | 'usecase'
+
+  const DEMO_QUERIES: Record<DemoQueryType, { query: string; label: string; description: string; icon: string; winner: string }> = {
+    keyword: {
+      query: "ultralight backpacking tent",
+      label: "Keyword Match",
+      description: "Exact terms that BM25 handles well",
+      icon: "📝",
+      winner: "Lexical ≈ Hybrid"
+    },
+    semantic: {
+      query: "gear to keep my feet dry on slippery mountain trails",
+      label: "Conceptual",
+      description: "No exact keywords - semantic understanding needed",
+      icon: "💡",
+      winner: "Hybrid Wins"
+    },
+    usecase: {
+      query: "I'm planning a 3-day backpacking trip in Yosemite next month. What tent should I bring?",
+      label: "Task-Based",
+      description: "Complex intent requiring reasoning",
+      icon: "🎯",
+      winner: "Agent Excels"
+    }
+  }
 
   // Get persona display name
   const getPersonaName = (id: UserId) => {
@@ -242,6 +268,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       // Reset demo state when closed
       setIsDemoRunning(false)
       setDemoStep('intro')
+      setSelectedDemoQuery(null)
       setDemoLexicalResults([])
       setDemoHybridResults([])
       setDemoAgenticMessage(null)
@@ -444,9 +471,10 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   }
 
   // Demo functionality
-  const runDemo = async () => {
+  const runDemo = async (queryType: DemoQueryType) => {
+    setSelectedDemoQuery(queryType)
     setIsDemoRunning(true)
-    setDemoStep('intro')
+    setDemoStep('lexical')  // Skip intro, go straight to lexical
     setDemoLexicalResults([])
     setDemoHybridResults([])
     setDemoAgenticMessage(null)
@@ -458,33 +486,38 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setQueryExpanded({ lexical: false, hybrid: false })
     setMessages([])
     setSearchResults([])
+    
+    // Start the lexical search immediately
+    const demoQuery = DEMO_QUERIES[queryType].query
+    const personalizedUserId = personalizationEnabled ? userId : undefined
+    
+    setIsLoading(true)
+    try {
+      const results = await api.lexicalSearch(demoQuery, 10, personalizedUserId)
+      setDemoLexicalResults(results.products)
+      setDemoLexicalQuery(results.es_query || null)
+      setDemoLexicalRawHits(results.raw_hits || [])
+    } catch (error) {
+      console.error('Demo lexical search failed:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const advanceDemo = async () => {
-    if (isLoading) return
+    if (isLoading || !selectedDemoQuery) return
 
+    const demoQuery = DEMO_QUERIES[selectedDemoQuery].query
+    
     // User ID for personalized searches (only pass when enabled)
     const personalizedUserId = personalizationEnabled ? userId : undefined
     const chatUserId = personalizationEnabled ? userId : 'user_new'  // Use generic user when personalization off
     
-    if (demoStep === 'intro') {
-      setDemoStep('lexical')
-      setIsLoading(true)
-      try {
-        const results = await api.lexicalSearch(DEMO_QUERY, 10, personalizedUserId)
-        setDemoLexicalResults(results.products)
-        setDemoLexicalQuery(results.es_query || null)
-        setDemoLexicalRawHits(results.raw_hits || [])
-      } catch (error) {
-        console.error('Demo lexical search failed:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    } else if (demoStep === 'lexical') {
+    if (demoStep === 'lexical') {
       setDemoStep('hybrid')
       setIsLoading(true)
       try {
-        const results = await api.hybridSearch(DEMO_QUERY, 10, personalizedUserId)
+        const results = await api.hybridSearch(demoQuery, 10, personalizedUserId)
         setDemoHybridResults(results.products)
         setDemoHybridQuery(results.es_query || null)
         setDemoHybridRawHits(results.raw_hits || [])
@@ -512,7 +545,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
         let currentSteps: AgentStep[] = []
         let currentContent = ''
 
-        await api.streamChat(DEMO_QUERY, chatUserId, (event: StreamEvent) => {
+        await api.streamChat(demoQuery, chatUserId, (event: StreamEvent) => {
           const { type, data } = event
 
           switch (type) {
@@ -674,49 +707,116 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const renderDemoContent = () => {
     return (
       <div className="space-y-6">
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-          <h3 className="text-lg font-semibold text-white mb-2">🎯 Demo Query</h3>
-          <p className="text-primary font-medium mb-3">"{DEMO_QUERY}"</p>
-          <div className="flex flex-col gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
-            <div className="flex items-center gap-2">
-              <span>Persona:</span>
-              <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
+        {/* Demo Query Header - only show when a query is selected */}
+        {selectedDemoQuery && (
+          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+            <h3 className="text-lg font-semibold text-white mb-2">🎯 Demo Query</h3>
+            <p className="text-primary font-medium mb-2">"{DEMO_QUERIES[selectedDemoQuery].query}"</p>
+            <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+              <span className="bg-slate-700 px-2 py-1 rounded">{DEMO_QUERIES[selectedDemoQuery].icon} {DEMO_QUERIES[selectedDemoQuery].label}</span>
+              <span>→</span>
+              <span className="text-cyan-400">{DEMO_QUERIES[selectedDemoQuery].winner}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span>Personalization:</span>
-              {personalizationEnabled ? (
-                <span className="flex items-center gap-1 text-green-400 font-medium">
-                  <Target className="w-3 h-3" /> ON - results boosted by browsing history
-                </span>
-              ) : (
-                <span className="text-gray-500">OFF - generic results</span>
-              )}
+            <div className="flex flex-col gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
+              <div className="flex items-center gap-2">
+                <span>Persona:</span>
+                <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>Personalization:</span>
+                {personalizationEnabled ? (
+                  <span className="flex items-center gap-1 text-green-400 font-medium">
+                    <Target className="w-3 h-3" /> ON - results boosted by browsing history
+                  </span>
+                ) : (
+                  <span className="text-gray-500">OFF - generic results</span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {demoStep === 'intro' && (
+        {/* Demo Selection - show when no query selected yet */}
+        {demoStep === 'intro' && !selectedDemoQuery && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center"
+            className="bg-slate-800/50 rounded-xl p-6 border border-slate-700"
           >
-            <Zap className="w-12 h-12 text-primary mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-white mb-2">Watch the Difference</h3>
-            <p className="text-gray-400 mb-4">
-              See how different search approaches handle the same query:
-            </p>
-            <ul className="text-left text-gray-300 space-y-2 mb-6">
-              <li className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-amber-400" /> <strong>Lexical:</strong> Basic keyword matching</li>
-              <li className="flex items-center gap-2"><Search className="w-4 h-4 text-cyan-400" /> <strong>Hybrid:</strong> Semantic + keyword combined</li>
-              <li className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" /> <strong>Agentic:</strong> AI-powered with tools</li>
-            </ul>
-            <button
-              onClick={advanceDemo}
-              className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl font-medium transition-all"
-            >
-              Start Demo →
-            </button>
+            <div className="text-center mb-6">
+              <Zap className="w-12 h-12 text-primary mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">Choose a Demo Scenario</h3>
+              <p className="text-gray-400">
+                Each scenario highlights different search strengths
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              {/* Keyword Demo - Lexical shines */}
+              <button
+                onClick={() => runDemo('keyword')}
+                className="w-full text-left bg-amber-950/30 hover:bg-amber-900/40 border border-amber-700/50 hover:border-amber-600 rounded-xl p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{DEMO_QUERIES.keyword.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-white">{DEMO_QUERIES.keyword.label}</span>
+                      <span className="text-xs bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded-full">{DEMO_QUERIES.keyword.winner}</span>
+                    </div>
+                    <p className="text-sm text-gray-400 mt-1 truncate">"{DEMO_QUERIES.keyword.query}"</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-amber-400 transition-colors flex-shrink-0" />
+                </div>
+              </button>
+
+              {/* Semantic Demo - Hybrid shines */}
+              <button
+                onClick={() => runDemo('semantic')}
+                className="w-full text-left bg-cyan-950/30 hover:bg-cyan-900/40 border border-cyan-700/50 hover:border-cyan-600 rounded-xl p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{DEMO_QUERIES.semantic.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-white">{DEMO_QUERIES.semantic.label}</span>
+                      <span className="text-xs bg-cyan-900/50 text-cyan-300 px-2 py-0.5 rounded-full">{DEMO_QUERIES.semantic.winner}</span>
+                    </div>
+                    <p className="text-sm text-gray-400 mt-1 truncate">"{DEMO_QUERIES.semantic.query}"</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-cyan-400 transition-colors flex-shrink-0" />
+                </div>
+              </button>
+
+              {/* Use Case Demo - Agent shines */}
+              <button
+                onClick={() => runDemo('usecase')}
+                className="w-full text-left bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 rounded-xl p-4 transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{DEMO_QUERIES.usecase.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-white">{DEMO_QUERIES.usecase.label}</span>
+                      <span className="text-xs bg-primary/30 text-primary px-2 py-0.5 rounded-full">{DEMO_QUERIES.usecase.winner}</span>
+                    </div>
+                    <p className="text-sm text-gray-400 mt-1 truncate">"{DEMO_QUERIES.usecase.query}"</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-primary transition-colors flex-shrink-0" />
+                </div>
+              </button>
+            </div>
+            
+            <div className="mt-6 pt-4 border-t border-slate-700">
+              <p className="text-xs text-gray-500 text-center mb-3">
+                Each demo runs: Lexical → Hybrid → Agentic search
+              </p>
+              <ul className="text-xs text-gray-400 space-y-1">
+                <li className="flex items-center gap-2"><BookOpen className="w-3 h-3 text-amber-400" /> <strong>Lexical:</strong> BM25 keyword matching</li>
+                <li className="flex items-center gap-2"><Search className="w-3 h-3 text-cyan-400" /> <strong>Hybrid:</strong> Semantic + BM25 combined</li>
+                <li className="flex items-center gap-2"><MessageSquare className="w-3 h-3 text-primary" /> <strong>Agentic:</strong> AI reasoning with tools</li>
+              </ul>
+            </div>
           </motion.div>
         )}
 
@@ -1055,15 +1155,28 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
             <p className="text-gray-300 mb-4">
               Notice how agentic search provides context-aware recommendations with reasoning.
             </p>
-            <button
-              onClick={() => {
-                setIsDemoRunning(false)
-                setMode('chat')
-              }}
-              className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg transition-colors"
-            >
-              Try it yourself
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => {
+                  setIsDemoRunning(false)
+                  setSelectedDemoQuery(null)
+                  setDemoStep('intro')
+                }}
+                className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                ← Try Another Demo
+              </button>
+              <button
+                onClick={() => {
+                  setIsDemoRunning(false)
+                  setSelectedDemoQuery(null)
+                  setMode('chat')
+                }}
+                className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                Start Chatting →
+              </button>
+            </div>
           </motion.div>
         )}
       </div>
@@ -1119,7 +1232,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                   </button>
                   {/* Watch This Demo Button */}
                   <button
-                    onClick={runDemo}
+                    onClick={() => {
+                      setIsDemoRunning(true)
+                      setDemoStep('intro')
+                      setSelectedDemoQuery(null)
+                    }}
                     disabled={isDemoRunning}
                     className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 text-white"
                   >

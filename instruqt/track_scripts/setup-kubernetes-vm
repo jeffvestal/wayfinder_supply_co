@@ -381,7 +381,7 @@ if [ -d "/opt/workshop-assets/scripts" ]; then
     ELASTICSEARCH_URL="${ELASTICSEARCH_URL}" \
     KIBANA_URL="${KIBANA_URL}" \
     ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
-    python3 deploy_workflows.py --workflows-dir /opt/workshop-assets/config/workflows 2>&1 || {
+    python3 deploy_workflows.py --workflows-dir /opt/workshop-assets/config/workflows --exclude get_customer_profile 2>&1 || {
       echo "[Workshop] ⚠️  Workflow deployment returned non-zero exit code"
     }
   else
@@ -408,7 +408,7 @@ if [ -d "/opt/workshop-assets/scripts" ]; then
     ELASTICSEARCH_URL="${ELASTICSEARCH_URL}" \
     KIBANA_URL="${KIBANA_URL}" \
     ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
-    python3 create_agents.py 2>&1 || {
+    python3 create_agents.py --skip-workflows get_customer_profile --skip-tools tool-workflow-get-customer-profile --skip-agents trip-planner-agent 2>&1 || {
       echo "[Workshop] ⚠️  Agent creation returned non-zero exit code"
     }
   else
@@ -432,9 +432,14 @@ echo "  - Elasticsearch: ${ELASTICSEARCH_URL}"
 echo "  - Kibana: ${KIBANA_URL}"
 echo ""
 echo "Created:"
-echo "  - Workflows (check_trip_safety, get_customer_profile)"
-echo "  - Agents (Trip Planner)"
-echo "  - Tools (product_search, ES|QL, workflow tools)"
+echo "  - Workflows (check_trip_safety, get_user_affinity, extract_trip_entities)"
+echo "  - Tools (product_search, ES|QL queries, workflow tools)"
+echo "  - Agents (context-extractor, response-parser, itinerary-extractor, trip-itinerary)"
+echo ""
+echo "Note: Learners will build in workshops:"
+echo "  - get_customer_profile workflow (Challenge 2)"
+echo "  - tool-workflow-get-customer-profile (Challenge 3)"
+echo "  - trip-planner-agent (Challenge 4)"
 echo "========================================="
 
 

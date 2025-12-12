@@ -88,7 +88,7 @@ In this workshop, you'll explore how the system:
 
 ## Explore the Backend
 
-1. Open the [button label="Kibana"](tab-1) tab
+1. Open the [button label="Kibana"](tab-2) tab
 
 2. Navigate to **Dev Tools** → **Console** to query the indices:
    ```
@@ -117,21 +117,24 @@ In this workshop, you'll explore how the system:
 
 Use the terminal tabs for debugging:
 
-- [button label="Host-1 Terminal"](tab-2) - Frontend, backend, and MCP server logs
-- [button label="Kubernetes VM Terminal"](tab-3) - Elasticsearch and Kibana
+- [button label="Host-1 Terminal"](tab-3) - Frontend, backend, and MCP server logs
+- [button label="Kubernetes VM Terminal"](tab-4) - Elasticsearch and Kibana
 
 ### Useful Commands
 
 **Check services on host-1:**
 ```bash
-docker ps
-docker logs wayfinder-frontend
-docker logs wayfinder-backend
-```
+# Check if backend is running (serves both API and frontend)
+curl -s localhost:8000/health
 
-**Check Elasticsearch health:**
-```bash
-curl -s localhost:9200/_cluster/health | jq
+# View backend logs (includes frontend serving)
+tail -n20 /var/log/backend.log
+
+# View MCP server logs
+tail -n20 /var/log/mcp-server.log
+
+# Check running processes
+ps aux | grep uvicorn
 ```
 
 ---
