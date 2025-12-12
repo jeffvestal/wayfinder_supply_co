@@ -58,6 +58,8 @@ function getCurrentStatus(steps: AgentStep[], isLoading: boolean): string {
 }
 
 export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner }: SearchPanelProps) {
+  const FALLBACK_PRODUCT_IMAGE =
+    "data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A//www.w3.org/2000/svg'%20width%3D'200'%20height%3D'200'%20viewBox%3D'0%200%20200%20200'%3E%3Crect%20width%3D'200'%20height%3D'200'%20fill%3D'%231f2937'/%3E%3Cpath%20d%3D'M70%2080h60l-6%2060H76z'%20fill%3D'%23374151'/%3E%3Cpath%20d%3D'M85%2080c0-8%206-14%2015-14s15%206%2015%2014'%20fill%3D'none'%20stroke%3D'%234b5563'%20stroke-width%3D'8'%20stroke-linecap%3D'round'/%3E%3Ctext%20x%3D'100'%20y%3D'165'%20text-anchor%3D'middle'%20font-family%3D'system-ui%2C%20-apple-system%2C%20Segoe%20UI%2C%20Roboto'%20font-size%3D'14'%20fill%3D'%239ca3af'%3ENo%20image%3C/text%3E%3C/svg%3E"
   const [mode, setMode] = useState<SearchMode>('chat')
   const [panelWidth, setPanelWidth] = useState(50) // Percentage of screen width
   const [isDragging, setIsDragging] = useState(false)
@@ -952,7 +954,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                                 alt={product.title}
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  (e.target as HTMLImageElement).src = '/images/products/placeholder.jpg'
+                                  (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE
                                 }}
                               />
                             ) : (

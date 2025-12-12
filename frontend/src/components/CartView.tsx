@@ -18,7 +18,7 @@ const MOCK_CART: Cart = {
       price: 549.99,
       quantity: 1,
       subtotal: 549.99,
-      image_url: '/images/products/tent-placeholder.jpg'
+      image_url: '/images/products/WF-CAM-TEN-57250EC4.jpg'
     },
     {
       product_id: 'WF-CAM-SLE-002',
@@ -26,7 +26,7 @@ const MOCK_CART: Cart = {
       price: 399.99,
       quantity: 1,
       subtotal: 399.99,
-      image_url: '/images/products/bag-placeholder.jpg'
+      image_url: '/images/products/WF-CAM-SLE-891AFFD1.jpg'
     }
   ],
   subtotal: 949.98,
