@@ -25,7 +25,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 549.99,
     brand: 'Wayfinder Supply',
     tags: ['expedition', '4-season'],
-    image_url: '/images/products/WF-CAM-TEN-57250EC4.jpg'
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-CAM-TEN-57250EC4.jpg'
   },
   {
     id: 'WF-CAM-SLE-002',
@@ -36,7 +36,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 399.99,
     brand: 'Summit Pro',
     tags: ['expedition', 'cold-weather'],
-    image_url: '/images/products/WF-CAM-SLE-891AFFD1.jpg'
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-CAM-SLE-891AFFD1.jpg'
   },
   {
     id: 'WF-HIK-BAC-003',
@@ -47,18 +47,18 @@ const MOCK_PRODUCTS: Product[] = [
     price: 279.99,
     brand: 'TrailBlazer',
     tags: ['ultralight', 'backpacking'],
-    image_url: '/images/products/WF-HIK-BAC-F16CA437.jpg'
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-HIK-BAC-F16CA437.jpg'
   },
   {
-    id: 'WF-HIK-FOO-004',
-    title: 'Alpine Edge Mountaineer Boots',
-    description: 'Waterproof leather boots with Vibram soles, perfect for rocky terrain and long-distance hiking.',
+    id: 'WF-HIK-TRE-004',
+    title: 'Summit Pro Carbon Trekking Poles',
+    description: 'Ultralight carbon fiber trekking poles with ergonomic cork grips and quick-lock adjustment.',
     category: 'hiking',
-    subcategory: 'footwear',
-    price: 229.99,
-    brand: 'Alpine Edge',
-    tags: ['professional', 'waterproof'],
-    image_url: '/images/products/WF-HIK-FOO-BBFD557B.jpg'
+    subcategory: 'trekking_poles',
+    price: 149.99,
+    brand: 'Summit Pro',
+    tags: ['ultralight', 'professional'],
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-HIK-TRE-5777D61A.jpg'
   },
   {
     id: 'WF-CLM-HAR-005',
@@ -69,7 +69,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 89.99,
     brand: 'Summit Pro',
     tags: ['professional', 'lightweight'],
-    image_url: '/images/products/WF-CLI-HAR-000D5F37.jpg'
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-CLI-HAR-000D5F37.jpg'
   },
   {
     id: 'WF-WAT-KAY-006',
@@ -80,7 +80,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 1299.99,
     brand: 'Pacific Tide',
     tags: ['professional', 'touring'],
-    image_url: '/images/products/WF-WAT-KAY-769FDC85.jpg'
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-WAT-KAY-769FDC85.jpg'
   },
   {
     id: 'WF-WIN-SKI-007',
@@ -91,7 +91,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 699.99,
     brand: 'Alpine Edge',
     tags: ['all-mountain', 'intermediate'],
-    image_url: '/images/products/WF-WIN-SKI-09F23736.jpg'
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-WIN-SKI-09F23736.jpg'
   },
   {
     id: 'WF-WIN-SNO-008',
@@ -102,7 +102,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 199.99,
     brand: 'Wayfinder Supply',
     tags: ['backcountry', 'lightweight'],
-    image_url: '/images/products/WF-WIN-SNO-370005B0.jpg'
+    image_url: 'https://storage.googleapis.com/wayfinder_supply_co/products/WF-WIN-SNO-370005B0.jpg'
   }
 ]
 
