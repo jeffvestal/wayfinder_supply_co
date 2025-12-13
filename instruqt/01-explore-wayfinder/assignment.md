@@ -11,6 +11,13 @@ tabs:
   hostname: host-1
   path: /
   port: 8000
+- id: popout-ui-01
+  title: UI (Pop-out)
+  type: service
+  hostname: host-1
+  path: /
+  port: 8000
+  new_window: true
 - id: 0ukl1c9nexnd
   title: Architecture Diagram
   type: service

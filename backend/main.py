@@ -3,11 +3,14 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-env_path = Path(__file__).resolve().parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    load_dotenv()
+# Only load .env in standalone/local mode, NOT in Instruqt
+# Instruqt sets INSTRUQT=true environment variable
+if not os.getenv("INSTRUQT"):
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        load_dotenv()
 
 # Now import everything else (routers will see the loaded env vars)
 from fastapi import FastAPI, Request
