@@ -60,8 +60,10 @@ Before testing, let's verify everything is deployed:
 2. Check your workflow:
 
 ```bash
+# Load environment variables
+export $(curl -s http://kubernetes-vm:9000/env | xargs)
 export KIBANA_URL="http://kubernetes-vm:30001"
-export ES_APIKEY="${STANDALONE_ELASTICSEARCH_APIKEY}"
+export ES_APIKEY="${ELASTICSEARCH_APIKEY}"
 
 # Check workflow
 curl -s -X GET "$KIBANA_URL/api/workflows" \

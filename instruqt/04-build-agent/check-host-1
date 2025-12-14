@@ -4,11 +4,14 @@
 
 set -e
 
-KIBANA_URL="${STANDALONE_KIBANA_URL:-http://kubernetes-vm:30001}"
-ES_APIKEY="${STANDALONE_ELASTICSEARCH_APIKEY}"
+# Load environment variables from Instruqt env server
+export $(curl -s http://kubernetes-vm:9000/env | xargs)
+
+KIBANA_URL="${KIBANA_URL:-http://kubernetes-vm:30001}"
+ES_APIKEY="${ELASTICSEARCH_APIKEY}"
 
 if [ -z "$ES_APIKEY" ]; then
-    fail-message "ERROR: STANDALONE_ELASTICSEARCH_APIKEY environment variable not set"
+    fail-message "ERROR: ELASTICSEARCH_APIKEY environment variable not set"
     exit 1
 fi
 
