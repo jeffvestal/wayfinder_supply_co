@@ -83,18 +83,14 @@ fi
 echo "4. Testing workflow execution..."
 WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.results[] | select(.name=="get_customer_profile") | .id')
 
-EXECUTION_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/_execute" \
+EXECUTION_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/run" \
   -H "Authorization: ApiKey $ES_APIKEY" \
   -H "Content-Type: application/json" \
   -H "kbn-xsrf: true" \
   -H "x-elastic-internal-origin: kibana" \
-  -d '{
-    "input": {
-      "user_id": "user_member"
-    }
-  }')
+  -d '{"inputs": {"user_id": "user_member"}}')
 
-if echo "$EXECUTION_RESPONSE" | jq -e '.status == "success" or .status == "running"' > /dev/null 2>&1; then
+if echo "$EXECUTION_RESPONSE" | jq -e '.workflowExecutionId' > /dev/null 2>&1; then
     echo "   ✓ Workflow executes successfully"
 else
     fail-message "   ✗ Workflow execution failed"

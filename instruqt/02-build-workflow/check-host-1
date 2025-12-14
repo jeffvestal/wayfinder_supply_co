@@ -88,12 +88,12 @@ echo ""
 echo "Step 5: Testing workflow execution..."
 echo "Executing workflow with user_id: user_member"
 
-EXECUTION_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/_execute" \
+EXECUTION_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/run" \
   -H "Authorization: ApiKey $ES_APIKEY" \
   -H "Content-Type: application/json" \
   -H "kbn-xsrf: true" \
   -H "x-elastic-internal-origin: kibana" \
-  -d '{"input": {"user_id": "user_member"}}' 2>&1)
+  -d '{"inputs": {"user_id": "user_member"}}' 2>&1)
 
 EXEC_HTTP_CODE=$(echo "$EXECUTION_RESPONSE" | tail -n1)
 EXEC_BODY=$(echo "$EXECUTION_RESPONSE" | sed '$d')
@@ -107,20 +107,19 @@ if [ "$EXEC_HTTP_CODE" != "200" ]; then
     exit 1
 fi
 
-# Check execution status
-EXEC_STATUS=$(echo "$EXEC_BODY" | jq -r '.status // "unknown"' 2>/dev/null)
-echo "Execution status: $EXEC_STATUS"
-
-if [ "$EXEC_STATUS" = "success" ] || [ "$EXEC_STATUS" = "completed" ] || [ "$EXEC_STATUS" = "running" ]; then
+# Check execution status - success returns workflowExecutionId
+if echo "$EXEC_BODY" | jq -e '.workflowExecutionId' > /dev/null 2>&1; then
+    EXEC_ID=$(echo "$EXEC_BODY" | jq -r '.workflowExecutionId')
     echo ""
     echo "✓ Workflow executed successfully!"
+    echo "  Execution ID: $EXEC_ID"
     echo ""
     echo "=== Challenge 2 Check PASSED ==="
     exit 0
 else
-    echo "ERROR: Unexpected execution status: $EXEC_STATUS"
+    echo "ERROR: Workflow execution failed"
     echo "Full response:"
     echo "$EXEC_BODY" | jq '.' 2>/dev/null || echo "$EXEC_BODY"
-    fail-message "ERROR: Workflow execution returned status: $EXEC_STATUS"
+    fail-message "ERROR: Workflow execution failed. Check MCP server is running on port 8002."
     exit 1
 fi
