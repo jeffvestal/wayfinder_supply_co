@@ -2,35 +2,101 @@
 # Validation script for Challenge 3: Build Tool
 # Checks that workflow tool exists and is properly configured
 
-set -e
+echo "=== Starting Challenge 3 Check Script ==="
+echo "Date: $(date)"
+echo ""
 
-# Load environment variables from Instruqt env server
-export $(curl -s http://kubernetes-vm:9000/env | xargs)
+# Don't use set -e so we can see all errors
+# set -e
+
+echo "Step 1: Loading environment variables from kubernetes-vm:9000..."
+ENV_RESPONSE=$(curl -s http://kubernetes-vm:9000/env 2>&1)
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to fetch env vars from kubernetes-vm:9000"
+    fail-message "ERROR: Could not load environment variables"
+    exit 1
+fi
+echo "ENV_RESPONSE length: ${#ENV_RESPONSE}"
+
+export $(echo "$ENV_RESPONSE" | xargs) 2>/dev/null || true
 
 KIBANA_URL="${KIBANA_URL:-http://kubernetes-vm:30001}"
 ES_APIKEY="${ELASTICSEARCH_APIKEY}"
 
+echo "Step 2: Checking environment variables..."
+echo "KIBANA_URL: $KIBANA_URL"
+echo "ES_APIKEY set: $([ -n "$ES_APIKEY" ] && echo 'yes' || echo 'NO')"
+
 if [ -z "$ES_APIKEY" ]; then
+    echo "ERROR: ELASTICSEARCH_APIKEY is empty!"
     fail-message "ERROR: ELASTICSEARCH_APIKEY environment variable not set"
     exit 1
 fi
 
-echo "Checking for workflow tool..."
+echo ""
+echo "Step 3: Fetching tools from Kibana..."
+echo "URL: $KIBANA_URL/api/agent_builder/tools"
 
-# Check if tool exists
-TOOL_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/agent_builder/tools" \
+TOOL_RESPONSE=$(curl -s -w "\n%{http_code}" -X GET "$KIBANA_URL/api/agent_builder/tools" \
   -H "Authorization: ApiKey $ES_APIKEY" \
   -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana")
+  -H "x-elastic-internal-origin: kibana" 2>&1)
 
-if [ $? -ne 0 ]; then
-    fail-message "ERROR: Failed to connect to Kibana API"
+HTTP_CODE=$(echo "$TOOL_RESPONSE" | tail -n1)
+RESPONSE_BODY=$(echo "$TOOL_RESPONSE" | sed '$d')
+
+echo "HTTP Status: $HTTP_CODE"
+echo "Response length: ${#RESPONSE_BODY}"
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo "ERROR: Kibana API returned non-200 status"
+    echo "Response: $RESPONSE_BODY"
+    fail-message "ERROR: Failed to query tools (HTTP $HTTP_CODE)"
     exit 1
 fi
 
-# Check if workflow tool exists
-if echo "$TOOL_RESPONSE" | jq -e '.data[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
-    TOOL_DATA=$(echo "$TOOL_RESPONSE" | jq '.data[] | select(.id=="tool-workflow-get-customer-profile")')
+echo ""
+echo "Step 4: Parsing tools response..."
+
+# Debug: Show the structure of the response
+echo "Response structure (first 500 chars):"
+echo "$RESPONSE_BODY" | head -c 500
+echo ""
+echo ""
+
+# Try to list all tool IDs - check both .data[] and direct array []
+echo "Looking for tools..."
+echo "Trying .data[] format:"
+echo "$RESPONSE_BODY" | jq -r '.data[]? | .id' 2>/dev/null | head -10 || echo "  (no .data[] found)"
+
+echo "Trying direct array [] format:"
+echo "$RESPONSE_BODY" | jq -r '.[]? | .id' 2>/dev/null | head -10 || echo "  (no direct array found)"
+
+echo "Trying .tools[] format:"
+echo "$RESPONSE_BODY" | jq -r '.tools[]? | .id' 2>/dev/null | head -10 || echo "  (no .tools[] found)"
+
+echo ""
+echo "Step 5: Looking for tool-workflow-get-customer-profile..."
+
+# Try different response formats
+TOOL_DATA=""
+
+# Try .data[] first
+if echo "$RESPONSE_BODY" | jq -e '.data[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
+    TOOL_DATA=$(echo "$RESPONSE_BODY" | jq '.data[] | select(.id=="tool-workflow-get-customer-profile")')
+    echo "Found in .data[] format"
+# Try direct array
+elif echo "$RESPONSE_BODY" | jq -e '.[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
+    TOOL_DATA=$(echo "$RESPONSE_BODY" | jq '.[] | select(.id=="tool-workflow-get-customer-profile")')
+    echo "Found in direct array format"
+# Try .tools[]
+elif echo "$RESPONSE_BODY" | jq -e '.tools[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
+    TOOL_DATA=$(echo "$RESPONSE_BODY" | jq '.tools[] | select(.id=="tool-workflow-get-customer-profile")')
+    echo "Found in .tools[] format"
+fi
+
+if [ -n "$TOOL_DATA" ]; then
+    echo ""
     echo "✓ Found tool: tool-workflow-get-customer-profile"
     
     # Verify it's a workflow tool
@@ -49,7 +115,9 @@ if echo "$TOOL_RESPONSE" | jq -e '.data[] | select(.id=="tool-workflow-get-custo
     fi
     echo "✓ Tool configured with workflow_id: $WORKFLOW_ID"
     
-    # Verify the workflow exists using POST /api/workflows/search
+    # Verify the workflow exists
+    echo ""
+    echo "Step 6: Verifying referenced workflow exists..."
     WORKFLOW_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/search" \
       -H "Authorization: ApiKey $ES_APIKEY" \
       -H "Content-Type: application/json" \
@@ -74,14 +142,14 @@ if echo "$TOOL_RESPONSE" | jq -e '.data[] | select(.id=="tool-workflow-get-custo
     fi
     
     echo ""
-    echo "Tool details:"
-    echo "$TOOL_DATA" | jq '.'
+    echo "=== Challenge 3 Check PASSED ==="
     exit 0
 else
-    fail-message "ERROR: Tool 'tool-workflow-get-customer-profile' not found"
     echo ""
-    echo "Available tools:"
-    echo "$TOOL_RESPONSE" | jq -r '.data[] | "\(.id) (\(.type))"' || echo "None found"
+    echo "ERROR: Tool 'tool-workflow-get-customer-profile' not found!"
+    echo ""
+    echo "Full response for debugging:"
+    echo "$RESPONSE_BODY" | jq '.' 2>/dev/null || echo "$RESPONSE_BODY"
+    fail-message "ERROR: Tool 'tool-workflow-get-customer-profile' not found. Create it in Kibana → Agent Builder → Tools."
     exit 1
 fi
-
