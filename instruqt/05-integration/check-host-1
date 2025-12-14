@@ -47,7 +47,7 @@ TOOL_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/agent_builder/tools" \
   -H "kbn-xsrf: true" \
   -H "x-elastic-internal-origin: kibana")
 
-if echo "$TOOL_RESPONSE" | jq -e '.data[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
+if echo "$TOOL_RESPONSE" | jq -e '.results[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
     echo "   ✓ Tool 'tool-workflow-get-customer-profile' exists"
 else
     fail-message "   ✗ Tool 'tool-workflow-get-customer-profile' not found"
@@ -61,8 +61,8 @@ AGENT_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/agent_builder/agents" \
   -H "kbn-xsrf: true" \
   -H "x-elastic-internal-origin: kibana")
 
-if echo "$AGENT_RESPONSE" | jq -e '.data[] | select(.id=="trip-planner-agent")' > /dev/null 2>&1; then
-    AGENT_DATA=$(echo "$AGENT_RESPONSE" | jq '.data[] | select(.id=="trip-planner-agent")')
+if echo "$AGENT_RESPONSE" | jq -e '.results[] | select(.id=="trip-planner-agent")' > /dev/null 2>&1; then
+    AGENT_DATA=$(echo "$AGENT_RESPONSE" | jq '.results[] | select(.id=="trip-planner-agent")')
     TOOL_COUNT=$(echo "$AGENT_DATA" | jq '.configuration.tools[0].tool_ids | length')
     
     # Check if agent has the customer profile tool

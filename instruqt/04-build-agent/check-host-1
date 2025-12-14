@@ -28,9 +28,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Check if agent exists
-if echo "$AGENT_RESPONSE" | jq -e '.data[] | select(.id=="trip-planner-agent")' > /dev/null 2>&1; then
-    AGENT_DATA=$(echo "$AGENT_RESPONSE" | jq '.data[] | select(.id=="trip-planner-agent")')
+# Check if agent exists (agents API uses .results[])
+if echo "$AGENT_RESPONSE" | jq -e '.results[] | select(.id=="trip-planner-agent")' > /dev/null 2>&1; then
+    AGENT_DATA=$(echo "$AGENT_RESPONSE" | jq '.results[] | select(.id=="trip-planner-agent")')
     echo "✓ Found agent: trip-planner-agent"
     
     # Check name
@@ -106,7 +106,7 @@ else
     fail-message "ERROR: Agent 'trip-planner-agent' not found"
     echo ""
     echo "Available agents:"
-    echo "$AGENT_RESPONSE" | jq -r '.data[] | "\(.id) (\(.name))"' || echo "None found"
+    echo "$AGENT_RESPONSE" | jq -r '.results[] | "\(.id) (\(.name))"' || echo "None found"
     exit 1
 fi
 

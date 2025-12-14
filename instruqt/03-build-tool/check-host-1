@@ -64,35 +64,19 @@ echo "$RESPONSE_BODY" | head -c 500
 echo ""
 echo ""
 
-# Try to list all tool IDs - check both .data[] and direct array []
-echo "Looking for tools..."
-echo "Trying .data[] format:"
-echo "$RESPONSE_BODY" | jq -r '.data[]? | .id' 2>/dev/null | head -10 || echo "  (no .data[] found)"
-
-echo "Trying direct array [] format:"
-echo "$RESPONSE_BODY" | jq -r '.[]? | .id' 2>/dev/null | head -10 || echo "  (no direct array found)"
-
-echo "Trying .tools[] format:"
-echo "$RESPONSE_BODY" | jq -r '.tools[]? | .id' 2>/dev/null | head -10 || echo "  (no .tools[] found)"
+# List all tool IDs from .results[]
+echo "Available tools:"
+echo "$RESPONSE_BODY" | jq -r '.results[]? | "\(.id) (\(.type))"' 2>/dev/null | head -20 || echo "  (could not parse)"
 
 echo ""
 echo "Step 5: Looking for tool-workflow-get-customer-profile..."
 
-# Try different response formats
+# Tools API returns .results[] (same as workflows API)
 TOOL_DATA=""
 
-# Try .data[] first
-if echo "$RESPONSE_BODY" | jq -e '.data[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
-    TOOL_DATA=$(echo "$RESPONSE_BODY" | jq '.data[] | select(.id=="tool-workflow-get-customer-profile")')
-    echo "Found in .data[] format"
-# Try direct array
-elif echo "$RESPONSE_BODY" | jq -e '.[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
-    TOOL_DATA=$(echo "$RESPONSE_BODY" | jq '.[] | select(.id=="tool-workflow-get-customer-profile")')
-    echo "Found in direct array format"
-# Try .tools[]
-elif echo "$RESPONSE_BODY" | jq -e '.tools[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
-    TOOL_DATA=$(echo "$RESPONSE_BODY" | jq '.tools[] | select(.id=="tool-workflow-get-customer-profile")')
-    echo "Found in .tools[] format"
+if echo "$RESPONSE_BODY" | jq -e '.results[] | select(.id=="tool-workflow-get-customer-profile")' > /dev/null 2>&1; then
+    TOOL_DATA=$(echo "$RESPONSE_BODY" | jq '.results[] | select(.id=="tool-workflow-get-customer-profile")')
+    echo "Found tool in .results[]"
 fi
 
 if [ -n "$TOOL_DATA" ]; then
