@@ -102,11 +102,15 @@ export const api = {
   async streamChat(
     message: string,
     userId: string,
-    onEvent: (event: StreamEvent) => void
+    onEvent: (event: StreamEvent) => void,
+    agentId?: string
   ): Promise<void> {
     const url = createApiUrl('/api/chat');
     url.searchParams.set('message', message);
     url.searchParams.set('user_id', userId);
+    if (agentId) {
+      url.searchParams.set('agent_id', agentId);
+    }
     
     const response = await fetch(url.toString(), {
       method: 'POST',
@@ -148,6 +152,19 @@ export const api = {
           }
         }
       }
+    }
+  },
+
+  async checkAgentExists(agentId: string): Promise<boolean> {
+    const url = createApiUrl(`/api/agent-status/${agentId}`);
+    try {
+      const response = await fetch(url.toString());
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.exists === true;
+    } catch (error) {
+      console.error('Failed to check agent status:', error);
+      return false;
     }
   },
 

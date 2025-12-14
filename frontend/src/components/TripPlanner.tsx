@@ -5,7 +5,7 @@ import { ItineraryModal } from './ItineraryModal'
 import { 
   Send, Loader2, MapPin, Calendar, Mountain, ChevronDown, ChevronRight,
   ShoppingCart, Plus, Compass, CloudSun, Backpack, CheckCircle2, Clock,
-  Tent, Thermometer, Map, Sun, Moon, RefreshCw
+  Tent, Thermometer, Map, Sun, Moon, RefreshCw, AlertTriangle
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -177,6 +177,7 @@ export function TripPlanner({ userId }: TripPlannerProps) {
   const [expandedThinking, setExpandedThinking] = useState(false)
   // Store thought traces per message for persistence after agent responds
   const [messageTraces, setMessageTraces] = useState<Record<string, ThoughtTraceEvent[]>>({})
+  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null)
   const [tripContext, setTripContext] = useState({
     destination: '',
     dates: '',
@@ -200,6 +201,13 @@ export function TripPlanner({ userId }: TripPlannerProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Check if trip-planner-agent exists on mount
+  useEffect(() => {
+    api.checkAgentExists('trip-planner-agent')
+      .then(exists => setAgentAvailable(exists))
+      .catch(() => setAgentAvailable(false))
+  }, [])
 
   // Check if context has been modified
   useEffect(() => {
@@ -420,7 +428,7 @@ export function TripPlanner({ userId }: TripPlannerProps) {
           // Use fallback regex extraction as backup (runs in parallel, won't hurt)
           extractProductsFromResponseFallback(messageContent)
         }
-      })
+      }, 'trip-planner-agent')
     } catch (error) {
       console.error('Chat error:', error)
       const errorMessage: ChatMessage = {
@@ -680,7 +688,24 @@ export function TripPlanner({ userId }: TripPlannerProps) {
             <div className={`flex-1 overflow-y-auto transition-all duration-500 ${
               messages.length === 0 ? 'p-6' : 'p-4'
             }`}>
-              {messages.length === 0 ? (
+              {agentAvailable === false ? (
+                <div className="flex items-center justify-center h-full text-center">
+                  <div className="max-w-md">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/20 flex items-center justify-center">
+                      <AlertTriangle className="w-8 h-8 text-amber-400" />
+                    </div>
+                    <h3 className="text-2xl font-display font-bold text-white mb-2">
+                      Trip Planner Not Available
+                    </h3>
+                    <p className="text-gray-400 mb-2">
+                      The Trip Planner agent hasn't been created yet.
+                    </p>
+                    <p className="text-gray-500 text-sm">
+                      Complete Challenge 4 to enable this feature.
+                    </p>
+                  </div>
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-center">
                   <div>
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
@@ -874,11 +899,11 @@ export function TripPlanner({ userId }: TripPlannerProps) {
                       ? 'bg-white border border-slate-300 text-slate-800 placeholder-slate-400'
                       : 'bg-white/90 backdrop-blur-sm border border-white/20 text-slate-800 placeholder-slate-500'
                   }`}
-                  disabled={isLoading}
+                  disabled={isLoading || agentAvailable === false}
                 />
                 <button
                   type="submit"
-                  disabled={!input.trim() || isLoading}
+                  disabled={!input.trim() || isLoading || agentAvailable === false}
                   className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-lg shadow-primary/20 hover:shadow-primary/40"
                 >
                   <Send className="w-4 h-4" />

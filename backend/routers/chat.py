@@ -136,7 +136,7 @@ async def parse_trip_context_endpoint(
 async def chat_endpoint(
     message: str = Query(..., description="The chat message"),
     user_id: Optional[str] = Query("user_new", description="User ID"),
-    agent_id: Optional[str] = Query("trip-planner-agent", description="Agent ID")
+    agent_id: Optional[str] = Query("wayfinder-search-agent", description="Agent ID")
 ):
     """
     Chat endpoint that proxies to Elastic Agent Builder streaming API.
@@ -156,7 +156,7 @@ async def chat_endpoint(
     )
 
 
-async def stream_agent_response(message: str, agent_id: str = "trip-planner-agent"):
+async def stream_agent_response(message: str, agent_id: str = "wayfinder-search-agent"):
     """
     Proxy SSE stream from Elastic Agent Builder to frontend.
     Parses Agent Builder events and forwards them in a consistent format.
@@ -328,6 +328,22 @@ async def stream_agent_response(message: str, agent_id: str = "trip-planner-agen
 def format_sse_event(event_type: str, data: dict) -> str:
     """Format data as an SSE event string."""
     return f"data: {json.dumps({'type': event_type, 'data': data})}\n\n"
+
+
+@router.get("/agent-status/{agent_id}")
+async def check_agent_status(agent_id: str):
+    """Check if an agent exists and is accessible."""
+    url = f"{KIBANA_URL}/api/agent_builder/agents/{agent_id}"
+    headers = {
+        "Authorization": f"ApiKey {ELASTICSEARCH_APIKEY}",
+        "kbn-xsrf": "true",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=headers)
+            return {"exists": response.status_code == 200, "agent_id": agent_id}
+    except Exception as e:
+        return {"exists": False, "agent_id": agent_id, "error": str(e)}
 
 
 @router.post("/extract-itinerary")

@@ -491,17 +491,17 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     const demoQuery = DEMO_QUERIES[queryType].query
     const personalizedUserId = personalizationEnabled ? userId : undefined
     
-    setIsLoading(true)
-    try {
+      setIsLoading(true)
+      try {
       const results = await api.lexicalSearch(demoQuery, 10, personalizedUserId)
-      setDemoLexicalResults(results.products)
-      setDemoLexicalQuery(results.es_query || null)
-      setDemoLexicalRawHits(results.raw_hits || [])
-    } catch (error) {
-      console.error('Demo lexical search failed:', error)
-    } finally {
-      setIsLoading(false)
-    }
+        setDemoLexicalResults(results.products)
+        setDemoLexicalQuery(results.es_query || null)
+        setDemoLexicalRawHits(results.raw_hits || [])
+      } catch (error) {
+        console.error('Demo lexical search failed:', error)
+      } finally {
+        setIsLoading(false)
+      }
   }
 
   const advanceDemo = async () => {
@@ -709,31 +709,31 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       <div className="space-y-6">
         {/* Demo Query Header - only show when a query is selected */}
         {selectedDemoQuery && (
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-            <h3 className="text-lg font-semibold text-white mb-2">🎯 Demo Query</h3>
+        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+          <h3 className="text-lg font-semibold text-white mb-2">🎯 Demo Query</h3>
             <p className="text-primary font-medium mb-2">"{DEMO_QUERIES[selectedDemoQuery].query}"</p>
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
               <span className="bg-slate-700 px-2 py-1 rounded">{DEMO_QUERIES[selectedDemoQuery].icon} {DEMO_QUERIES[selectedDemoQuery].label}</span>
               <span>→</span>
               <span className="text-cyan-400">{DEMO_QUERIES[selectedDemoQuery].winner}</span>
             </div>
-            <div className="flex flex-col gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
-              <div className="flex items-center gap-2">
-                <span>Persona:</span>
-                <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Personalization:</span>
-                {personalizationEnabled ? (
-                  <span className="flex items-center gap-1 text-green-400 font-medium">
-                    <Target className="w-3 h-3" /> ON - results boosted by browsing history
-                  </span>
-                ) : (
-                  <span className="text-gray-500">OFF - generic results</span>
-                )}
-              </div>
+          <div className="flex flex-col gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
+            <div className="flex items-center gap-2">
+              <span>Persona:</span>
+              <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>Personalization:</span>
+              {personalizationEnabled ? (
+                <span className="flex items-center gap-1 text-green-400 font-medium">
+                  <Target className="w-3 h-3" /> ON - results boosted by browsing history
+                </span>
+              ) : (
+                <span className="text-gray-500">OFF - generic results</span>
+              )}
             </div>
           </div>
+        </div>
         )}
 
         {/* Demo Selection - show when no query selected yet */}
@@ -744,16 +744,16 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
             className="bg-slate-800/50 rounded-xl p-6 border border-slate-700"
           >
             <div className="text-center mb-6">
-              <Zap className="w-12 h-12 text-primary mx-auto mb-4" />
+            <Zap className="w-12 h-12 text-primary mx-auto mb-4" />
               <h3 className="text-xl font-bold text-white mb-2">Choose a Demo Scenario</h3>
               <p className="text-gray-400">
                 Each scenario highlights different search strengths
-              </p>
+            </p>
             </div>
             
             <div className="space-y-3">
               {/* Keyword Demo - Lexical shines */}
-              <button
+            <button
                 onClick={() => runDemo('keyword')}
                 className="w-full text-left bg-amber-950/30 hover:bg-amber-900/40 border border-amber-700/50 hover:border-amber-600 rounded-xl p-4 transition-all group"
               >
@@ -768,7 +768,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-amber-400 transition-colors flex-shrink-0" />
                 </div>
-              </button>
+            </button>
 
               {/* Semantic Demo - Hybrid shines */}
               <button
@@ -1156,16 +1156,16 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               Notice how agentic search provides context-aware recommendations with reasoning.
             </p>
             <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => {
-                  setIsDemoRunning(false)
+            <button
+              onClick={() => {
+                setIsDemoRunning(false)
                   setSelectedDemoQuery(null)
                   setDemoStep('intro')
-                }}
-                className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg transition-colors"
-              >
+              }}
+              className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg transition-colors"
+            >
                 ← Try Another Demo
-              </button>
+            </button>
               <button
                 onClick={() => {
                   setIsDemoRunning(false)

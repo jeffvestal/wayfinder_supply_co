@@ -224,6 +224,35 @@ Always prioritize safety and use ONLY Wayfinder catalog products in recommendati
     )
 
 
+def create_wayfinder_search_agent(tool_ids: List[str]) -> Optional[str]:
+    """Create the general search agent for product recommendations."""
+    instructions = """You are the Wayfinder Supply Co. Search Assistant. Help customers find outdoor gear from our catalog.
+
+## YOUR ROLE
+- Search the product catalog to find gear that matches customer needs
+- Provide helpful product recommendations with prices
+- Answer questions about our products
+
+## TOOLS
+- product_search: Search the Wayfinder product catalog
+- get_user_affinity: Get user preferences from browsing history
+
+## IMPORTANT
+- ONLY recommend products from the Wayfinder Supply Co. catalog
+- Include product names and prices in your responses
+- For trip planning questions, tell the user: "For full trip planning with weather and itinerary, check out our Trip Planner feature!"
+
+Keep responses concise and helpful."""
+    
+    return create_agent(
+        agent_id="wayfinder-search-agent",
+        name="Wayfinder Search Assistant",
+        description="Simple product search agent for finding gear in the catalog.",
+        instructions=instructions,
+        tool_ids=tool_ids
+    )
+
+
 def create_trip_itinerary_agent() -> Optional[str]:
     """Create the Trip Itinerary synthesis agent (optional, kept for future use)."""
     instructions = """You are the Wayfinder Supply Co. Trip Itinerary Specialist. Your role is to create beautiful, detailed trip plans based on gathered information.
@@ -671,6 +700,10 @@ def main() -> int:
     itinerary_extractor_id = create_itinerary_extractor_agent()
     time.sleep(1)
     
+    # Create wayfinder-search-agent (always created, not skipped)
+    wayfinder_search_id = create_wayfinder_search_agent(tool_ids=tool_ids)
+    time.sleep(1)
+    
     trip_planner_id = None
     if "trip-planner-agent" not in args.skip_agents:
         trip_planner_id = create_trip_planner_agent(tool_ids=tool_ids)
@@ -689,6 +722,7 @@ def main() -> int:
     print(f"Context Extractor Agent ID: {context_extractor_id}")
     print(f"Response Parser Agent ID: {response_parser_id}")
     print(f"Itinerary Extractor Agent ID: {itinerary_extractor_id}")
+    print(f"Wayfinder Search Agent ID: {wayfinder_search_id}")
     print(f"Trip Planner Agent ID: {trip_planner_id}")
     print(f"Trip Itinerary Agent ID: {trip_itinerary_id}")
     print(f"Created {len(tool_ids)} tools")
