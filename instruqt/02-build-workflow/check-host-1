@@ -2,74 +2,125 @@
 # Validation script for Challenge 2: Build Workflow
 # Checks that get_customer_profile workflow exists and can be executed
 
-set -e
+echo "=== Starting Challenge 2 Check Script ==="
+echo "Date: $(date)"
+echo ""
 
-# Load environment variables from Instruqt env server
-export $(curl -s http://kubernetes-vm:9000/env | xargs)
+# Don't use set -e so we can see all errors
+# set -e
+
+echo "Step 1: Loading environment variables from kubernetes-vm:9000..."
+ENV_RESPONSE=$(curl -s http://kubernetes-vm:9000/env 2>&1)
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to fetch env vars from kubernetes-vm:9000"
+    echo "Response: $ENV_RESPONSE"
+    fail-message "ERROR: Could not load environment variables"
+    exit 1
+fi
+echo "ENV_RESPONSE length: ${#ENV_RESPONSE}"
+
+# Export the env vars
+export $(echo "$ENV_RESPONSE" | xargs) 2>/dev/null || true
 
 KIBANA_URL="${KIBANA_URL:-http://kubernetes-vm:30001}"
 ES_APIKEY="${ELASTICSEARCH_APIKEY}"
 
+echo "Step 2: Checking environment variables..."
+echo "KIBANA_URL: $KIBANA_URL"
+echo "ES_APIKEY set: $([ -n "$ES_APIKEY" ] && echo 'yes' || echo 'NO')"
+echo "ES_APIKEY length: ${#ES_APIKEY}"
+
 if [ -z "$ES_APIKEY" ]; then
+    echo "ERROR: ELASTICSEARCH_APIKEY is empty!"
     fail-message "ERROR: ELASTICSEARCH_APIKEY environment variable not set"
     exit 1
 fi
 
-echo "Checking for get_customer_profile workflow..."
+echo ""
+echo "Step 3: Searching for workflows..."
+echo "URL: $KIBANA_URL/api/workflows/search"
 
-# Check if workflow exists using POST /api/workflows/search
-WORKFLOW_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/search" \
+WORKFLOW_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$KIBANA_URL/api/workflows/search" \
   -H "Authorization: ApiKey $ES_APIKEY" \
   -H "Content-Type: application/json" \
   -H "kbn-xsrf: true" \
   -H "x-elastic-internal-origin: kibana" \
-  -d '{"limit": 100, "page": 1, "query": ""}')
+  -d '{"limit": 100, "page": 1, "query": ""}' 2>&1)
 
-if [ $? -ne 0 ]; then
-    fail-message "ERROR: Failed to connect to Kibana API"
+# Extract HTTP status code (last line)
+HTTP_CODE=$(echo "$WORKFLOW_RESPONSE" | tail -n1)
+# Extract response body (all but last line)
+RESPONSE_BODY=$(echo "$WORKFLOW_RESPONSE" | sed '$d')
+
+echo "HTTP Status: $HTTP_CODE"
+echo "Response length: ${#RESPONSE_BODY}"
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo "ERROR: Kibana API returned non-200 status"
+    echo "Response: $RESPONSE_BODY"
+    fail-message "ERROR: Failed to query workflows (HTTP $HTTP_CODE)"
     exit 1
 fi
 
-# Check if workflow exists by name
-if echo "$WORKFLOW_RESPONSE" | jq -e '.results[] | select(.name=="get_customer_profile")' > /dev/null 2>&1; then
-    WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.results[] | select(.name=="get_customer_profile") | .id')
-    echo "✓ Found workflow: get_customer_profile (ID: $WORKFLOW_ID)"
-else
-    fail-message "ERROR: Workflow 'get_customer_profile' not found"
-    echo "Available workflows:"
-    echo "$WORKFLOW_RESPONSE" | jq -r '.results[] | .name' || echo "None found"
-    exit 1
-fi
+echo ""
+echo "Step 4: Parsing workflow response..."
+echo "Looking for workflow named 'get_customer_profile'..."
 
-# Test workflow execution
-echo "Testing workflow execution..."
-EXECUTION_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/_execute" \
-  -H "Authorization: ApiKey $ES_APIKEY" \
-  -H "Content-Type: application/json" \
-  -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana" \
-  -d '{
-    "input": {
-      "user_id": "user_member"
-    }
-  }')
+# List all workflow names
+echo "Available workflows:"
+echo "$RESPONSE_BODY" | jq -r '.results[]? | .name' 2>/dev/null || echo "  (could not parse results)"
 
-if [ $? -ne 0 ]; then
-    fail-message "ERROR: Failed to execute workflow"
-    exit 1
-fi
-
-# Check if execution was successful
-if echo "$EXECUTION_RESPONSE" | jq -e '.status == "success" or .status == "running"' > /dev/null 2>&1; then
-    echo "✓ Workflow executed successfully"
+# Check if our workflow exists
+WORKFLOW_EXISTS=$(echo "$RESPONSE_BODY" | jq -e '.results[] | select(.name=="get_customer_profile")' 2>/dev/null)
+if [ -n "$WORKFLOW_EXISTS" ]; then
+    WORKFLOW_ID=$(echo "$RESPONSE_BODY" | jq -r '.results[] | select(.name=="get_customer_profile") | .id')
     echo ""
-    echo "Workflow output:"
-    echo "$EXECUTION_RESPONSE" | jq '.'
+    echo "✓ Found workflow: get_customer_profile"
+    echo "  ID: $WORKFLOW_ID"
+else
+    echo ""
+    echo "ERROR: Workflow 'get_customer_profile' not found!"
+    fail-message "ERROR: Workflow 'get_customer_profile' not found. Create it in Kibana → Workflows."
+    exit 1
+fi
+
+echo ""
+echo "Step 5: Testing workflow execution..."
+echo "Executing workflow with user_id: user_member"
+
+EXECUTION_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/_execute" \
+  -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "Content-Type: application/json" \
+  -H "kbn-xsrf: true" \
+  -H "x-elastic-internal-origin: kibana" \
+  -d '{"input": {"user_id": "user_member"}}' 2>&1)
+
+EXEC_HTTP_CODE=$(echo "$EXECUTION_RESPONSE" | tail -n1)
+EXEC_BODY=$(echo "$EXECUTION_RESPONSE" | sed '$d')
+
+echo "Execution HTTP Status: $EXEC_HTTP_CODE"
+
+if [ "$EXEC_HTTP_CODE" != "200" ]; then
+    echo "ERROR: Workflow execution failed (HTTP $EXEC_HTTP_CODE)"
+    echo "Response: $EXEC_BODY"
+    fail-message "ERROR: Workflow execution failed"
+    exit 1
+fi
+
+# Check execution status
+EXEC_STATUS=$(echo "$EXEC_BODY" | jq -r '.status // "unknown"' 2>/dev/null)
+echo "Execution status: $EXEC_STATUS"
+
+if [ "$EXEC_STATUS" = "success" ] || [ "$EXEC_STATUS" = "completed" ] || [ "$EXEC_STATUS" = "running" ]; then
+    echo ""
+    echo "✓ Workflow executed successfully!"
+    echo ""
+    echo "=== Challenge 2 Check PASSED ==="
     exit 0
 else
-    fail-message "ERROR: Workflow execution failed"
-    echo "Response:"
-    echo "$EXECUTION_RESPONSE" | jq '.'
+    echo "ERROR: Unexpected execution status: $EXEC_STATUS"
+    echo "Full response:"
+    echo "$EXEC_BODY" | jq '.' 2>/dev/null || echo "$EXEC_BODY"
+    fail-message "ERROR: Workflow execution returned status: $EXEC_STATUS"
     exit 1
 fi
-
