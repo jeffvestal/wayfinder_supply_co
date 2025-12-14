@@ -18,15 +18,17 @@ fi
 echo "Verifying complete system integration..."
 echo ""
 
-# Check workflow
+# Check workflow using POST /api/workflows/search
 echo "1. Checking workflow..."
-WORKFLOW_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/workflows" \
+WORKFLOW_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/search" \
   -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "Content-Type: application/json" \
   -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana")
+  -H "x-elastic-internal-origin: kibana" \
+  -d '{"limit": 100, "page": 1, "query": ""}')
 
-if echo "$WORKFLOW_RESPONSE" | jq -e '.data[] | select(.name=="get_customer_profile")' > /dev/null 2>&1; then
-    WORKFLOW_ENABLED=$(echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | select(.name=="get_customer_profile") | .enabled')
+if echo "$WORKFLOW_RESPONSE" | jq -e '.results[] | select(.name=="get_customer_profile")' > /dev/null 2>&1; then
+    WORKFLOW_ENABLED=$(echo "$WORKFLOW_RESPONSE" | jq -r '.results[] | select(.name=="get_customer_profile") | .enabled')
     if [ "$WORKFLOW_ENABLED" = "true" ]; then
         echo "   ✓ Workflow 'get_customer_profile' exists and is enabled"
     else
@@ -79,7 +81,7 @@ fi
 
 # Test workflow execution
 echo "4. Testing workflow execution..."
-WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | select(.name=="get_customer_profile") | .id')
+WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.results[] | select(.name=="get_customer_profile") | .id')
 
 EXECUTION_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/$WORKFLOW_ID/_execute" \
   -H "Authorization: ApiKey $ES_APIKEY" \

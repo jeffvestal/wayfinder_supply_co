@@ -17,11 +17,13 @@ fi
 
 echo "Checking for get_customer_profile workflow..."
 
-# Check if workflow exists
-WORKFLOW_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/workflows" \
+# Check if workflow exists using POST /api/workflows/search
+WORKFLOW_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/search" \
   -H "Authorization: ApiKey $ES_APIKEY" \
+  -H "Content-Type: application/json" \
   -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana")
+  -H "x-elastic-internal-origin: kibana" \
+  -d '{"limit": 100, "page": 1, "query": ""}')
 
 if [ $? -ne 0 ]; then
     fail-message "ERROR: Failed to connect to Kibana API"
@@ -29,13 +31,13 @@ if [ $? -ne 0 ]; then
 fi
 
 # Check if workflow exists by name
-if echo "$WORKFLOW_RESPONSE" | jq -e '.data[] | select(.name=="get_customer_profile")' > /dev/null 2>&1; then
-    WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | select(.name=="get_customer_profile") | .id')
+if echo "$WORKFLOW_RESPONSE" | jq -e '.results[] | select(.name=="get_customer_profile")' > /dev/null 2>&1; then
+    WORKFLOW_ID=$(echo "$WORKFLOW_RESPONSE" | jq -r '.results[] | select(.name=="get_customer_profile") | .id')
     echo "✓ Found workflow: get_customer_profile (ID: $WORKFLOW_ID)"
 else
     fail-message "ERROR: Workflow 'get_customer_profile' not found"
     echo "Available workflows:"
-    echo "$WORKFLOW_RESPONSE" | jq -r '.data[] | .name' || echo "None found"
+    echo "$WORKFLOW_RESPONSE" | jq -r '.results[] | .name' || echo "None found"
     exit 1
 fi
 

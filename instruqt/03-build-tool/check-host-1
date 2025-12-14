@@ -49,14 +49,16 @@ if echo "$TOOL_RESPONSE" | jq -e '.data[] | select(.id=="tool-workflow-get-custo
     fi
     echo "✓ Tool configured with workflow_id: $WORKFLOW_ID"
     
-    # Verify the workflow exists
-    WORKFLOW_RESPONSE=$(curl -s -X GET "$KIBANA_URL/api/workflows" \
+    # Verify the workflow exists using POST /api/workflows/search
+    WORKFLOW_RESPONSE=$(curl -s -X POST "$KIBANA_URL/api/workflows/search" \
       -H "Authorization: ApiKey $ES_APIKEY" \
+      -H "Content-Type: application/json" \
       -H "kbn-xsrf: true" \
-      -H "x-elastic-internal-origin: kibana")
+      -H "x-elastic-internal-origin: kibana" \
+      -d '{"limit": 100, "page": 1, "query": ""}')
     
-    if echo "$WORKFLOW_RESPONSE" | jq -e ".data[] | select(.id==\"$WORKFLOW_ID\")" > /dev/null 2>&1; then
-        WORKFLOW_NAME=$(echo "$WORKFLOW_RESPONSE" | jq -r ".data[] | select(.id==\"$WORKFLOW_ID\") | .name")
+    if echo "$WORKFLOW_RESPONSE" | jq -e ".results[] | select(.id==\"$WORKFLOW_ID\")" > /dev/null 2>&1; then
+        WORKFLOW_NAME=$(echo "$WORKFLOW_RESPONSE" | jq -r ".results[] | select(.id==\"$WORKFLOW_ID\") | .name")
         echo "✓ Referenced workflow exists: $WORKFLOW_NAME"
     else
         fail-message "ERROR: Referenced workflow '$WORKFLOW_ID' does not exist"
