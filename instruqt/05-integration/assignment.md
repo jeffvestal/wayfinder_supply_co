@@ -41,81 +41,59 @@ Congratulations! You've built all the components. Now let's test your complete s
 
 ## What You've Built
 
-Throughout this workshop, you've created:
-
-1. **Workflow** (`get_customer_profile`) - Connects to MCP server for CRM data
-2. **Tool** (`tool-workflow-get-customer-profile`) - Makes workflow available to agents
-3. **Agent** (`trip-planner-agent`) - Orchestrates all tools to plan trips
+Throughout this workshop, you've created different types of agentic tools:
+1. **Workflow** - `get_customer_profile`
+	 - Connects to MCP server for CRM data
+3. **Tool** - `tool-workflow-get-customer-profile`
+	- Makes workflow available to agents
+4. **Agent** - `trip-planner-agent`
+	- Orchestrates all tools to plan trips
 
 Now let's see them work together!
 
 ---
 
-## Step 1: Verify All Components
-
-Before testing, let's verify everything is deployed:
-
-1. Open the [button label="Terminal"](tab-2) tab
-
-2. Check your workflow:
-
-```bash
-# Load environment variables
-export $(curl -s http://kubernetes-vm:9000/env | xargs)
-export KIBANA_URL="http://kubernetes-vm:30001"
-export ES_APIKEY="${ELASTICSEARCH_APIKEY}"
-
-# Check workflow
-curl -s -X GET "$KIBANA_URL/api/workflows" \
-  -H "Authorization: ApiKey $ES_APIKEY" \
-  -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana" \
-  | jq '.data[] | select(.name=="get_customer_profile") | {name, id, enabled}'
-```
-
-3. Check your tool:
-
-```bash
-curl -s -X GET "$KIBANA_URL/api/agent_builder/tools" \
-  -H "Authorization: ApiKey $ES_APIKEY" \
-  -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana" \
-  | jq '.data[] | select(.id=="tool-workflow-get-customer-profile") | {id, type, description}'
-```
-
-4. Check your agent:
-
-```bash
-curl -s -X GET "$KIBANA_URL/api/agent_builder/agents" \
-  -H "Authorization: ApiKey $ES_APIKEY" \
-  -H "kbn-xsrf: true" \
-  -H "x-elastic-internal-origin: kibana" \
-  | jq '.data[] | select(.id=="trip-planner-agent") | {id, name, tool_count: (.configuration.tools[0].tool_ids | length)}'
-```
-
-All three should be present and configured correctly!
-
----
-
-## Step 2: Test in Wayfinder UI
+## Step 1: Test in Wayfinder UI
 
 1. Open the [button label="Wayfinder UI"](tab-0) tab
+	> [!NOTE]
+	> If you need more screen space, you can  open the Wayfinder store in a new tab by clicking
+	>
+	> the second tab [button label="UI (Popout)"](tab-1)
 
-2. Navigate to **Trip Planner**
+2. Click on **Trip Planner**
+	![CleanShot 2025-12-16 at 11.26.33@2x.png](../assets/CleanShot%202025-12-16%20at%2011.26.33%402x.png)
 
-3. Try a trip planning query:
+3. Try a trip planning query.In the chat box at the bottom enter:
    ```
    I'm planning a 3-day backpacking trip to Banff next weekend. What gear do I need?
    ```
+	 Click `Send`
+	 ![CleanShot 2025-12-16 at 11.30.37@2x.png](../assets/CleanShot%202025-12-16%20at%2011.30.37%402x.png)
 
-4. **Watch the Thought Trace** panel on the right - you should see:
+4. **View our Plan** <br>
+Just like chatting with our agent in Kibana, this custom Trip Planner will give varying answers (Because its the same agent!).
+But, you should see a similar trip plan
+![CleanShot 2025-12-16 at 11.33.26@2x.png](../assets/CleanShot%202025-12-16%20at%2011.33.26%402x.png)
+
+4. **Review the Thought Trace** <br>
+Also just as we did in Kibana, we can view the thought trace of the agent. Here click on `Completed xx steps`
+You'll see some of the following calls
    - ✅ `check_trip_safety` workflow called (weather data)
    - ✅ `get_customer_profile` workflow called (your workflow!)
    - ✅ `get_user_affinity` tool called (preferences)
    - ✅ `product_search` tool called multiple times (gear recommendations)
    - ✅ Agent synthesizing the response
+	![CleanShot 2025-12-16 at 11.36.42@2x.png](../assets/CleanShot%202025-12-16%20at%2011.36.42%402x.png)
 
-5. Notice how your `get_customer_profile` workflow appears in the trace!
+6. **E-Commerce tie-in**<br>
+Our Agent and tools built a helpful trip itineary for our customer. However, ultimately as an e-commerce store we are selling products. <br>
+Our trip planner extracts
+	1. product suggests, which we sell. Users can click on the + in the small card to add the item to the cart
+	 ![CleanShot 2025-12-16 at 11.40.03@2x.png](../assets/CleanShot%202025-12-16%20at%2011.40.03%402x.png)
+	1. Daily trip itinary details
+	![CleanShot 2025-12-16 at 11.42.55@2x.png](../assets/CleanShot%202025-12-16%20at%2011.42.55%402x.png)
+
 
 ---
 
@@ -132,38 +110,6 @@ All three should be present and configured correctly!
 
 ---
 
-## Step 4: Verify Agent Behavior
-
-1. Open the [button label="Kibana"](tab-1) tab
-
-2. Navigate to **Machine Learning** → **Agent Builder** → **Agents**
-
-3. Click on your **Trip Planner Agent**
-
-4. Click **Test** and try a query
-
-5. Review the execution:
-   - Check that all tools are called
-   - Verify the tool call sequence
-   - Confirm the agent follows its instructions
-
----
-
-## Step 5: Check Execution Logs
-
-1. In Kibana, navigate to **Observability** → **Logs**
-
-2. Filter for workflow executions:
-   ```
-   workflow.name: get_customer_profile
-   ```
-
-3. Review the logs to see:
-   - Workflow execution details
-   - MCP server calls
-   - Customer profile data returned
-
----
 
 ## What You've Accomplished
 
@@ -206,24 +152,6 @@ Now that you've built the complete system, you can:
 
 ---
 
-## Troubleshooting
-
-**Workflow not appearing in trace?**
-- Verify workflow is enabled: `curl ... | jq '.data[] | select(.name=="get_customer_profile") | .enabled'`
-- Check agent has the tool assigned
-- Review agent execution logs
-
-**Agent not calling your workflow?**
-- Verify tool is assigned to agent
-- Check tool description is clear
-- Review agent instructions mention customer profile
-
-**Need help?**
-- Check execution logs in Kibana
-- Review workflow execution history
-- Test workflow directly via API
-
----
 
 ## Congratulations! 🎉
 

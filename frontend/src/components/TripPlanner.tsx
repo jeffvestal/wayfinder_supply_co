@@ -35,7 +35,6 @@ function getToolStatusMessage(toolId: string): string {
   const toolMessages: Record<string, string> = {
     'tool-workflow-check-trip-safety': 'Checking weather conditions...',
     'tool-workflow-get-customer-profile': 'Looking up your preferences...',
-    'tool-workflow-get-user-affinity': 'Analyzing your gear style...',
     'tool-search-product-search': 'Scanning the catalog...',
     'tool-esql-get-user-affinity': 'Reviewing your browsing history...',
   }

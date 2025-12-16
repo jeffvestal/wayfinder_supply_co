@@ -407,7 +407,7 @@ Rules:
     )
 
 
-def create_esql_tool(name: str, query: str, description: str, params: Optional[Dict] = None) -> Optional[str]:
+def create_esql_tool(name: str, query: str, description: str, params: Optional[Dict] = None, labels: Optional[List[str]] = None) -> Optional[str]:
     """Create an ES|QL tool and return its ID. Deletes existing tool first."""
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
@@ -428,6 +428,9 @@ def create_esql_tool(name: str, query: str, description: str, params: Optional[D
         }
     }
     
+    if labels:
+        tool_config["labels"] = labels
+    
     response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
     if response.status_code in [200, 201]:
@@ -442,7 +445,7 @@ def create_esql_tool(name: str, query: str, description: str, params: Optional[D
         return None
 
 
-def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optional[str]:
+def create_workflow_tool(name: str, workflow_id: str, description: str, labels: Optional[List[str]] = None) -> Optional[str]:
     """Create a workflow tool and return its ID. Deletes existing tool first."""
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
@@ -462,6 +465,9 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
         }
     }
     
+    if labels:
+        tool_config["labels"] = labels
+    
     response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
     if response.status_code in [200, 201]:
@@ -476,7 +482,7 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
         return None
 
 
-def create_index_search_tool(name: str, index: str, description: str) -> Optional[str]:
+def create_index_search_tool(name: str, index: str, description: str, labels: Optional[List[str]] = None) -> Optional[str]:
     """Create an index search tool and return its ID. Deletes existing tool first."""
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
@@ -495,6 +501,9 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
             "pattern": index  # API expects 'pattern', not 'index'
         }
     }
+    
+    if labels:
+        tool_config["labels"] = labels
     
     response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
@@ -651,7 +660,8 @@ def main() -> int:
     esql_tool_id = create_esql_tool(
         name="get_user_affinity",
         query=esql_query,
-        description="Get top gear preference tags from user browsing behavior in clickstream data"
+        description="Get top gear preference tags from user browsing behavior in clickstream data",
+        labels=["wayfinder"]
     )
     if esql_tool_id:
         tool_ids.append(esql_tool_id)
@@ -660,19 +670,22 @@ def main() -> int:
     # Create workflow tools
     workflow_tool_ids = {}
     for name, workflow_id in workflow_ids.items():
+        # Skip creating workflow tool for get_user_affinity - we use the ES|QL tool instead
+        if name == "get_user_affinity":
+            continue
         tool_name = f"tool-workflow-{name.replace('_', '-')}"
         if tool_name in args.skip_tools:
             print(f"⊘ Skipping tool: {tool_name}")
             continue
         descriptions = {
             "check_trip_safety": "Get weather conditions and road alerts for a trip destination",
-            "get_customer_profile": "Retrieve customer profile including purchase history and loyalty tier",
-            "get_user_affinity": "Get user's gear preference affinity from browsing behavior"
+            "get_customer_profile": "Retrieve customer profile including purchase history and loyalty tier"
         }
         tool_id = create_workflow_tool(
             name=name,
             workflow_id=workflow_id,
-            description=descriptions.get(name, f"Workflow: {name}")
+            description=descriptions.get(name, f"Workflow: {name}"),
+            labels=["wayfinder"]
         )
         if tool_id:
             workflow_tool_ids[name] = tool_id
@@ -683,7 +696,8 @@ def main() -> int:
     index_tool_id = create_index_search_tool(
         name="product_search",
         index="product-catalog",
-        description="Search the product catalog for gear recommendations"
+        description="Search the product catalog for gear recommendations",
+        labels=["wayfinder"]
     )
     if index_tool_id:
         tool_ids.append(index_tool_id)

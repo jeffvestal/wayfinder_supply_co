@@ -1,37 +1,33 @@
 version: "3"
 virtualmachines:
-  - name: kubernetes-vm
-    image: elastic-security-education/pk-instruqt-gcp-elastic-9-3-0-main-v1-1-1-14-g725f878
-    shell: /bin/bash
-    environment:
-      INSTRUQT: "true"
-      LLM_KEY_DURATION: 1d
-      LLM_KEY_MAX_BUDGET: "25"
-      LLM_MODELS: '["gpt-3.5-turbo","gpt-4.1","gpt-4o","gpt-4o-westus","eval-gpt-4o","anthropic","cohere","gemini-1.0","claude-sonnet-4"]'
-      LLM_PROXY_URL: litellm-proxy-service-1059491012611.us-central1.run.app
-    memory: 16384
-    cpus: 16
-    allow_external_ingress:
-      - https
-    provision_ssl_certificate: true
-
-  - name: host-1
-    image: elastic-security-education/pk-instruqt-gcp-worker-9-3-0-main-v1-1-1-14-g725f878
-    shell: /bin/bash
-    memory: 8192
-    cpus: 4
-    allow_external_ingress:
-      - https
-    provision_ssl_certificate: true
-
+- name: kubernetes-vm
+  image: elastic-security-education/pk-instruqt-gcp-elastic-9-3-0-main-v1-1-1-14-g725f878
+  shell: /bin/bash
+  environment:
+    INSTRUQT: "true"
+    LLM_KEY_DURATION: 1d
+    LLM_KEY_MAX_BUDGET: "25"
+    LLM_MODELS: '["gpt-3.5-turbo","gpt-4.1","gpt-4o","gpt-4o-westus","eval-gpt-4o","anthropic","cohere","gemini-1.0","claude-sonnet-4"]'
+    LLM_PROXY_URL: litellm-proxy-service-1059491012611.us-central1.run.app
+  memory: 16384
+  cpus: 16
+  allow_external_ingress:
+  - https
+  provision_ssl_certificate: true
+- name: host-1
+  image: elastic-security-education/pk-instruqt-gcp-worker-9-3-0-main-v1-1-1-14-g725f878
+  shell: /bin/bash
+  memory: 8192
+  cpus: 4
+  allow_external_ingress:
+  - https
+  provision_ssl_certificate: true
 secrets:
-  - name: SA_LLM_PROXY_BEARER_TOKEN
-  - name: GCSKEY_ELASTIC_SA
-  - name: GCSKEY_EDEN_WORKSHOP
-  - name: GCS_KEY_EDUCATION
-  - name: GCSKEY
-  - name: KIBANA_SMTP_USER
-  - name: KIBANA_SMTP_PASS
-  - name: GCSKEY_CE_INFRA_CONTAINERS
-
-
+- name: SA_LLM_PROXY_BEARER_TOKEN
+- name: GCSKEY_ELASTIC_SA
+- name: GCSKEY_EDEN_WORKSHOP
+- name: GCS_KEY_EDUCATION
+- name: GCSKEY
+- name: KIBANA_SMTP_USER
+- name: KIBANA_SMTP_PASS
+- name: GCSKEY_CE_INFRA_CONTAINERS

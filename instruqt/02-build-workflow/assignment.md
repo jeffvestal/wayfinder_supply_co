@@ -70,7 +70,9 @@ You'll create the `get_customer_profile` workflow that:
 
 ## Step 3: Define the Inputs
 
-A workflow needs to know what data it expects. Paste this block into the editor:
+A workflow needs to know what data it expects.
+1. Delete the example code
+2. Paste this block into the editor:
 
 ```yaml
 version: "1"
@@ -230,6 +232,8 @@ Loyalty Tier: Platinum
 Lifetime Value: $2847.50
 Purchase History: 12 items
 ```
+
+![CleanShot 2025-12-15 at 20.33.05@2x.png](../assets/CleanShot%202025-12-15%20at%2020.33.05%402x.png)
 
 🎉 You've built and run your first workflow!
 

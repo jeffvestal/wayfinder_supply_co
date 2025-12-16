@@ -9,7 +9,7 @@ tabs:
   title: Kibana Agent Builder
   type: service
   hostname: kubernetes-vm
-  path: /app/agent_builder
+  path: /app/agent_builder/tools
   port: 30001
 - id: jxurvygvav1x
   title: Terminal
@@ -56,7 +56,7 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
    - Go to **Machine Learning** → **Agent Builder** → **Tools**
    - You should see a list of existing tools (like `product_search`, `get_user_affinity`, etc.)
 
-> **Note:** Screenshot placeholder: Tools list view showing existing tools
+![CleanShot 2025-12-15 at 20.39.51@2x.png](../assets/CleanShot%202025-12-15%20at%2020.39.51%402x.png)
 
 ---
 
@@ -64,38 +64,45 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
 
 1. Click the **"Create tool"** or **"Add tool"** button (usually in the top-right corner)
 
-2. Select the tool type:
-   - Choose **"Workflow"** from the tool type options
-   - This tells Agent Builder that this tool wraps an Elastic Workflow
-
-> **Note:** Screenshot placeholder: Create tool form with tool type selection
-
 ---
 
 ## Step 3: Configure the Tool
 
 Fill in the tool configuration form:
+### Statem References
+1. Select the tool type:
+   - Choose **"Workflow"** from the tool type options
+   - This tells Agent Builder that this tool wraps an Elastic Workflow
 
-1. **Tool ID**: Enter `tool-workflow-get-customer-profile`
+2. **Tool ID**: Enter
+	 ```
+	tool-workflow-get-customer-profile
+	```
    - This is the unique identifier for your tool
    - Use the `tool-workflow-` prefix to indicate it's a workflow tool
 
-2. **Description**: Enter:
+3. **Description**: Enter:
    ```
    Retrieve customer profile including purchase history and loyalty tier from CRM
    ```
    - This description is critical! Agents read this to decide when to use your tool
    - Be clear and specific about what the tool does
+### Labels
+4. **Labels**
+   - Enter `wayfinder`
 
-3. **Workflow Selection**:
+### Configuration
+5. **Workflow Selection**:
    - In the workflow dropdown/selector, find and select `get_customer_profile`
    - This is the workflow you created in Challenge 2
    - The UI will automatically link this tool to your workflow
+6. **Workflow execution**
+   - Leave this checked.
+   - This tells the tool to wait for the workflow to complete and return its output.
+![CleanShot 2025-12-16 at 10.14.34@2x.png](../assets/CleanShot%202025-12-16%20at%2010.14.34%402x.png)
 
-> **Note:** Screenshot placeholder: Tool form showing workflow dropdown with `get_customer_profile` selected
-
-4. Click **"Save"** or **"Create"** to create the tool
-
+7. Click **"Save"** to create the tool
+![CleanShot 2025-12-16 at 10.15.41@2x.png](../assets/CleanShot%202025-12-16%20at%2010.15.41%402x.png)
 ---
 
 ## Step 4: Verify Your Tool
@@ -103,13 +110,18 @@ Fill in the tool configuration form:
 1. After saving, you should be redirected back to the Tools list
 
 2. Find your tool in the list:
-   - Look for **ID**: `tool-workflow-get-customer-profile`
-   - **Type** should show as "Workflow"
-   - **Description** should show your description text
+   - In the search box enter `tool-workflow-get-customer-profile`
 
-3. Click on your tool to view its details:
-   - You should see the workflow it's connected to (`get_customer_profile`)
-   - Verify all the configuration looks correct
+3. Click the 3 dot menu on the right of the row:
+4. Click > Test
+![CleanShot 2025-12-15 at 20.48.42@2x.png](../assets/CleanShot%202025-12-15%20at%2020.48.42%402x.png)
+5. Enter `user_member` in the `user_id` box
+![CleanShot 2025-12-15 at 20.57.56@2x.png](../assets/CleanShot%202025-12-15%20at%2020.57.56%402x.png)
+6. You should see a response with one result document that includes information about the user.
+```nocopy,wrap
+"output": "Customer Profile for user_member:\nName: Alex Hiker\nLoyalty Tier: platinum\nLifetime Value: $4500\nPurchase History: 3 items\n"
+```
+8. Click Cancel to close the test ox
 
 ---
 

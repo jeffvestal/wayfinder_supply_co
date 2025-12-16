@@ -13,6 +13,7 @@ Wraps an Elastic Workflow:
   "id": "tool-workflow-get-customer-profile",
   "type": "workflow",
   "description": "Retrieve customer profile including purchase history and loyalty tier",
+  "labels": ["wayfinder"],
   "configuration": {
     "workflow_id": "<workflow-id>"
   }
@@ -28,6 +29,7 @@ Executes ES|QL queries directly:
   "id": "tool-esql-get-user-affinity",
   "type": "esql",
   "description": "Get top gear preference tags from user browsing behavior",
+  "labels": ["wayfinder"],
   "configuration": {
     "query": "FROM user-clickstream | WHERE meta_tags IS NOT NULL | STATS count = COUNT(*) BY meta_tags | SORT count DESC | LIMIT 5",
     "params": {}
@@ -44,6 +46,7 @@ Searches an Elasticsearch index:
   "id": "tool-search-product-search",
   "type": "index_search",
   "description": "Search the product catalog for gear recommendations",
+  "labels": ["wayfinder"],
   "configuration": {
     "pattern": "product-catalog"
   }
@@ -62,6 +65,7 @@ curl -X POST "$KIBANA_URL/api/agent_builder/tools" \
     "id": "tool-workflow-example",
     "type": "workflow",
     "description": "Tool description here",
+    "labels": ["wayfinder"],
     "configuration": {
       "workflow_id": "<workflow-id>"
     }
