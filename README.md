@@ -555,6 +555,130 @@ uvicorn main:app --host 0.0.0.0 --port 8001
 4. Workflow receives response and can log/process the data
 5. Agent uses the workflow results for personalization and recommendations
 
+## Dataset & Product Generation
+
+### Current Dataset
+
+The workshop includes a pre-generated product catalog with:
+
+- **~150 products** across 10 categories
+- **10 categories**: Camping, Hiking, Climbing, Winter Sports, Water Sports, Cycling, Fishing, Apparel, Tropical & Safari, Accessories
+- **80+ subcategories** covering diverse outdoor activities
+- **AI-generated product metadata** (titles, descriptions, attributes, prices)
+- **AI-generated product images** (via Vertex AI Imagen 3)
+- **Product reviews** (5-30 reviews per product with star ratings)
+
+**Output files:**
+- `generated_products/products.json` — Product catalog with metadata
+- `generated_products/reviews.json` — Product reviews
+- `frontend/public/images/products/` — Product images (or GCS URLs)
+
+### Generating More Products
+
+#### Quick Start
+
+Generate products using the default configuration:
+
+```bash
+# Generate full catalog (~150 products) with images
+python scripts/generate_products.py --config config/product_generation.yaml
+
+# Generate products only (skip images - faster, no Vertex AI costs)
+python scripts/generate_products.py --config config/product_generation.yaml --skip-images
+```
+
+#### Customizing Product Generation
+
+Edit `config/product_generation.yaml` to customize:
+
+**1. Adjust product counts per subcategory:**
+```yaml
+categories:
+  - name: "Camping"
+    subcategories:
+      - name: "Tents - 3 Season"
+        count: 5  # Generate 5 tents instead of 3
+```
+
+**2. Add new categories:**
+```yaml
+categories:
+  - name: "New Category"
+    subcategories:
+      - name: "New Subcategory"
+        count: 3
+        description: "Description for AI generation"
+        activities: ["activity1", "activity2"]
+```
+
+**3. Adjust price ranges:**
+```yaml
+price_ranges:
+  "New Category":
+    min: 29.99
+    max: 299.99
+```
+
+**4. Modify brand weights:**
+```yaml
+brands:
+  - name: "Custom Brand"
+    weight: 0.15
+    style: "Brand style description"
+```
+
+**5. Use different generation modes:**
+```yaml
+generation_modes:
+  test:
+    products_per_subcategory: 1
+    total_target: 10
+  demo:
+    products_per_subcategory: 2
+    total_target: 50
+  full:
+    products_per_subcategory: 3
+    total_target: 150
+```
+
+#### Generation Options
+
+**Skip image generation** (faster, no Vertex AI costs):
+```bash
+python scripts/generate_products.py --skip-images
+```
+
+**Use custom config file:**
+```bash
+python scripts/generate_products.py --config config/product_generation-tiny.yaml
+```
+
+**Metadata only** (no images, no AI calls - uses templates):
+```bash
+python scripts/generate_products.py --metadata-only
+```
+
+### After Generating Products
+
+1. **Upload images to GCS** (if generated):
+   ```bash
+   python scripts/upload_images_to_gcs.py
+   ```
+
+2. **Generate reviews**:
+   ```bash
+   python scripts/generate_reviews.py
+   python scripts/update_product_ratings.py
+   ```
+
+3. **Load into Elasticsearch**:
+   ```bash
+   python scripts/setup_elastic.py
+   python scripts/seed_products.py
+   ```
+
+See the [Product Generation & Data Loading](#product-generation--data-loading) section below for complete workflow details.
+
 <details>
 <summary><strong>Product Generation & Data Loading</strong> (Click to expand)</summary>
 
