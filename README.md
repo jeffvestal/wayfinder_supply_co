@@ -12,6 +12,75 @@ This workshop showcases how to build an intelligent, conversational shopping exp
 - **Location Intelligence**: Covers 30 global adventure destinations with seasonal activity and weather data
 - **Real-time Synthesis**: Creates personalized itineraries with gear checklists based on conditions
 
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Docker & Docker Compose (for local dev)
+- Google Cloud account (for product image generation)
+
+### Local Development
+
+1. **Clone and setup environment**:
+   ```bash
+   git clone https://github.com/jeffvestal/wayfinder_supply_co.git
+   cd wayfinder_supply_co
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+
+2. **Generate product data** (requires Google Cloud credentials):
+   ```bash
+   pip install -r requirements.txt
+   python scripts/generate_products.py --mode full
+   ```
+
+3. **Start all services**:
+   ```bash
+   docker-compose up --build
+   ```
+
+4. **Access the app**:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+   - MCP Server: http://localhost:8001
+
+### Instruqt Environment
+
+The workshop runs on Instruqt with two VMs:
+
+| VM | Services | Purpose |
+|----|----------|---------|
+| `kubernetes-vm` | Elasticsearch, Kibana, Agent Builder | Elastic Stack |
+| `host-1` | Frontend, Backend, MCP Server | Application layer |
+
+Setup scripts in `instruqt/track_scripts/` handle all configuration.
+
+### Standalone Demo Setup
+
+Run the complete demo outside of Instruqt using Docker containers connected to your own Elasticsearch cluster.
+
+**Quick setup:**
+```bash
+# Configure Agent Builder (one-time setup)
+./scripts/standalone_setup.sh
+
+# Start all services
+docker-compose up -d
+
+# Verify setup
+python scripts/validate_setup.py --mode standalone
+```
+
+**Access the application:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- MCP Server: http://localhost:8001
+
+For detailed setup instructions, see [Standalone Demo Setup](#standalone-demo-setup) below.
+
 ## Architecture
 
 ```
@@ -105,57 +174,11 @@ Full catalog covers 10 categories with ~150 products:
 - **Clickstream Tracking** — Real-time behavior tracking for guest users
 - **Personalized Recommendations** — AI uses browsing history to tailor suggestions
 
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- Docker & Docker Compose (for local dev)
-- Google Cloud account (for product image generation)
-
-### Local Development
-
-1. **Clone and setup environment**:
-   ```bash
-   git clone https://github.com/jeffvestal/wayfinder_supply_co.git
-   cd wayfinder_supply_co
-   cp .env.example .env
-   # Edit .env with your credentials
-   ```
-
-2. **Generate product data** (requires Google Cloud credentials):
-   ```bash
-   pip install -r requirements.txt
-   python scripts/generate_products.py --mode full
-   ```
-
-3. **Start all services**:
-   ```bash
-   docker-compose up --build
-   ```
-
-4. **Access the app**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - MCP Server: http://localhost:8001
-
-### Instruqt Environment
-
-The workshop runs on Instruqt with two VMs:
-
-| VM | Services | Purpose |
-|----|----------|---------|
-| `kubernetes-vm` | Elasticsearch, Kibana, Agent Builder | Elastic Stack |
-| `host-1` | Frontend, Backend, MCP Server | Application layer |
-
-Setup scripts in `instruqt/track_scripts/` handle all configuration.
-
-### Standalone Demo Setup
+## Standalone Demo Setup
 
 Run the complete demo outside of Instruqt using Docker containers connected to your own Elasticsearch cluster.
 
-#### Prerequisites
+### Prerequisites
 
 1. **Elasticsearch Cluster**
    - **Standard clusters**: Cluster with snapshot restored (contains `product-catalog` and `user-clickstream` indices)
@@ -233,7 +256,7 @@ Run the complete demo outside of Instruqt using Docker containers connected to y
    - Create indices and mappings
    - Load product data from `generated_products/products.json`
    - Load clickstream data
-   - Then deploy workflows and create agents/tools
+   - Then deploy workflows and create agents/tools (all tools are labeled with "wayfinder" for easy identification)
    
    **To update data only** (without reconfiguring workflows/agents):
    ```bash
@@ -426,19 +449,6 @@ The **Guest User** (`user_new`) enables live, interactive demonstrations of pers
 - **Show the Data**: Use the Events modal to show exactly what was tracked
 - **Explain the Flow**: Point out how the AI references "based on your browsing history" in responses
 
-## User Personas
-
-The demo includes multiple user personas to showcase personalization:
-
-| Persona | Name | Scenario | Behavior |
-|---------|------|----------|----------|
-| **Ultralight Backpacker** | Sarah Martinez | PCT thru-hike | Premium ultralight gear focus |
-| **Family Camper** | Mike Thompson | Family camping | Family-friendly, durable, budget |
-| **Weekend Warrior** | Jennifer Walsh | Sprint triathlon | Entry-level, versatile |
-| **Climbing Enthusiast** | David Chen | Red Rocks trip | Technical climbing gear |
-| **Winter Pro** | Emma Johansson | Backcountry skiing | Premium winter gear |
-| **Guest User** | Guest | Live demo | Real-time tracking, no history |
-
 ## Workshop Flow
 
 1. **Explore the Store** — Browse products, see semantic search in action
@@ -451,46 +461,28 @@ The demo includes multiple user personas to showcase personalization:
 
 ## Environment Variables
 
-### Snapshot Cluster (Data Loading)
+Key environment variables needed for different scenarios:
 
-These credentials are used when loading data and creating snapshots:
+**For Standalone Demo:**
+- `STANDALONE_ELASTICSEARCH_URL` - Demo Elasticsearch endpoint
+- `STANDALONE_ELASTICSEARCH_APIKEY` - API key for demo cluster
+- `STANDALONE_KIBANA_URL` - Demo Kibana endpoint
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `SNAPSHOT_ELASTICSEARCH_URL` | Source Elasticsearch endpoint | For data loading |
-| `SNAPSHOT_ELASTICSEARCH_APIKEY` | API key for source cluster | For data loading |
+**For Data Loading:**
+- `SNAPSHOT_ELASTICSEARCH_URL` - Source Elasticsearch endpoint (falls back to `ELASTICSEARCH_URL`)
+- `SNAPSHOT_ELASTICSEARCH_APIKEY` - API key for source cluster (falls back to `ELASTICSEARCH_APIKEY`)
 
-**Note:** Falls back to `ELASTICSEARCH_URL` and `ELASTICSEARCH_APIKEY` if not set (for backward compatibility).
+**For Product Generation:**
+- `GOOGLE_API_KEY` - Gemini API key
+- `GOOGLE_CLOUD_PROJECT` - GCP project ID
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to Vertex AI service account JSON
+- `GCS_BUCKET_NAME` - GCS bucket for product images
+- `GCS_SERVICE_ACCOUNT_KEY` - Path to GCS service account JSON
 
-### Standalone Demo Cluster (Runtime)
+See `.env.example` for a complete template.
 
-These credentials are used when running the demo:
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `STANDALONE_ELASTICSEARCH_URL` | Demo Elasticsearch endpoint | Yes (for demo) |
-| `STANDALONE_ELASTICSEARCH_APIKEY` | API key for demo cluster | Yes (for demo) |
-| `STANDALONE_KIBANA_URL` | Demo Kibana endpoint | Yes (for demo) |
-
-**Note:** Falls back to `ELASTICSEARCH_URL`, `ELASTICSEARCH_APIKEY`, and `KIBANA_URL` if not set (for backward compatibility).
-
-### GCS Configuration (Image Upload)
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GCS_BUCKET_NAME` | GCS bucket name for product images | For image upload |
-| `GCS_PREFIX` | GCS prefix/folder path | For image upload |
-| `GCS_SERVICE_ACCOUNT_KEY` | Path to GCS service account JSON | For image upload |
-
-### Google AI (Product Generation)
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GOOGLE_API_KEY` | Gemini API key (for product generation) | For generation |
-| `GOOGLE_CLOUD_PROJECT` | GCP project ID | For generation |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account JSON | For generation |
-
-## Product Generation & Data Loading
+<details>
+<summary><strong>Product Generation & Data Loading</strong> (Click to expand)</summary>
 
 This section covers the complete workflow for generating a new product catalog, creating product images, and loading data into Elasticsearch.
 
@@ -743,6 +735,8 @@ brands:
 | "Service account key not found" | Check `GCS_SERVICE_ACCOUNT_KEY` path |
 | "No products found in index" | Run `seed_products.py` before `seed_clickstream.py` |
 | Image generation fails | Verify Vertex AI Imagen API is enabled in GCP |
+
+</details>
 
 ## Tech Stack
 
