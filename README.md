@@ -482,6 +482,79 @@ Key environment variables needed for different scenarios:
 
 See `.env.example` for a complete template.
 
+## Simulated External Services
+
+The demo includes two simulated external APIs that run on the MCP Server, demonstrating how Agent Builder integrates with external systems.
+
+### CRM Service (Customer Profiles)
+
+Simulates a Salesforce-like CRM for customer data.
+
+**What it provides:**
+- Customer loyalty tier (none, platinum, business)
+- Purchase history (items already owned)
+- Account type and lifetime value
+- Preferences (ultralight, bulk discount, etc.)
+
+**How it's called:**
+```
+Agent → Workflow Tool → get_customer_profile workflow → HTTP POST to MCP Server → CRM data returned
+```
+
+**Mock customers:**
+| User ID | Name | Tier | Use Case |
+|---------|------|------|----------|
+| `user_new` | Jordan Explorer | none | New customer, no history |
+| `user_member` | Alex Hiker | platinum | Loyal customer with purchase history |
+| `user_business` | Casey Campground | business | B2B account, bulk orders |
+
+**Files:**
+- `mcp_server/tools/crm_service.py` — Service implementation
+- `mcp_server/data/crm_mock.json` — Mock customer data
+- `config/workflows/get_customer_profile.yaml` — Workflow that calls the service
+
+### Weather & Location Service (Trip Conditions)
+
+Simulates a weather/travel conditions API covering 30 global destinations.
+
+**What it provides:**
+- Weather conditions (temperature, precipitation, conditions)
+- Road alerts (traction laws, closures)
+- Seasonal activity recommendations
+- Location coverage status (covered vs. uncovered destinations)
+
+**How it's called:**
+```
+Agent → Workflow Tool → check_trip_safety workflow → HTTP POST to MCP Server → Weather data returned
+```
+
+**Coverage:** 30 locations across 7 regions with seasonal weather patterns, activities, and recommendations.
+
+**Files:**
+- `mcp_server/tools/weather_service.py` — Service implementation with fuzzy location matching
+- `mcp_server/data/locations.json` — 30 destination definitions with seasonal data
+- `config/workflows/check_trip_safety.yaml` — Workflow that calls the service
+
+### MCP Server
+
+Both services run on the MCP Server (FastAPI):
+- **Port:** 8001 (local) or 8002 (Instruqt)
+- **Protocol:** JSON-RPC 2.0
+- **Endpoint:** `POST /mcp`
+
+**Start locally:**
+```bash
+cd mcp_server
+uvicorn main:app --host 0.0.0.0 --port 8001
+```
+
+**How it works:**
+1. Workflows call the MCP Server via HTTP POST with JSON-RPC 2.0 format
+2. MCP Server routes to the appropriate tool (`get_customer_profile_tool` or `get_trip_conditions_tool`)
+3. Tool reads from mock data files and returns structured JSON
+4. Workflow receives response and can log/process the data
+5. Agent uses the workflow results for personalization and recommendations
+
 <details>
 <summary><strong>Product Generation & Data Loading</strong> (Click to expand)</summary>
 
