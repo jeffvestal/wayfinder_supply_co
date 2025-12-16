@@ -2,6 +2,7 @@
 
 A hands-on workshop demonstrating **Elastic Agentic Search** capabilities through "Wayfinder Supply Co." — a fictional outdoor retailer with an AI-powered trip planning assistant.
 
+![header photo](wayfinder_store_headshot.png)
 ## Overview
 
 This workshop showcases how to build an intelligent, conversational shopping experience that goes beyond keyword matching:
