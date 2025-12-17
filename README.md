@@ -257,7 +257,7 @@ Run the complete demo outside of Instruqt using Docker containers connected to y
    - Create indices and mappings
    - Load product data from `generated_products/products.json`
    - Load clickstream data
-   - Then deploy workflows and create agents/tools (all tools are labeled with "wayfinder" for easy identification)
+   - Then deploy workflows and create agents/tools
    
    **To update data only** (without reconfiguring workflows/agents):
    ```bash

@@ -407,7 +407,7 @@ Rules:
     )
 
 
-def create_esql_tool(name: str, query: str, description: str, params: Optional[Dict] = None, labels: Optional[List[str]] = None) -> Optional[str]:
+def create_esql_tool(name: str, query: str, description: str, params: Optional[Dict] = None) -> Optional[str]:
     """Create an ES|QL tool and return its ID. Deletes existing tool first."""
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
@@ -428,9 +428,6 @@ def create_esql_tool(name: str, query: str, description: str, params: Optional[D
         }
     }
     
-    if labels:
-        tool_config["labels"] = labels
-    
     response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
     if response.status_code in [200, 201]:
@@ -445,7 +442,7 @@ def create_esql_tool(name: str, query: str, description: str, params: Optional[D
         return None
 
 
-def create_workflow_tool(name: str, workflow_id: str, description: str, labels: Optional[List[str]] = None) -> Optional[str]:
+def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optional[str]:
     """Create a workflow tool and return its ID. Deletes existing tool first."""
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
@@ -465,9 +462,6 @@ def create_workflow_tool(name: str, workflow_id: str, description: str, labels: 
         }
     }
     
-    if labels:
-        tool_config["labels"] = labels
-    
     response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
     if response.status_code in [200, 201]:
@@ -482,7 +476,7 @@ def create_workflow_tool(name: str, workflow_id: str, description: str, labels: 
         return None
 
 
-def create_index_search_tool(name: str, index: str, description: str, labels: Optional[List[str]] = None) -> Optional[str]:
+def create_index_search_tool(name: str, index: str, description: str) -> Optional[str]:
     """Create an index search tool and return its ID. Deletes existing tool first."""
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
@@ -501,9 +495,6 @@ def create_index_search_tool(name: str, index: str, description: str, labels: Op
             "pattern": index  # API expects 'pattern', not 'index'
         }
     }
-    
-    if labels:
-        tool_config["labels"] = labels
     
     response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
     
@@ -660,8 +651,7 @@ def main() -> int:
     esql_tool_id = create_esql_tool(
         name="get_user_affinity",
         query=esql_query,
-        description="Get top gear preference tags from user browsing behavior in clickstream data",
-        labels=["wayfinder"]
+        description="Get top gear preference tags from user browsing behavior in clickstream data"
     )
     if esql_tool_id:
         tool_ids.append(esql_tool_id)
@@ -684,8 +674,7 @@ def main() -> int:
         tool_id = create_workflow_tool(
             name=name,
             workflow_id=workflow_id,
-            description=descriptions.get(name, f"Workflow: {name}"),
-            labels=["wayfinder"]
+            description=descriptions.get(name, f"Workflow: {name}")
         )
         if tool_id:
             workflow_tool_ids[name] = tool_id
@@ -696,8 +685,7 @@ def main() -> int:
     index_tool_id = create_index_search_tool(
         name="product_search",
         index="product-catalog",
-        description="Search the product catalog for gear recommendations",
-        labels=["wayfinder"]
+        description="Search the product catalog for gear recommendations"
     )
     if index_tool_id:
         tool_ids.append(index_tool_id)
