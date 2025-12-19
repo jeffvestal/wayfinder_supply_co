@@ -154,10 +154,7 @@ Always prioritize safety and use ONLY Wayfinder catalog products in recommendati
 	- Select or enter `wayfinder`
 
 ### Presentation
-4. **Display Name**: Enter
-	```
-	Trip Planner Agent`
-	```
+4. **Display Name**: Enter `Trip Planner Agent`
    - This is the display name shown in the UI
 
 5. **Display Description**: Enter:
@@ -180,11 +177,11 @@ Now you need to assign tools to your agent. Tools are the capabilities the agent
 1. Find the **"Tools"** tab back at the top next to Settings
 	![CleanShot 2025-12-16 at 10.51.08@2x.png](../assets/CleanShot%202025-12-16%20at%2010.51.08%402x.png)
 
-2. Select the following tools (You can either search for them in the seach box or you may need to go to page 2 of the list):
-   - `product_search` - Search the product catalog
-   - `check_trip_safety` - Check trip safety and weather
-   - `get_customer_profile` - Get customer profile (the tool you created in Challenge 3)
-   - `get_user_affinity` - Get user preferences from clickstream
+2. Select the following tools (You can either search for them in the search box or you may need to go to page 2 of the list):
+   - `tool-search-product-search` - Search the product catalog
+   - `tool-workflow-check-trip-safety` - Check trip safety and weather
+   - `tool-workflow-get-customer-profile` - Get customer profile (the tool you created in Challenge 3)
+   - `tool-esql-get-user-affinity` - Get user preferences from clickstream
 
 	![CleanShot 2025-12-16 at 10.57.07@2x.png](../assets/CleanShot%202025-12-16%20at%2010.57.07%402x.png)
 

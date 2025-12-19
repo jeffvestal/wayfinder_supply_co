@@ -53,7 +53,7 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
 
 2. Navigate to the Tools section:
    - Click the **hamburger menu** (☰) in the top-left corner
-   - Go to **Machine Learning** → **Agent Builder** → **Tools**
+   - Go to **Elasticsearch** → **Agent Builder** → **Tools**
    - You should see a list of existing tools (like `product_search`, `get_user_affinity`, etc.)
 
 ![CleanShot 2025-12-15 at 20.39.51@2x.png](../assets/CleanShot%202025-12-15%20at%2020.39.51%402x.png)

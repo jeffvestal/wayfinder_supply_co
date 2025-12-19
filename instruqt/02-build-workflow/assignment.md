@@ -213,8 +213,11 @@ steps:
 2. Click the ▶️ (run) button next to Save
 
 3. A panel will appear asking for the `user_id` input
+   - **Note**: The `user_id` field will be empty by default - you need to enter a value
 
-4. In the `user_id` field, enter `user_member` and click **"Run"**
+4. In the `user_id` field, enter: **`user_member`** and click **"Run"**
+   - This is the user identifier (not a name)
+   - The workflow will return customer data including the name "Sarah Martinez" - that's the result, not what you enter
 
 ---
 

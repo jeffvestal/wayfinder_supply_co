@@ -61,8 +61,9 @@ In this workshop, you'll explore how the system:
 2. **Browse Products**: Scroll through the product catalog and notice the categories
 
 3. **Try the Trip Planner**: Click **Trip Planner** in the navigation
-   - Enter a destination like "Banff" or "Yosemite"
-   - Ask: *"I'm planning a camping trip to Banff next weekend. What gear do I need?"*
+   - You'll see a message that the Trip Planner agent hasn't been created yet
+   - **This is expected!** In Challenge 4, you'll build the Trip Planner agent that powers this feature
+   - For now, observe how the UI is structured and ready for the agent you'll create
 
 4. **Watch the Agent Think**: Notice the **Thought Trace** panel on the right showing:
    - Tool calls to check weather conditions
@@ -81,7 +82,7 @@ In this workshop, you'll explore how the system:
 
 ## Understand the Architecture
 
-1. Open the [button label="Architecture Diagram"](tab-1) tab to see how all the components connect
+1. Open the [button label="Architecture Diagram"](tab-2) tab to see how all the components connect
 
 2. **Key Components**:
    - **Frontend** (React) - User interface with chat and thought trace
@@ -95,7 +96,7 @@ In this workshop, you'll explore how the system:
 
 ## Explore the Backend
 
-1. Open the [button label="Kibana"](tab-2) tab
+1. Open the [button label="Kibana"](tab-3) tab
 
 2. Navigate to **Dev Tools** → **Console** to query the indices:
    ```
@@ -124,8 +125,8 @@ In this workshop, you'll explore how the system:
 
 Use the terminal tabs for debugging:
 
-- [button label="Host-1 Terminal"](tab-3) - Frontend, backend, and MCP server logs
-- [button label="Kubernetes VM Terminal"](tab-4) - Elasticsearch and Kibana
+- [button label="Host-1 Terminal"](tab-4) - Frontend, backend, and MCP server logs
+- [button label="Kubernetes VM Terminal"](tab-5) - Elasticsearch and Kibana
 
 ### Useful Commands
 
