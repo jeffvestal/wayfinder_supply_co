@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Product, ChatMessage, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
+import { getToolStatusMessage } from '../lib/constants'
 import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target, FileText, Plus, ShoppingCart, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ProductDetailModal } from './ProductDetailModal'
@@ -29,17 +30,6 @@ interface AgentStep {
 interface ExtendedChatMessage extends ChatMessage {
   steps?: AgentStep[];
   status?: 'thinking' | 'working' | 'typing' | 'complete';
-}
-
-// Map tool IDs to friendly contextual messages
-function getToolStatusMessage(toolId: string): string {
-  const toolMessages: Record<string, string> = {
-    'tool-workflow-check-trip-safety': 'Checking weather conditions...',
-    'tool-workflow-get-customer-profile': 'Looking up your preferences...',
-    'tool-search-product-search': 'Scanning the catalog...',
-    'tool-esql-get-user-affinity': 'Reviewing your browsing history...',
-  }
-  return toolMessages[toolId] || 'Planning your adventure...'
 }
 
 // Get current thinking status from trace events

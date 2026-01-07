@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChatMessage, UserId, ThoughtTraceEvent } from '../types'
 import { api } from '../lib/api'
+import { getToolStatusMessage } from '../lib/constants'
 import { ItineraryModal } from './ItineraryModal'
 import { 
   Send, Loader2, MapPin, Calendar, Mountain, ChevronDown, ChevronRight,
@@ -12,6 +13,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 interface TripPlannerProps {
   userId: UserId
+  initialMessage?: string
+  onInitialMessageSent?: () => void
 }
 
 interface SuggestedProduct {
@@ -28,17 +31,6 @@ interface ItineraryDay {
   activities: string[]
   weather?: string
   gear_needed?: string[]
-}
-
-// Map tool IDs to friendly contextual messages
-function getToolStatusMessage(toolId: string): string {
-  const toolMessages: Record<string, string> = {
-    'tool-workflow-check-trip-safety': 'Checking weather conditions...',
-    'tool-workflow-get-customer-profile': 'Looking up your preferences...',
-    'tool-search-product-search': 'Scanning the catalog...',
-    'tool-esql-get-user-affinity': 'Reviewing your browsing history...',
-  }
-  return toolMessages[toolId] || 'Planning your adventure...'
 }
 
 // Get current thinking status from trace events
@@ -168,7 +160,7 @@ function parseProductsFromResponse(content: string): { catalogProducts: string[]
   }
 }
 
-export function TripPlanner({ userId }: TripPlannerProps) {
+export function TripPlanner({ userId, initialMessage, onInitialMessageSent }: TripPlannerProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -207,6 +199,16 @@ export function TripPlanner({ userId }: TripPlannerProps) {
       .then(exists => setAgentAvailable(exists))
       .catch(() => setAgentAvailable(false))
   }, [])
+
+  // Handle initial message when provided (for demo flow)
+  useEffect(() => {
+    if (initialMessage && !isLoading && messages.length === 0 && agentAvailable !== false) {
+      // Auto-send the initial message
+      sendMessage(initialMessage, false).then(() => {
+        onInitialMessageSent?.()
+      })
+    }
+  }, [initialMessage, agentAvailable])
 
   // Check if context has been modified
   useEffect(() => {

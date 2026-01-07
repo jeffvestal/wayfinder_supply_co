@@ -10,6 +10,7 @@ import httpx
 import os
 import json
 from typing import Optional
+from services.json_parser import extract_json_from_response
 
 router = APIRouter()
 
@@ -72,57 +73,17 @@ async def parse_trip_context_endpoint(
                         except json.JSONDecodeError:
                             continue
                 
-                # Parse JSON from response (agent should return only JSON)
-                full_response = full_response.strip()
-                
-                # Remove markdown code blocks if present
-                if full_response.startswith("```"):
-                    # Extract JSON from code block
-                    lines = full_response.split("\n")
-                    json_lines = []
-                    in_json = False
-                    for line in lines:
-                        if line.strip().startswith("```"):
-                            if in_json:
-                                break
-                            in_json = True
-                            continue
-                        if in_json:
-                            json_lines.append(line)
-                    full_response = "\n".join(json_lines)
-                
-                # Try to parse as JSON
-                try:
-                    parsed = json.loads(full_response)
-                    # Ensure we have the expected structure
-                    result = {
-                        "destination": parsed.get("destination"),
-                        "dates": parsed.get("dates"),
-                        "activity": parsed.get("activity")
-                    }
-                    return result
-                except json.JSONDecodeError:
-                    # If parsing fails, try to extract JSON from the response
-                    # Look for JSON-like patterns
-                    import re
-                    json_match = re.search(r'\{[^{}]*"destination"[^{}]*\}', full_response)
-                    if json_match:
-                        try:
-                            parsed = json.loads(json_match.group())
-                            return {
-                                "destination": parsed.get("destination"),
-                                "dates": parsed.get("dates"),
-                                "activity": parsed.get("activity")
-                            }
-                        except:
-                            pass
-                    
-                    # Fallback: return nulls if we can't parse
-                    return {
-                        "destination": None,
-                        "dates": None,
-                        "activity": None
-                    }
+                # Parse JSON from response using helper
+                parsed = extract_json_from_response(
+                    full_response,
+                    required_fields=["destination", "dates", "activity"],
+                    fallback={"destination": None, "dates": None, "activity": None}
+                )
+                return {
+                    "destination": parsed.get("destination"),
+                    "dates": parsed.get("dates"),
+                    "activity": parsed.get("activity")
+                }
                     
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Request timeout")
@@ -401,34 +362,13 @@ async def extract_itinerary_endpoint(
                         except json.JSONDecodeError:
                             continue
                 
-                # Parse JSON from response (agent should return only JSON)
-                full_response = full_response.strip()
-                
-                # Remove markdown code blocks if present
-                if full_response.startswith("```"):
-                    # Extract JSON from code block
-                    lines = full_response.split("\n")
-                    json_lines = []
-                    in_json = False
-                    for line in lines:
-                        if line.strip().startswith("```"):
-                            if in_json:
-                                break
-                            in_json = True
-                            continue
-                        if in_json:
-                            json_lines.append(line)
-                    full_response = "\n".join(json_lines)
-                
-                # Try to parse as JSON
-                try:
-                    parsed = json.loads(full_response)
-                    # Ensure we have the expected structure
-                    days = parsed.get("days", [])
-                    return {"days": days}
-                except json.JSONDecodeError:
-                    # If parsing fails, return empty
-                    return {"days": []}
+                # Parse JSON from response using helper
+                parsed = extract_json_from_response(
+                    full_response,
+                    required_fields=["days"],
+                    fallback={"days": []}
+                )
+                return {"days": parsed.get("days", [])}
                     
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Request timeout")
@@ -530,8 +470,6 @@ async def extract_trip_entities_endpoint(
 
 def parse_extraction_result(result: dict) -> dict:
     """Parse the extraction result from workflow or agent response."""
-    import re
-    
     # Get the response text
     response_text = ""
     if isinstance(result, dict):
@@ -548,52 +486,22 @@ def parse_extraction_result(result: dict) -> dict:
     else:
         response_text = str(result)
     
-    response_text = response_text.strip()
-    
-    # Remove markdown code blocks if present
-    if "```" in response_text:
-        lines = response_text.split("\n")
-        json_lines = []
-        in_json = False
-        for line in lines:
-            if line.strip().startswith("```"):
-                if in_json:
-                    break
-                in_json = True
-                continue
-            if in_json:
-                json_lines.append(line)
-        if json_lines:
-            response_text = "\n".join(json_lines)
-    
-    # Try to parse as JSON
-    try:
-        parsed = json.loads(response_text)
-        return {
-            "products": parsed.get("products", []),
-            "itinerary": parsed.get("itinerary", []),
-            "safety_notes": parsed.get("safety_notes", []),
-            "weather": parsed.get("weather", None)
-        }
-    except json.JSONDecodeError:
-        # Try to find JSON object in the response
-        json_match = re.search(r'\{[\s\S]*"products"[\s\S]*\}', response_text)
-        if json_match:
-            try:
-                parsed = json.loads(json_match.group())
-                return {
-                    "products": parsed.get("products", []),
-                    "itinerary": parsed.get("itinerary", []),
-                    "safety_notes": parsed.get("safety_notes", []),
-                    "weather": parsed.get("weather", None)
-                }
-            except:
-                pass
-        
-        # Return empty structure if parsing fails
-        return {
+    # Use helper to extract JSON
+    parsed = extract_json_from_response(
+        response_text,
+        required_fields=["products"],
+        fallback={
             "products": [],
             "itinerary": [],
             "safety_notes": [],
             "weather": None
         }
+    )
+    
+    # Ensure we have the expected structure
+    return {
+        "products": parsed.get("products", []),
+        "itinerary": parsed.get("itinerary", []),
+        "safety_notes": parsed.get("safety_notes", []),
+        "weather": parsed.get("weather", None)
+    }

@@ -7,7 +7,9 @@ import { OrderConfirmation } from './components/OrderConfirmation'
 import { SearchPanel } from './components/SearchPanel'
 import { UserMenu } from './components/UserMenu'
 import { UserAccountPage } from './components/UserAccountPage'
-import { ShoppingCart, MapPin, Home, Menu, X, Search } from 'lucide-react'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { DemoOverlay } from './components/DemoOverlay'
+import { ShoppingCart, MapPin, Home, Menu, X, Search, Play } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
 import { UserPersona } from './types'
@@ -29,8 +31,10 @@ function App() {
   const [searchPanelOpen, setSearchPanelOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>()
+  const [tripPlannerInitialMessage, setTripPlannerInitialMessage] = useState<string | undefined>()
   const [orderId, setOrderId] = useState<string | null>(null)
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
+  const [isDemoRunning, setIsDemoRunning] = useState(false)
 
   // Load personas on mount
   useEffect(() => {
@@ -95,6 +99,34 @@ function App() {
   const handleStartChatWithContext = (productName: string, tag: string) => {
     setChatInitialMessage(`I'm looking at the **${productName}** and I'm interested in other **${tag}** gear. What do you recommend?`)
     setSearchPanelOpen(true)
+  }
+
+  // Handle 1-Click Demo
+  const handleStartDemo = async () => {
+    setIsDemoRunning(true)
+    
+    // Wait a moment for overlay to show
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    // Switch to Sarah Martinez persona
+    const sarahPersona = personas.find(p => p.id === 'ultralight_backpacker_sarah')
+    if (sarahPersona) {
+      setCurrentUser('ultralight_backpacker_sarah')
+      setCurrentPersona(sarahPersona)
+    }
+    
+    // Wait for persona switch
+    await new Promise(resolve => setTimeout(resolve, 300))
+    
+    // Set initial message for Trip Planner
+    setTripPlannerInitialMessage("Planning a 3-day backpacking trip to Yosemite next month. What gear do I need?")
+    
+    // Navigate to Trip Planner
+    setCurrentView('trip-planner')
+    
+    // Hide overlay after navigation
+    await new Promise(resolve => setTimeout(resolve, 500))
+    setIsDemoRunning(false)
   }
 
   useEffect(() => {
@@ -192,6 +224,15 @@ function App() {
             </div>
             <div className="flex items-center gap-3">
               <button
+                onClick={handleStartDemo}
+                disabled={isDemoRunning}
+                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-cyan-500 hover:from-primary-dark hover:to-cyan-600 text-white rounded-lg transition-all border border-primary/30 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm shadow-lg shadow-primary/20"
+                title="Watch Demo"
+              >
+                <Play className="w-4 h-4" />
+                Watch Demo
+              </button>
+              <button
                 onClick={() => setSearchPanelOpen(true)}
                 className="flex items-center justify-center w-10 h-10 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
                 title="Search & Chat"
@@ -272,99 +313,117 @@ function App() {
 
       {/* Main Content */}
       <main>
-        <AnimatePresence mode="wait">
-          {currentView === 'storefront' && (
-            <motion.div
-              key="storefront"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Storefront userId={currentUser} onStartChat={handleStartChatWithContext} />
-            </motion.div>
-          )}
-          {currentView === 'trip-planner' && (
-            <motion.div
-              key="trip-planner"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <TripPlanner userId={currentUser} />
-            </motion.div>
-          )}
-          {currentView === 'cart' && (
-            <motion.div
-              key="cart"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <CartView userId={currentUser} loyaltyTier={getLoyaltyTier(currentUser)} />
-              </div>
-            </motion.div>
-          )}
-          {currentView === 'checkout' && (
-            <motion.div
-              key="checkout"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <CheckoutPage
-                userId={currentUser}
-                loyaltyTier={getLoyaltyTier(currentUser)}
-                onBack={() => setCurrentView('cart')}
-                onOrderComplete={(orderId, confirmationNumber) => {
-                  setOrderId(orderId)
-                  setConfirmationNumber(confirmationNumber)
-                  setCurrentView('order-confirmation')
-                }}
-              />
-            </motion.div>
-          )}
-          {currentView === 'order-confirmation' && orderId && confirmationNumber && (
-            <motion.div
-              key="order-confirmation"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <OrderConfirmation
-                userId={currentUser}
-                orderId={orderId}
-                confirmationNumber={confirmationNumber}
-                onContinueShopping={() => setCurrentView('storefront')}
-              />
-            </motion.div>
-          )}
-          {currentView === 'account' && (
-            <motion.div
-              key="account"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <UserAccountPage
-                currentUserId={currentUser}
-                onSelectUser={(userId, persona) => {
-                  setCurrentUser(userId)
-                  if (persona) {
-                    setCurrentPersona(persona)
-                  }
-                  setCurrentView('storefront')
-                }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <ErrorBoundary>
+          <AnimatePresence mode="wait">
+            {currentView === 'storefront' && (
+              <motion.div
+                key="storefront"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorBoundary>
+                  <Storefront userId={currentUser} onStartChat={handleStartChatWithContext} />
+                </ErrorBoundary>
+              </motion.div>
+            )}
+            {currentView === 'trip-planner' && (
+              <motion.div
+                key="trip-planner"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorBoundary>
+                  <TripPlanner 
+                    userId={currentUser} 
+                    initialMessage={tripPlannerInitialMessage}
+                    onInitialMessageSent={() => setTripPlannerInitialMessage(undefined)}
+                  />
+                </ErrorBoundary>
+              </motion.div>
+            )}
+            {currentView === 'cart' && (
+              <motion.div
+                key="cart"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorBoundary>
+                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <CartView userId={currentUser} loyaltyTier={getLoyaltyTier(currentUser)} />
+                  </div>
+                </ErrorBoundary>
+              </motion.div>
+            )}
+            {currentView === 'checkout' && (
+              <motion.div
+                key="checkout"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorBoundary>
+                  <CheckoutPage
+                    userId={currentUser}
+                    loyaltyTier={getLoyaltyTier(currentUser)}
+                    onBack={() => setCurrentView('cart')}
+                    onOrderComplete={(orderId, confirmationNumber) => {
+                      setOrderId(orderId)
+                      setConfirmationNumber(confirmationNumber)
+                      setCurrentView('order-confirmation')
+                    }}
+                  />
+                </ErrorBoundary>
+              </motion.div>
+            )}
+            {currentView === 'order-confirmation' && orderId && confirmationNumber && (
+              <motion.div
+                key="order-confirmation"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorBoundary>
+                  <OrderConfirmation
+                    userId={currentUser}
+                    orderId={orderId}
+                    confirmationNumber={confirmationNumber}
+                    onContinueShopping={() => setCurrentView('storefront')}
+                  />
+                </ErrorBoundary>
+              </motion.div>
+            )}
+            {currentView === 'account' && (
+              <motion.div
+                key="account"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorBoundary>
+                  <UserAccountPage
+                    currentUserId={currentUser}
+                    onSelectUser={(userId, persona) => {
+                      setCurrentUser(userId)
+                      if (persona) {
+                        setCurrentPersona(persona)
+                      }
+                      setCurrentView('storefront')
+                    }}
+                  />
+                </ErrorBoundary>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </ErrorBoundary>
       </main>
 
       {/* Floating Search Button (only on very small screens where header might be cramped) */}
@@ -376,14 +435,19 @@ function App() {
       </button>
 
       {/* Search Panel */}
-      <SearchPanel
-        isOpen={searchPanelOpen}
-        onClose={() => setSearchPanelOpen(false)}
-        userId={currentUser}
-        onOpenTripPlanner={() => setCurrentView('trip-planner')}
-        initialMessage={chatInitialMessage}
-        onInitialMessageSent={() => setChatInitialMessage(undefined)}
-      />
+      <ErrorBoundary>
+        <SearchPanel
+          isOpen={searchPanelOpen}
+          onClose={() => setSearchPanelOpen(false)}
+          userId={currentUser}
+          onOpenTripPlanner={() => setCurrentView('trip-planner')}
+          initialMessage={chatInitialMessage}
+          onInitialMessageSent={() => setChatInitialMessage(undefined)}
+        />
+      </ErrorBoundary>
+
+      {/* Demo Overlay */}
+      <DemoOverlay isVisible={isDemoRunning} />
     </div>
   )
 }

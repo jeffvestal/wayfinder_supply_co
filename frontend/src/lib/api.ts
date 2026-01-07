@@ -182,7 +182,8 @@ export const api = {
   },
 
   async getProduct(id: string): Promise<any> {
-    const response = await fetch(`${API_URL}/api/products/${id}`);
+    const url = createApiUrl(`/api/products/${id}`);
+    const response = await fetch(url.toString());
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -217,7 +218,9 @@ export const api = {
   },
 
   async addToCart(userId: string, productId: string, quantity = 1): Promise<void> {
-    const response = await fetch(`${API_URL}/api/cart?user_id=${userId}`, {
+    const url = createApiUrl('/api/cart');
+    url.searchParams.set('user_id', userId);
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -234,7 +237,9 @@ export const api = {
   },
 
   async clearCart(userId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/cart?user_id=${userId}`, {
+    const url = createApiUrl('/api/cart');
+    url.searchParams.set('user_id', userId);
+    const response = await fetch(url.toString(), {
       method: 'DELETE',
     });
 
@@ -244,7 +249,9 @@ export const api = {
   },
 
   async removeFromCart(userId: string, productId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/cart/${productId}?user_id=${userId}`, {
+    const url = createApiUrl(`/api/cart/${productId}`);
+    url.searchParams.set('user_id', userId);
+    const response = await fetch(url.toString(), {
       method: 'DELETE',
     });
 
@@ -254,7 +261,10 @@ export const api = {
   },
 
   async updateCartQuantity(userId: string, productId: string, quantity: number): Promise<void> {
-    const response = await fetch(`${API_URL}/api/cart/${productId}?user_id=${userId}&quantity=${quantity}`, {
+    const url = createApiUrl(`/api/cart/${productId}`);
+    url.searchParams.set('user_id', userId);
+    url.searchParams.set('quantity', quantity.toString());
+    const response = await fetch(url.toString(), {
       method: 'PUT',
     });
 
@@ -277,7 +287,9 @@ export const api = {
   },
 
   async submitReview(productId: string, userId: string, rating: number, title: string, text: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/products/${productId}/reviews?user_id=${userId}`, {
+    const url = createApiUrl(`/api/products/${productId}/reviews`);
+    url.searchParams.set('user_id', userId);
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -295,7 +307,8 @@ export const api = {
   },
 
   async createOrder(userId: string, shippingAddress: any, paymentInfo: any): Promise<{ order_id: string; confirmation_number: string }> {
-    const response = await fetch(`${API_URL}/api/orders`, {
+    const url = createApiUrl('/api/orders');
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -358,7 +371,8 @@ export const api = {
   },
 
   async getUserPersonas(): Promise<{ personas: any[] }> {
-    const response = await fetch(`${API_URL}/api/users/personas`);
+    const url = createApiUrl('/api/users/personas');
+    const response = await fetch(url.toString());
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -374,7 +388,8 @@ export const api = {
     tag?: string
   ): Promise<void> {
     // Fire and forget - don't await, don't throw errors
-    fetch(`${API_URL}/api/clickstream`, {
+    const url = createApiUrl('/api/clickstream');
+    fetch(url.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -392,7 +407,8 @@ export const api = {
   },
 
   async clearUserHistory(userId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/clickstream/${userId}`, {
+    const url = createApiUrl(`/api/clickstream/${userId}`);
+    const response = await fetch(url.toString(), {
       method: 'DELETE',
     });
 
@@ -402,7 +418,8 @@ export const api = {
   },
 
   async getUserStats(userId: string): Promise<{ total_views: number; total_cart_adds: number; total_events: number }> {
-    const response = await fetch(`${API_URL}/api/clickstream/${userId}/stats`);
+    const url = createApiUrl(`/api/clickstream/${userId}/stats`);
+    const response = await fetch(url.toString());
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -472,7 +489,8 @@ export const api = {
     suggestedProducts: any[],
     otherRecommendedItems: string[]
   ): Promise<Response> {
-    const response = await fetch(`${API_URL}/api/reports/trip-pdf`, {
+    const url = createApiUrl('/api/reports/trip-pdf');
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

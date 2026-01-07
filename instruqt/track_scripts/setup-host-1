@@ -257,7 +257,7 @@ sleep 5
 echo "[Workshop] Checking service health..."
 
 # Check MCP server
-if curl -fsS http://localhost:8001/health >/dev/null 2>&1 || curl -fsS http://localhost:8001/ >/dev/null 2>&1; then
+if curl -fsS http://localhost:8002/health >/dev/null 2>&1 || curl -fsS http://localhost:8002/ >/dev/null 2>&1; then
   echo "[Workshop] ✓ MCP server is running"
 else
   echo "[Workshop] ⚠️  MCP server may not be responding yet"
