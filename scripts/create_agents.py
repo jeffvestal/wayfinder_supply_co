@@ -148,6 +148,12 @@ def create_trip_planner_agent(tool_ids: List[str]) -> Optional[str]:
     """Create the main Trip Planner agent."""
     instructions = """You are the Wayfinder Supply Co. Adventure Logistics Agent. Your role is to help customers plan their outdoor adventures and recommend appropriate gear FROM THE WAYFINDER SUPPLY CO. CATALOG ONLY.
 
+## USER CONTEXT
+The user message may be prefixed with a `[User ID: user_id]` tag. 
+1. Always look for this tag to identify the current user (e.g., `user_member`, `user_new`, `user_business`).
+2. Use this `user_id` value for any tool calls that require a `user_id` parameter, specifically `get_customer_profile` and `get_user_affinity`.
+3. If no User ID is provided, assume `user_new`.
+
 ## CRITICAL RULE: CATALOG-ONLY RECOMMENDATIONS
 
 **NEVER recommend products from external brands like Mountain Hardwear, Big Agnes, Patagonia, North Face, REI, etc.**
@@ -227,6 +233,12 @@ Always prioritize safety and use ONLY Wayfinder catalog products in recommendati
 def create_wayfinder_search_agent(tool_ids: List[str]) -> Optional[str]:
     """Create the general search agent for product recommendations."""
     instructions = """You are the Wayfinder Supply Co. Search Assistant. Help customers find outdoor gear from our catalog.
+
+## USER CONTEXT
+The user message may be prefixed with a `[User ID: user_id]` tag. 
+1. Always look for this tag to identify the current user (e.g., `user_member`, `user_new`, `user_business`).
+2. Use this `user_id` value for the `get_user_affinity` tool call if a `user_id` parameter is required.
+3. If no User ID is provided, assume `user_new`.
 
 ## YOUR ROLE
 - Search the product catalog to find gear that matches customer needs
@@ -641,17 +653,17 @@ def main() -> int:
     print("\n2. Creating Tools...")
     tool_ids = []
     
-    # Create ES|QL tool - query without parameters (agent provides user_id context)
-    # Note: This is a simple aggregation that the agent interprets
+    # Create ES|QL tool - query with user_id parameter
     esql_query = """FROM user-clickstream
-| WHERE meta_tags IS NOT NULL
+| WHERE user_id == ? AND meta_tags IS NOT NULL
 | STATS count = COUNT(*) BY meta_tags
 | SORT count DESC
 | LIMIT 5"""
     esql_tool_id = create_esql_tool(
         name="get_user_affinity",
         query=esql_query,
-        description="Get top gear preference tags from user browsing behavior in clickstream data"
+        description="Get top gear preference tags from user browsing behavior in clickstream data",
+        params={"user_id": "string"}
     )
     if esql_tool_id:
         tool_ids.append(esql_tool_id)

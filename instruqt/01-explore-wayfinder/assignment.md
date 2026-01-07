@@ -60,23 +60,26 @@ In this workshop, you'll explore how the system:
 
 2. **Browse Products**: Scroll through the product catalog and notice the categories
 
-3. **Try the Trip Planner**: Click **Trip Planner** in the navigation
-   - You'll see a message that the Trip Planner agent hasn't been created yet
-   - **This is expected!** In Challenge 4, you'll build the Trip Planner agent that powers this feature
-   - For now, observe how the UI is structured and ready for the agent you'll create
+3. **Try the Chat Concierge**: Click **Chat Concierge** in the navigation
+   - You'll see a message that the agent hasn't been created yet
+   - **This is expected!** In Challenge 4, you'll build the agent and workflows that power this feature
+   - For now, observe how the UI is structured and ready for the components you'll create
 
-4. **Watch the Agent Think**: Notice the **Thought Trace** panel on the right showing:
-   - Tool calls to check weather conditions
-   - Customer profile lookups
-   - Product searches
-   - How the agent orchestrates multiple data sources
+4. **Try the Trip Planner**: Click **Trip Planner** in the navigation
+   - You'll see a message that the Trip Planner agent hasn't been created yet
+   - **This is also expected!** This agent will also be created in Challenge 4
+   - Once built, you'll see the **Thought Trace** panel showing:
+     - Tool calls to check weather conditions
+     - Customer profile lookups
+     - Product searches
+     - How the agent orchestrates multiple data sources
 
 5. **Test Personalization**: Use the user switcher (top right) to change between:
    - **Jordan Explorer** - New user, no history
    - **Alex Hiker** - Platinum member, ultralight preference
    - **Casey Campground** - Business buyer, bulk orders
 
-   Notice how recommendations change based on user preferences and purchase history!
+   *Note: Full personalization will be visible once you complete the agents in Challenge 4*
 
 ---
 

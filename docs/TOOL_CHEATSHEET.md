@@ -29,8 +29,10 @@ Executes ES|QL queries directly:
   "type": "esql",
   "description": "Get top gear preference tags from user browsing behavior",
   "configuration": {
-    "query": "FROM user-clickstream | WHERE meta_tags IS NOT NULL | STATS count = COUNT(*) BY meta_tags | SORT count DESC | LIMIT 5",
-    "params": {}
+    "query": "FROM user-clickstream | WHERE user_id == ? AND meta_tags IS NOT NULL | STATS count = COUNT(*) BY meta_tags | SORT count DESC | LIMIT 5",
+    "params": {
+      "user_id": "string"
+    }
   }
 }
 ```
