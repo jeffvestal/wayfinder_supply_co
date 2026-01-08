@@ -663,7 +663,7 @@ def main() -> int:
         name="get_user_affinity",
         query=esql_query,
         description="Get top gear preference tags from user browsing behavior in clickstream data",
-        params={"user_id": {"type": "keyword"}}
+        params={"user_id": {"type": "keyword", "description": "The user ID to look up browsing history for"}}
     )
     if esql_tool_id:
         tool_ids.append(esql_tool_id)
