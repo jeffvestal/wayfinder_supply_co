@@ -1,13 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Product, ChatMessage, UserId } from '../types'
+import { Product, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
-import { getToolStatusMessage } from '../lib/constants'
-import { X, Search, Send, Loader2, ChevronRight, ChevronDown, MessageSquare, Zap, BookOpen, Settings, Database, Target, FileText, Plus, ShoppingCart, Check } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { X, Search, Send, Loader2, MessageSquare, Zap, BookOpen, Target } from 'lucide-react'
 import { ProductDetailModal } from './ProductDetailModal'
-
-type SearchMode = 'chat' | 'hybrid' | 'lexical'
+import { ChatMode } from './search/ChatMode'
+import { SearchMode } from './search/SearchMode'
+import { DemoMode } from './search/DemoMode'
+import { 
+  SearchMode as SearchModeType, 
+  ExtendedChatMessage, 
+  AgentStep, 
+  DemoQueryType,
+  DEMO_QUERIES 
+} from './search/types'
 
 interface SearchPanelProps {
   isOpen: boolean
@@ -18,48 +24,26 @@ interface SearchPanelProps {
   onOpenTripPlanner?: () => void
 }
 
-interface AgentStep {
-  type: 'reasoning' | 'tool_call';
-  reasoning?: string;
-  tool_call_id?: string;
-  tool_id?: string;
-  params?: any;
-  results?: any[];
-}
-
-interface ExtendedChatMessage extends ChatMessage {
-  steps?: AgentStep[];
-  status?: 'thinking' | 'working' | 'typing' | 'complete';
-}
-
-// Get current thinking status from trace events
-function getCurrentStatus(steps: AgentStep[], isLoading: boolean): string {
-  if (!isLoading) return ''
-  if (steps.length === 0) return 'Starting up...'
-  
-  const lastStep = steps[steps.length - 1]
-  if (lastStep.type === 'reasoning') {
-    return 'Thinking...'
-  } else if (lastStep.type === 'tool_call') {
-    return getToolStatusMessage(lastStep.tool_id || '')
-  }
-  return 'Working...'
-}
-
 export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner }: SearchPanelProps) {
-  const FALLBACK_PRODUCT_IMAGE =
-    "data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A//www.w3.org/2000/svg'%20width%3D'200'%20height%3D'200'%20viewBox%3D'0%200%20200%20200'%3E%3Crect%20width%3D'200'%20height%3D'200'%20fill%3D'%231f2937'/%3E%3Cpath%20d%3D'M70%2080h60l-6%2060H76z'%20fill%3D'%23374151'/%3E%3Cpath%20d%3D'M85%2080c0-8%206-14%2015-14s15%206%2015%2014'%20fill%3D'none'%20stroke%3D'%234b5563'%20stroke-width%3D'8'%20stroke-linecap%3D'round'/%3E%3Ctext%20x%3D'100'%20y%3D'165'%20text-anchor%3D'middle'%20font-family%3D'system-ui%2C%20-apple-system%2C%20Segoe%20UI%2C%20Roboto'%20font-size%3D'14'%20fill%3D'%239ca3af'%3ENo%20image%3C/text%3E%3C/svg%3E"
-  const [mode, setMode] = useState<SearchMode>('chat')
-  const [panelWidth, setPanelWidth] = useState(50) // Percentage of screen width
+  // UI State
+  const [mode, setMode] = useState<SearchModeType>('chat')
+  const [panelWidth, setPanelWidth] = useState(50)
   const [isDragging, setIsDragging] = useState(false)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(false)
+  
+  // Chat state
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([])
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
+  const [stepsExpanded, setStepsExpanded] = useState<Record<string, boolean>>({})
+  
+  // Search state
   const [searchResults, setSearchResults] = useState<Product[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isProductModalOpen, setIsProductModalOpen] = useState(false)
-  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
-  const [stepsExpanded, setStepsExpanded] = useState<Record<string, boolean>>({})
+  
+  // Demo state
   const [isDemoRunning, setIsDemoRunning] = useState(false)
   const [demoStep, setDemoStep] = useState<'intro' | 'lexical' | 'hybrid' | 'agentic' | 'complete'>('intro')
   const [selectedDemoQuery, setSelectedDemoQuery] = useState<DemoQueryType | null>(null)
@@ -67,123 +51,77 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const [demoHybridResults, setDemoHybridResults] = useState<Product[]>([])
   const [demoAgenticMessage, setDemoAgenticMessage] = useState<ExtendedChatMessage | null>(null)
   const [demoAgenticProducts, setDemoAgenticProducts] = useState<Product[]>([])
-  const [addingToCart, setAddingToCart] = useState<string | null>(null)
-  const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
   const [demoLexicalQuery, setDemoLexicalQuery] = useState<any>(null)
   const [demoLexicalRawHits, setDemoLexicalRawHits] = useState<any[]>([])
   const [demoHybridQuery, setDemoHybridQuery] = useState<any>(null)
   const [demoHybridRawHits, setDemoHybridRawHits] = useState<any[]>([])
   const [queryExpanded, setQueryExpanded] = useState<{ lexical: boolean; hybrid: boolean }>({ lexical: false, hybrid: false })
-  const [personalizationEnabled, setPersonalizationEnabled] = useState(false)
+  const [addingToCart, setAddingToCart] = useState<string | null>(null)
+  const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
+  
+  // Refs
   const dragStartX = useRef(0)
   const dragStartWidth = useRef(50)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialMessageSentRef = useRef(false)
 
-  // Demo query options - each highlights different search strengths
-  type DemoQueryType = 'keyword' | 'semantic' | 'usecase'
-
-  const DEMO_QUERIES: Record<DemoQueryType, { query: string; label: string; description: string; icon: string; winner: string }> = {
-    keyword: {
-      query: "ultralight backpacking tent",
-      label: "Keyword Match",
-      description: "Exact terms that BM25 handles well",
-      icon: "📝",
-      winner: "Lexical ≈ Hybrid"
-    },
-    semantic: {
-      query: "gear to keep my feet dry on slippery mountain trails",
-      label: "Conceptual",
-      description: "No exact keywords - semantic understanding needed",
-      icon: "💡",
-      winner: "Hybrid Wins"
-    },
-    usecase: {
-      query: "I'm planning a 3-day backpacking trip in Yosemite next month. What tent should I bring?",
-      label: "Task-Based",
-      description: "Complex intent requiring reasoning",
-      icon: "🎯",
-      winner: "Agent Excels"
-    }
-  }
-
-  // Get persona display name
-  const getPersonaName = (id: UserId) => {
-    const personas: Record<string, string> = {
-      'user_member': '👤 Sarah - Ultralight Hiker',
-      'user_business': '👔 Mike - Family Adventurer', 
-      'user_new': '🆕 New Visitor'
-    }
-    return personas[id] || id
-  }
-
   // Extract product IDs from agent tool results (Agent Builder returns "resource" format)
   const extractProductIdsFromSteps = (steps: AgentStep[]): string[] => {
     const productIds: string[] = []
-    const seenIds = new Set<string>()
-    
-    console.log('=== PRODUCT ID EXTRACTION ===')
-    console.log('Steps count:', steps.length)
     
     for (const step of steps) {
-      console.log('Step type:', step.type, 'tool_id:', step.tool_id)
-      
-      if (step.type === 'tool_call' && step.results && Array.isArray(step.results)) {
-        console.log('Tool results count:', step.results.length)
-        
+      if (step.type === 'tool_call' && step.results) {
         for (const result of step.results) {
-          // Handle Agent Builder "resource" format
-          // Structure: { type: "resource", data: { reference: { id, index }, partial: true, content: { highlights } } }
-          if (result.type === 'resource' && result.data?.reference?.id) {
-            const id = result.data.reference.id
-            console.log('Found resource ID:', id)
-            if (!seenIds.has(id)) {
-              seenIds.add(id)
-              productIds.push(id)
+          // Check for Agent Builder "resource" format with documents array
+          if (result?.content) {
+            try {
+              const content = typeof result.content === 'string' ? JSON.parse(result.content) : result.content
+              if (content.documents && Array.isArray(content.documents)) {
+                for (const doc of content.documents) {
+                  // Handle resource objects with id
+                  if (doc.id) {
+                    productIds.push(doc.id)
+                  }
+                  // Handle nested _source format
+                  if (doc._source?.id) {
+                    productIds.push(doc._source.id)
+                  }
+                }
+              }
+            } catch (e) {
+              // Not JSON, continue
             }
           }
-          // Also check for direct product objects (legacy/other formats)
-          else if (result.id && result.title) {
-            console.log('Found direct product:', result.id)
-            if (!seenIds.has(result.id)) {
-              seenIds.add(result.id)
-              productIds.push(result.id)
+          
+          // Direct results array with documents
+          if (Array.isArray(result)) {
+            for (const item of result) {
+              if (item?.id) productIds.push(item.id)
+              if (item?._source?.id) productIds.push(item._source.id)
             }
           }
         }
       }
     }
     
-    console.log('=== EXTRACTED PRODUCT IDS:', productIds.length, '===')
-    productIds.forEach(id => console.log('  -', id))
-    
-    return productIds.slice(0, 5) // Limit to top 5
+    return [...new Set(productIds)].slice(0, 3) // Unique, max 3
   }
   
-  // Fetch full product details for extracted IDs
-  const fetchProductsFromIds = async (ids: string[]): Promise<Product[]> => {
-    if (ids.length === 0) return []
-    
-    console.log('=== FETCHING PRODUCTS ===')
+  // Fetch product details from IDs
+  const fetchProductsFromIds = async (productIds: string[]): Promise<Product[]> => {
     const products: Product[] = []
-    
-    // Fetch products in parallel
-    const results = await Promise.allSettled(
-      ids.map(id => api.getProduct(id))
-    )
-    
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value) {
-        console.log('Fetched product:', result.value.title)
-        products.push(result.value as Product)
+    for (const id of productIds) {
+      try {
+        const product = await api.getProduct(id)
+        if (product) products.push(product)
+      } catch (e) {
+        console.error('Failed to fetch product:', id, e)
       }
     }
-    
-    console.log('=== FETCHED PRODUCTS:', products.length, '===')
     return products
   }
-  
-  // Helper to extract IDs and fetch products in one call
+
+  // Combined extraction helper
   const extractAndFetchProducts = async (steps: AgentStep[]) => {
     const productIds = extractProductIdsFromSteps(steps)
     if (productIds.length > 0) {
@@ -199,9 +137,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setAddingToCart(product.id)
     try {
       await api.addToCart(userId, product.id)
-      // Show success state
       setJustAddedToCart(product.id)
-      // Reset after animation
       setTimeout(() => setJustAddedToCart(null), 1500)
     } catch (error) {
       console.error('Failed to add to cart:', error)
@@ -214,24 +150,15 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   useEffect(() => {
     const extractProducts = async () => {
       if (demoAgenticMessage?.status === 'complete' && demoAgenticMessage?.steps) {
-        console.log('Demo message complete, attempting product extraction')
-        console.log('Steps:', JSON.stringify(demoAgenticMessage.steps, null, 2))
-        
-        // Extract product IDs from Agent Builder "resource" format
         const productIds = extractProductIdsFromSteps(demoAgenticMessage.steps)
-        console.log('Extracted product IDs:', productIds)
-        
         if (productIds.length > 0) {
-          // Fetch full product details
           const products = await fetchProductsFromIds(productIds)
-          console.log('Fetched products:', products)
           if (products.length > 0) {
             setDemoAgenticProducts(products)
           }
         }
       }
     }
-    
     extractProducts()
   }, [demoAgenticMessage?.status, demoAgenticMessage?.steps])
 
@@ -254,7 +181,6 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   useEffect(() => {
     if (!isOpen) {
       initialMessageSentRef.current = false
-      // Reset demo state when closed
       setIsDemoRunning(false)
       setDemoStep('intro')
       setSelectedDemoQuery(null)
@@ -313,17 +239,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     })
   }
 
-  const updateAssistantMessage = (
-    messageId: string, 
-    content: string, 
-    steps: AgentStep[], 
-    status: 'thinking' | 'working' | 'typing' | 'complete'
-  ) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId 
-        ? { ...msg, content, steps, status }
-        : msg
-    ))
+  const toggleStepsExpanded = (messageId: string) => {
+    setStepsExpanded(prev => ({ ...prev, [messageId]: !prev[messageId] }))
   }
 
   const sendMessage = async (messageText: string) => {
@@ -354,20 +271,18 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     try {
       let currentSteps: AgentStep[] = []
       let currentContent = ''
-      
-      // Use generic user when personalization is off
-      const chatUserIdForPersonalization = personalizationEnabled ? userId : 'user_new'
 
-      await api.streamChat(messageText.trim(), chatUserIdForPersonalization, (event: StreamEvent) => {
+      await api.streamChat(messageText, userId, (event: StreamEvent) => {
         const { type, data } = event
 
         switch (type) {
           case 'reasoning':
-            currentSteps = [...currentSteps, {
-              type: 'reasoning',
-              reasoning: data.reasoning
-            }]
-            updateAssistantMessage(assistantMessageId, currentContent, currentSteps, 'thinking')
+            currentSteps = [...currentSteps, { type: 'reasoning', reasoning: data.reasoning }]
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: currentContent, steps: currentSteps, status: 'thinking' }
+                : msg
+            ))
             break
 
           case 'tool_call':
@@ -381,7 +296,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                 params: data.params,
                 results: []
               }]
-              updateAssistantMessage(assistantMessageId, currentContent, currentSteps, 'working')
+              setMessages(prev => prev.map(msg => 
+                msg.id === assistantMessageId 
+                  ? { ...msg, content: currentContent, steps: currentSteps, status: 'working' }
+                  : msg
+              ))
             }
             break
 
@@ -392,78 +311,93 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                 ? { ...step, results: data.results }
                 : step
             )
-            updateAssistantMessage(assistantMessageId, currentContent, currentSteps, 'working')
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: currentContent, steps: currentSteps, status: 'working' }
+                : msg
+            ))
             break
 
           case 'message_chunk':
             currentContent += data.text_chunk || ''
-            updateAssistantMessage(assistantMessageId, currentContent, currentSteps, 'typing')
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: currentContent, steps: currentSteps, status: 'typing' }
+                : msg
+            ))
             break
 
           case 'message_complete':
-            currentContent = data.message_content || currentContent
-            updateAssistantMessage(assistantMessageId, currentContent, currentSteps, 'complete')
-            break
-
           case 'completion':
-            updateAssistantMessage(assistantMessageId, currentContent, currentSteps, 'complete')
+            currentContent = data.message_content || currentContent
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: currentContent, steps: currentSteps, status: 'complete' }
+                : msg
+            ))
             break
 
           case 'error':
             currentContent = `Error: ${data.error}`
-            updateAssistantMessage(assistantMessageId, currentContent, currentSteps, 'complete')
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: currentContent, steps: currentSteps, status: 'complete' }
+                : msg
+            ))
             break
         }
       })
     } catch (error) {
       console.error('Chat error:', error)
-      updateAssistantMessage(
-        assistantMessageId, 
-        `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`, 
-        [], 
-        'complete'
-      )
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessageId 
+          ? { ...msg, content: `Error: ${error instanceof Error ? error.message : 'Failed'}`, status: 'complete' }
+          : msg
+      ))
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleSearch = async (query: string, searchMode: SearchMode) => {
-    if (!query.trim() || isLoading) return
-
-    setIsLoading(true)
-    setSearchResults([])
-
-    try {
-      let results: { products: Product[]; total: number; personalized?: boolean }
-      const userIdForSearch = personalizationEnabled ? userId : undefined
-      if (searchMode === 'lexical') {
-        results = await api.lexicalSearch(query, 10, userIdForSearch)
-      } else {
-        results = await api.hybridSearch(query, 10, userIdForSearch)
-      }
-      setSearchResults(results.products)
-    } catch (error) {
-      console.error(`Search error (${searchMode}):`, error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (mode === 'chat') {
-      await sendMessage(input)
+      sendMessage(input)
     } else {
-      await handleSearch(input, mode)
+      // Hybrid or lexical search
+      handleSearch(input)
     }
+  }
+
+  const handleSearch = async (query: string) => {
+    if (!query.trim() || isLoading) return
+    
+    setIsLoading(true)
+    setInput('')
+    const personalizedUserId = personalizationEnabled ? userId : undefined
+
+    try {
+      const results = mode === 'hybrid' 
+        ? await api.hybridSearch(query, 10, personalizedUserId)
+        : await api.lexicalSearch(query, 10, personalizedUserId)
+      setSearchResults(results.products)
+    } catch (error) {
+      console.error('Search error:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleProductClick = (product: Product) => {
+    setSelectedProduct(product)
+    setIsProductModalOpen(true)
   }
 
   // Demo functionality
   const runDemo = async (queryType: DemoQueryType) => {
     setSelectedDemoQuery(queryType)
     setIsDemoRunning(true)
-    setDemoStep('lexical')  // Skip intro, go straight to lexical
+    setDemoStep('lexical')
     setDemoLexicalResults([])
     setDemoHybridResults([])
     setDemoAgenticMessage(null)
@@ -476,31 +410,28 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setMessages([])
     setSearchResults([])
     
-    // Start the lexical search immediately
     const demoQuery = DEMO_QUERIES[queryType].query
     const personalizedUserId = personalizationEnabled ? userId : undefined
     
-      setIsLoading(true)
-      try {
+    setIsLoading(true)
+    try {
       const results = await api.lexicalSearch(demoQuery, 10, personalizedUserId)
-        setDemoLexicalResults(results.products)
-        setDemoLexicalQuery(results.es_query || null)
-        setDemoLexicalRawHits(results.raw_hits || [])
-      } catch (error) {
-        console.error('Demo lexical search failed:', error)
-      } finally {
-        setIsLoading(false)
-      }
+      setDemoLexicalResults(results.products)
+      setDemoLexicalQuery(results.es_query || null)
+      setDemoLexicalRawHits(results.raw_hits || [])
+    } catch (error) {
+      console.error('Demo lexical search failed:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const advanceDemo = async () => {
     if (isLoading || !selectedDemoQuery) return
 
     const demoQuery = DEMO_QUERIES[selectedDemoQuery].query
-    
-    // User ID for personalized searches (only pass when enabled)
     const personalizedUserId = personalizationEnabled ? userId : undefined
-    const chatUserId = personalizationEnabled ? userId : 'user_new'  // Use generic user when personalization off
+    const chatUserId = personalizationEnabled ? userId : 'user_new'
     
     if (demoStep === 'lexical') {
       setDemoStep('hybrid')
@@ -539,10 +470,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
 
           switch (type) {
             case 'reasoning':
-              currentSteps = [...currentSteps, {
-                type: 'reasoning',
-                reasoning: data.reasoning
-              }]
+              currentSteps = [...currentSteps, { type: 'reasoning', reasoning: data.reasoning }]
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'thinking' } : null)
               break
 
@@ -577,19 +505,9 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               break
 
             case 'message_complete':
+            case 'completion':
               currentContent = data.message_content || currentContent
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'complete' } : null)
-              // Product extraction handled by useEffect watching for 'complete' status
-              console.log('Message complete, extracting products from steps:', currentSteps)
-              // Async extraction
-              extractAndFetchProducts(currentSteps)
-              break
-
-            case 'completion':
-              setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'complete' } : null)
-              // Product extraction handled by useEffect watching for 'complete' status
-              console.log('Completion event, extracting products from steps:', currentSteps)
-              // Async extraction
               extractAndFetchProducts(currentSteps)
               break
 
@@ -599,7 +517,6 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               break
           }
         })
-        // Also extract products after stream completes (async)
         extractAndFetchProducts(currentSteps)
       } catch (error) {
         console.error('Demo agentic search failed:', error)
@@ -613,12 +530,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     }
   }
 
-  const handleProductClick = (product: Product) => {
-    setSelectedProduct(product)
-    setIsProductModalOpen(true)
-  }
-
-  const getModeBgClass = (currentMode: SearchMode) => {
+  const getModeBgClass = (currentMode: SearchModeType) => {
     switch (currentMode) {
       case 'chat': return 'bg-slate-900'
       case 'hybrid': return 'bg-gradient-to-br from-slate-900 to-cyan-950/30'
@@ -627,556 +539,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     }
   }
 
-  const renderStep = (step: AgentStep, index: number, messageId: string) => {
-    const stepId = `${messageId}-${index}`
-    const isExpanded = expandedSteps.has(stepId)
-
-    return (
-      <div key={index} className="bg-primary/10 rounded-lg border border-primary/20 overflow-hidden">
-        <button
-          onClick={() => toggleStep(stepId)}
-          className="w-full flex items-center justify-between p-2 hover:bg-primary/20 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            {step.type === 'reasoning' ? (
-              <>
-                <Settings className="h-3 w-3 text-primary" />
-                <span className="text-xs font-medium text-primary">Reasoning</span>
-              </>
-            ) : (
-              <>
-                <Database className="h-3 w-3 text-primary" />
-                <span className="text-xs font-medium text-primary">{step.tool_id || 'Tool Call'}</span>
-              </>
-            )}
-          </div>
-          {isExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-primary" />}
-        </button>
-
-        {isExpanded && (
-          <div className="border-t border-primary/20 p-3 space-y-3 bg-primary/5">
-            {step.type === 'reasoning' && step.reasoning && (
-              <div>
-                <div className="text-xs font-semibold text-primary/70 mb-2 uppercase tracking-wide">Agent Thinking:</div>
-                <div className="bg-slate-800 rounded-md p-3">
-                  <div className="text-xs text-gray-300 leading-relaxed">{step.reasoning}</div>
-                </div>
-              </div>
-            )}
-
-            {step.type === 'tool_call' && step.params && Object.keys(step.params).length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-primary/70 mb-2 uppercase tracking-wide">Parameters:</div>
-                <div className="bg-slate-800 rounded-md p-3">
-                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
-                    {JSON.stringify(step.params, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            )}
-
-            {step.type === 'tool_call' && step.results && step.results.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-primary/70 mb-2 uppercase tracking-wide">Results:</div>
-                {step.results.map((result: any, resultIdx: number) => (
-                  <div key={resultIdx} className="bg-slate-800 rounded-md p-3 mb-2">
-                    <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-32 overflow-y-auto">
-                      {JSON.stringify(result, null, 2)}
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  const renderDemoContent = () => {
-    return (
-      <div className="space-y-6">
-        {/* Demo Query Header - only show when a query is selected */}
-        {selectedDemoQuery && (
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-          <h3 className="text-lg font-semibold text-white mb-2">🎯 Demo Query</h3>
-            <p className="text-primary font-medium mb-2">"{DEMO_QUERIES[selectedDemoQuery].query}"</p>
-            <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
-              <span className="bg-slate-700 px-2 py-1 rounded">{DEMO_QUERIES[selectedDemoQuery].icon} {DEMO_QUERIES[selectedDemoQuery].label}</span>
-              <span>→</span>
-              <span className="text-cyan-400">{DEMO_QUERIES[selectedDemoQuery].winner}</span>
-            </div>
-          <div className="flex flex-col gap-2 text-sm text-gray-400 border-t border-slate-700 pt-3 mt-3">
-            <div className="flex items-center gap-2">
-              <span>Persona:</span>
-              <span className="text-cyan-400 font-medium">{getPersonaName(userId)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span>Personalization:</span>
-              {personalizationEnabled ? (
-                <span className="flex items-center gap-1 text-green-400 font-medium">
-                  <Target className="w-3 h-3" /> ON - results boosted by browsing history
-                </span>
-              ) : (
-                <span className="text-gray-500">OFF - generic results</span>
-              )}
-            </div>
-          </div>
-        </div>
-        )}
-
-        {/* Demo Selection - show when no query selected yet */}
-        {demoStep === 'intro' && !selectedDemoQuery && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-slate-800/50 rounded-xl p-6 border border-slate-700"
-          >
-            <div className="text-center mb-6">
-            <Zap className="w-12 h-12 text-primary mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-white mb-2">Choose a Demo Scenario</h3>
-              <p className="text-gray-400">
-                Each scenario highlights different search strengths
-            </p>
-            </div>
-            
-            <div className="space-y-3">
-              {/* Keyword Demo - Lexical shines */}
-            <button
-                onClick={() => runDemo('keyword')}
-                className="w-full text-left bg-amber-950/30 hover:bg-amber-900/40 border border-amber-700/50 hover:border-amber-600 rounded-xl p-4 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{DEMO_QUERIES.keyword.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white">{DEMO_QUERIES.keyword.label}</span>
-                      <span className="text-xs bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded-full">{DEMO_QUERIES.keyword.winner}</span>
-                    </div>
-                    <p className="text-sm text-gray-400 mt-1 truncate">"{DEMO_QUERIES.keyword.query}"</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-amber-400 transition-colors flex-shrink-0" />
-                </div>
-            </button>
-
-              {/* Semantic Demo - Hybrid shines */}
-              <button
-                onClick={() => runDemo('semantic')}
-                className="w-full text-left bg-cyan-950/30 hover:bg-cyan-900/40 border border-cyan-700/50 hover:border-cyan-600 rounded-xl p-4 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{DEMO_QUERIES.semantic.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white">{DEMO_QUERIES.semantic.label}</span>
-                      <span className="text-xs bg-cyan-900/50 text-cyan-300 px-2 py-0.5 rounded-full">{DEMO_QUERIES.semantic.winner}</span>
-                    </div>
-                    <p className="text-sm text-gray-400 mt-1 truncate">"{DEMO_QUERIES.semantic.query}"</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-cyan-400 transition-colors flex-shrink-0" />
-                </div>
-              </button>
-
-              {/* Use Case Demo - Agent shines */}
-              <button
-                onClick={() => runDemo('usecase')}
-                className="w-full text-left bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 rounded-xl p-4 transition-all group"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{DEMO_QUERIES.usecase.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white">{DEMO_QUERIES.usecase.label}</span>
-                      <span className="text-xs bg-primary/30 text-primary px-2 py-0.5 rounded-full">{DEMO_QUERIES.usecase.winner}</span>
-                    </div>
-                    <p className="text-sm text-gray-400 mt-1 truncate">"{DEMO_QUERIES.usecase.query}"</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-primary transition-colors flex-shrink-0" />
-                </div>
-              </button>
-            </div>
-            
-            <div className="mt-6 pt-4 border-t border-slate-700">
-              <p className="text-xs text-gray-500 text-center mb-3">
-                Each demo runs: Lexical → Hybrid → Agentic search
-              </p>
-              <ul className="text-xs text-gray-400 space-y-1">
-                <li className="flex items-center gap-2"><BookOpen className="w-3 h-3 text-amber-400" /> <strong>Lexical:</strong> BM25 keyword matching</li>
-                <li className="flex items-center gap-2"><Search className="w-3 h-3 text-cyan-400" /> <strong>Hybrid:</strong> Semantic + BM25 combined</li>
-                <li className="flex items-center gap-2"><MessageSquare className="w-3 h-3 text-primary" /> <strong>Agentic:</strong> AI reasoning with tools</li>
-              </ul>
-            </div>
-          </motion.div>
-        )}
-
-        {(demoStep === 'lexical' || demoStep === 'hybrid' || demoStep === 'agentic' || demoStep === 'complete') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`rounded-xl p-4 border ${demoStep === 'lexical' ? 'bg-amber-950/30 border-amber-700' : 'bg-slate-800/30 border-slate-700'}`}
-          >
-            <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-amber-400" /> Lexical Search
-              <span className="text-xs bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded-full">BM25</span>
-            </h4>
-            {isLoading && demoStep === 'lexical' ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-                <span className="ml-2 text-gray-400">Running keyword search...</span>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Show Query - expandable */}
-                {demoLexicalQuery && demoLexicalRawHits.length > 0 && (
-                  <>
-                    <button
-                      onClick={() => setQueryExpanded(prev => ({ ...prev, lexical: !prev.lexical }))}
-                      className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
-                    >
-                      {queryExpanded.lexical ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                      <span>Show Query (2 sections)</span>
-                    </button>
-                    
-                    {queryExpanded.lexical && (
-                      <div className="space-y-2">
-                        {/* Query Box */}
-                        <div className="bg-slate-800/50 rounded-lg border border-amber-700/30 overflow-hidden">
-                          <div className="px-3 py-2 border-b border-amber-700/30 flex items-center gap-2">
-                            <Database className="w-4 h-4 text-amber-400" />
-                            <span className="text-xs font-medium text-amber-400 uppercase tracking-wide">QUERY</span>
-                          </div>
-                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-48 overflow-y-auto">
-                            {JSON.stringify(demoLexicalQuery, null, 2)}
-                          </pre>
-                        </div>
-                        
-                        {/* Top Results Box */}
-                        <div className="bg-slate-800/50 rounded-lg border border-amber-700/30 overflow-hidden">
-                          <div className="px-3 py-2 border-b border-amber-700/30 flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-amber-400" />
-                            <span className="text-xs font-medium text-amber-400 uppercase tracking-wide">TOP 3 RESPONSE DOCS</span>
-                          </div>
-                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">
-                            {JSON.stringify(demoLexicalRawHits, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-                
-                {/* Product Results */}
-                <div className="space-y-2">
-                  {demoLexicalResults.length === 0 ? (
-                    <p className="text-gray-500 text-sm">Waiting for search...</p>
-                  ) : (
-                    <>
-                      {demoLexicalResults.slice(0, 3).map((product) => (
-                        <div
-                          key={product.id}
-                          className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 cursor-pointer hover:border-amber-600/50 transition-colors"
-                          onClick={() => handleProductClick(product)}
-                        >
-                          <h5 className="font-medium text-white text-sm">{product.title}</h5>
-                          <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
-                        </div>
-                      ))}
-                      {demoLexicalResults.length > 3 && (
-                        <p className="text-xs text-gray-500">+{demoLexicalResults.length - 3} more results</p>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {(demoStep === 'hybrid' || demoStep === 'agentic' || demoStep === 'complete') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`rounded-xl p-4 border ${demoStep === 'hybrid' ? 'bg-cyan-950/30 border-cyan-700' : 'bg-slate-800/30 border-slate-700'}`}
-          >
-            <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-              <Search className="w-5 h-5 text-cyan-400" /> Hybrid Search
-              <span className="text-xs bg-cyan-900/50 text-cyan-300 px-2 py-0.5 rounded-full">Semantic + BM25</span>
-            </h4>
-            {isLoading && demoStep === 'hybrid' ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
-                <span className="ml-2 text-gray-400">Running hybrid search...</span>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Show Query - expandable */}
-                {demoHybridQuery && demoHybridRawHits.length > 0 && (
-                  <>
-                    <button
-                      onClick={() => setQueryExpanded(prev => ({ ...prev, hybrid: !prev.hybrid }))}
-                      className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
-                    >
-                      {queryExpanded.hybrid ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                      <span>Show Query (2 sections)</span>
-                    </button>
-                    
-                    {queryExpanded.hybrid && (
-                      <div className="space-y-2">
-                        {/* Query Box */}
-                        <div className="bg-slate-800/50 rounded-lg border border-cyan-700/30 overflow-hidden">
-                          <div className="px-3 py-2 border-b border-cyan-700/30 flex items-center gap-2">
-                            <Database className="w-4 h-4 text-cyan-400" />
-                            <span className="text-xs font-medium text-cyan-400 uppercase tracking-wide">QUERY</span>
-                          </div>
-                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-48 overflow-y-auto">
-                            {JSON.stringify(demoHybridQuery, null, 2)}
-                          </pre>
-                        </div>
-                        
-                        {/* Top Results Box */}
-                        <div className="bg-slate-800/50 rounded-lg border border-cyan-700/30 overflow-hidden">
-                          <div className="px-3 py-2 border-b border-cyan-700/30 flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-cyan-400" />
-                            <span className="text-xs font-medium text-cyan-400 uppercase tracking-wide">TOP 3 RESPONSE DOCS</span>
-                          </div>
-                          <pre className="p-3 text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">
-                            {JSON.stringify(demoHybridRawHits, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-                
-                {/* Product Results */}
-                <div className="space-y-2">
-                  {demoHybridResults.length === 0 ? (
-                    <p className="text-gray-500 text-sm">Waiting for search...</p>
-                  ) : (
-                    <>
-                      {demoHybridResults.slice(0, 3).map((product) => (
-                        <div
-                          key={product.id}
-                          className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 cursor-pointer hover:border-cyan-600/50 transition-colors"
-                          onClick={() => handleProductClick(product)}
-                        >
-                          <h5 className="font-medium text-white text-sm">{product.title}</h5>
-                          <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
-                        </div>
-                      ))}
-                      {demoHybridResults.length > 3 && (
-                        <p className="text-xs text-gray-500">+{demoHybridResults.length - 3} more results</p>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {(demoStep === 'agentic' || demoStep === 'complete') && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-xl p-4 border bg-primary/10 border-primary/30"
-          >
-            <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-primary" /> Agentic Search
-              <span className="text-xs bg-primary/30 text-primary px-2 py-0.5 rounded-full">AI + Tools</span>
-            </h4>
-            {demoAgenticMessage ? (
-              <div className="space-y-3">
-                {/* Status */}
-                {demoAgenticMessage.status && demoAgenticMessage.status !== 'complete' && (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    <span className="text-sm text-primary font-medium">
-                      {getCurrentStatus(demoAgenticMessage.steps || [], true)}
-                    </span>
-                  </div>
-                )}
-                
-                {/* Steps */}
-                {demoAgenticMessage.steps && demoAgenticMessage.steps.length > 0 && (
-                  <div className="space-y-1">
-                    <button
-                      onClick={() => setStepsExpanded(prev => ({ ...prev, 'demo': !prev['demo'] }))}
-                      className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300"
-                    >
-                      {stepsExpanded['demo'] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                      <span>Thought Trace ({demoAgenticMessage.steps.filter(s => s.reasoning || s.tool_id).length} steps)</span>
-                    </button>
-                    {stepsExpanded['demo'] && (
-                      <div className="space-y-1 mt-2">
-                        {demoAgenticMessage.steps
-                          .filter(step => step.reasoning || (step.tool_id && step.params))
-                          .map((step, idx) => renderStep(step, idx, 'demo'))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Product Cards with Intro Text */}
-                {demoAgenticProducts.length > 0 && (
-                  <div className="space-y-3">
-                    {/* Intro text extracted from agent response */}
-                    {demoAgenticMessage.content && (
-                      <p className="text-sm text-gray-300">
-                        {/* Extract first sentence/intro before product listings */}
-                        {demoAgenticMessage.content.split(/\n\n|\*\*[A-Z]/)[0].replace(/[*#]/g, '').trim()}
-                      </p>
-                    )}
-                    
-                    <div className="text-xs font-semibold text-primary/70 uppercase tracking-wide">Recommended Products</div>
-                    <div className="grid gap-2">
-                      {demoAgenticProducts.map((product) => (
-                        <div
-                          key={product.id}
-                          className="flex gap-3 bg-slate-800/80 rounded-lg p-3 border border-primary/20 hover:border-primary/40 transition-colors"
-                        >
-                          {/* Product Image */}
-                          <div className="flex-shrink-0 w-14 h-14 bg-slate-700 rounded-lg overflow-hidden">
-                            {product.image_url ? (
-                              <img
-                                src={product.image_url}
-                                alt={product.title}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = FALLBACK_PRODUCT_IMAGE
-                                }}
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-500">
-                                <ShoppingCart className="w-5 h-5" />
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Product Info with Description */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <h5 
-                                  className="font-medium text-white text-sm cursor-pointer hover:text-primary transition-colors"
-                                  onClick={() => handleProductClick(product)}
-                                >
-                                  {product.title}
-                                </h5>
-                                <p className="text-xs text-primary font-medium">${product.price?.toFixed(2)}</p>
-                              </div>
-                              {/* Add to Cart Button */}
-                              <button
-                                onClick={() => handleAddToCart(product)}
-                                disabled={addingToCart === product.id || justAddedToCart === product.id}
-                                className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 text-white text-xs font-medium rounded transition-all duration-300 ${
-                                  justAddedToCart === product.id 
-                                    ? 'bg-green-500 scale-110 animate-pulse' 
-                                    : 'bg-primary hover:bg-primary-dark disabled:opacity-50'
-                                }`}
-                              >
-                                {addingToCart === product.id ? (
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : justAddedToCart === product.id ? (
-                                  <Check className="w-3 h-3" />
-                                ) : (
-                                  <Plus className="w-3 h-3" />
-                                )}
-                                <span>{justAddedToCart === product.id ? 'Added!' : 'Add'}</span>
-                              </button>
-                            </div>
-                            {/* Product Description - truncated to 2 lines */}
-                            {product.description && (
-                              <p className="text-xs text-gray-400 mt-1 line-clamp-2">{product.description}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Response Text - only show if NO products (fallback) */}
-                {demoAgenticMessage.content && demoAgenticProducts.length === 0 && (
-                  <div className="bg-slate-800/50 rounded-lg p-3">
-                    <div className="prose prose-invert prose-sm max-w-none text-gray-300">
-                      <ReactMarkdown>{demoAgenticMessage.content}</ReactMarkdown>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">Waiting for agent response...</p>
-            )}
-          </motion.div>
-        )}
-
-        {demoStep !== 'intro' && demoStep !== 'complete' && (
-          <div className="flex justify-center">
-            <button
-              onClick={advanceDemo}
-              disabled={isLoading}
-              className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 flex items-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  {demoStep === 'lexical' && 'Show Hybrid →'}
-                  {demoStep === 'hybrid' && 'Show Agentic →'}
-                  {demoStep === 'agentic' && 'Complete Demo'}
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-        {demoStep === 'complete' && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-gradient-to-r from-primary/20 to-cyan-500/20 rounded-xl p-6 border border-primary/30 text-center"
-          >
-            <h3 className="text-xl font-bold text-white mb-2">✨ Demo Complete!</h3>
-            <p className="text-gray-300 mb-4">
-              Notice how agentic search provides context-aware recommendations with reasoning.
-            </p>
-            <div className="flex gap-3 justify-center">
-            <button
-              onClick={() => {
-                setIsDemoRunning(false)
-                  setSelectedDemoQuery(null)
-                  setDemoStep('intro')
-              }}
-              className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg transition-colors"
-            >
-                ← Try Another Demo
-            </button>
-              <button
-                onClick={() => {
-                  setIsDemoRunning(false)
-                  setSelectedDemoQuery(null)
-                  setMode('chat')
-                }}
-                className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                Start Chatting →
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop - clicking closes panel */}
+          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1206,7 +573,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               <div className="flex items-center justify-between p-4 border-b border-slate-700">
                 <h2 className="text-xl font-display font-bold text-white">Search & Chat</h2>
                 <div className="flex items-center gap-2">
-                  {/* Personalization Toggle - always visible */}
+                  {/* Personalization Toggle */}
                   <button
                     onClick={() => setPersonalizationEnabled(!personalizationEnabled)}
                     className={`px-3 py-1.5 text-sm rounded-lg transition-all flex items-center gap-1.5 ${
@@ -1214,7 +581,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                         ? 'bg-green-600 text-white shadow-md shadow-green-500/30'
                         : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
                     }`}
-                    title={personalizationEnabled ? 'Personalization ON - results tailored to browsing history' : 'Personalization OFF - generic results'}
+                    title={personalizationEnabled ? 'Personalization ON' : 'Personalization OFF'}
                   >
                     <Target className={`w-4 h-4 ${personalizationEnabled ? 'animate-pulse' : ''}`} />
                     <span className="hidden sm:inline">{personalizationEnabled ? 'Personal' : 'Generic'}</span>
@@ -1275,134 +642,66 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               {/* Content Area */}
               <div className="flex-1 overflow-y-auto p-4">
                 {isDemoRunning ? (
-                  renderDemoContent()
+                  <DemoMode
+                    userId={userId}
+                    isLoading={isLoading}
+                    personalizationEnabled={personalizationEnabled}
+                    demoStep={demoStep}
+                    selectedDemoQuery={selectedDemoQuery}
+                    demoLexicalResults={demoLexicalResults}
+                    demoLexicalQuery={demoLexicalQuery}
+                    demoLexicalRawHits={demoLexicalRawHits}
+                    demoHybridResults={demoHybridResults}
+                    demoHybridQuery={demoHybridQuery}
+                    demoHybridRawHits={demoHybridRawHits}
+                    demoAgenticMessage={demoAgenticMessage}
+                    demoAgenticProducts={demoAgenticProducts}
+                    queryExpanded={queryExpanded}
+                    stepsExpanded={stepsExpanded}
+                    expandedSteps={expandedSteps}
+                    addingToCart={addingToCart}
+                    justAddedToCart={justAddedToCart}
+                    onRunDemo={runDemo}
+                    onAdvanceDemo={advanceDemo}
+                    onProductClick={handleProductClick}
+                    onAddToCart={handleAddToCart}
+                    onToggleQueryExpanded={(type) => setQueryExpanded(prev => ({ ...prev, [type]: !prev[type] }))}
+                    onToggleStepsExpanded={toggleStepsExpanded}
+                    onToggleStep={toggleStep}
+                    onExitDemo={() => {
+                      setIsDemoRunning(false)
+                      setSelectedDemoQuery(null)
+                      setDemoStep('intro')
+                    }}
+                    onStartChat={() => {
+                      setIsDemoRunning(false)
+                      setSelectedDemoQuery(null)
+                      setMode('chat')
+                    }}
+                  />
                 ) : (
                   <>
                     {/* Chat Mode */}
                     {mode === 'chat' && (
-                      <div className="space-y-4">
-                        {messages.length === 0 ? (
-                          <div className="flex items-center justify-center h-64 text-center">
-                            <div>
-                              <MessageSquare className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                              <h3 className="text-lg font-semibold mb-2 text-white">Start a Conversation</h3>
-                              <p className="text-gray-400 text-sm">
-                                Ask about gear, get recommendations, or plan your trip
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          messages.map((message) => (
-                            <motion.div
-                              key={message.id}
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                            >
-                              <div
-                                className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                                  message.role === 'user'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-slate-800 text-gray-100'
-                                }`}
-                              >
-                                {/* Status indicator */}
-                                {message.role === 'assistant' && message.status && message.status !== 'complete' && (
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                    <span className="text-xs text-primary font-medium">
-                                      {getCurrentStatus(message.steps || [], true)}
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* Agent Steps */}
-                                {message.steps && message.steps.length > 0 && (
-                                  <div className="mb-3">
-                                    <button
-                                      onClick={() => setStepsExpanded(prev => ({ ...prev, [message.id]: !prev[message.id] }))}
-                                      className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300"
-                                    >
-                                      {stepsExpanded[message.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                      <span>Thought Trace ({message.steps.filter(s => s.reasoning || s.tool_id).length})</span>
-                                    </button>
-                                    {stepsExpanded[message.id] && (
-                                      <div className="space-y-1 mt-2">
-                                        {message.steps
-                                          .filter(step => step.reasoning || (step.tool_id && step.params))
-                                          .map((step, idx) => renderStep(step, idx, message.id))}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Message content */}
-                                {message.role === 'assistant' ? (
-                                  <div className="prose prose-invert prose-sm max-w-none">
-                                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                                  </div>
-                                ) : (
-                                  <p className="text-sm">{message.content}</p>
-                                )}
-                                
-                                <p className="text-xs opacity-70 mt-2">
-                                  {message.timestamp.toLocaleTimeString()}
-                                </p>
-                              </div>
-                            </motion.div>
-                          ))
-                        )}
-                        <div ref={messagesEndRef} />
-                      </div>
+                      <ChatMode
+                        messages={messages}
+                        isLoading={isLoading}
+                        stepsExpanded={stepsExpanded}
+                        expandedSteps={expandedSteps}
+                        onToggleStepsExpanded={toggleStepsExpanded}
+                        onToggleStep={toggleStep}
+                        messagesEndRef={messagesEndRef}
+                      />
                     )}
 
                     {/* Hybrid/Lexical Mode */}
                     {(mode === 'hybrid' || mode === 'lexical') && (
-                      <div className="space-y-4">
-                        {searchResults.length === 0 && !isLoading ? (
-                          <div className="flex items-center justify-center h-64 text-center">
-                            <div>
-                              <Search className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                              <h3 className="text-lg font-semibold mb-2 text-white">
-                                {mode === 'hybrid' ? 'Hybrid Search' : 'Lexical Search'}
-                              </h3>
-                              <p className="text-gray-400 text-sm">
-                                {mode === 'hybrid' 
-                                  ? 'Combines semantic understanding with keyword matching'
-                                  : 'Basic BM25 keyword-based search'}
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            {searchResults.map((product) => (
-                              <motion.div
-                                key={product.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className={`rounded-xl p-4 border cursor-pointer transition-all ${
-                                  mode === 'hybrid' 
-                                    ? 'bg-cyan-950/30 border-cyan-700/50 hover:border-cyan-500' 
-                                    : 'bg-amber-950/30 border-amber-700/50 hover:border-amber-500'
-                                }`}
-                                onClick={() => handleProductClick(product)}
-                              >
-                                <h3 className="text-lg font-semibold text-white mb-1">{product.title}</h3>
-                                <p className="text-sm text-gray-300 mb-2">${product.price?.toFixed(2)}</p>
-                                {product.description && (
-                                  <p className="text-sm text-gray-400 line-clamp-2">{product.description}</p>
-                                )}
-                              </motion.div>
-                            ))}
-                          </>
-                        )}
-                        {isLoading && (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                            <span className="ml-3 text-gray-400">Searching...</span>
-                          </div>
-                        )}
-                      </div>
+                      <SearchMode
+                        mode={mode}
+                        results={searchResults}
+                        isLoading={isLoading}
+                        onProductClick={handleProductClick}
+                      />
                     )}
                   </>
                 )}
