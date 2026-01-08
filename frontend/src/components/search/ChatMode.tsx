@@ -31,7 +31,7 @@ function getCurrentStatus(steps: AgentStep[], isLoading: boolean): string {
 
 export function ChatMode({
   messages,
-  isLoading,
+  isLoading: _isLoading,
   stepsExpanded,
   expandedSteps,
   onToggleStepsExpanded,

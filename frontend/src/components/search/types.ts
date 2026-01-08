@@ -1,4 +1,4 @@
-import { ChatMessage, Product, UserId } from '../../types'
+import { ChatMessage, UserId } from '../../types'
 
 // Agent step for thought trace display
 export interface AgentStep {

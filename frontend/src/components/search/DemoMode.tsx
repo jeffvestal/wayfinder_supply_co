@@ -7,7 +7,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import { 
   ExtendedChatMessage, AgentStep, DemoQueryType, 
-  DEMO_QUERIES, FALLBACK_PRODUCT_IMAGE, getPersonaName, SearchMode 
+  DEMO_QUERIES, FALLBACK_PRODUCT_IMAGE, getPersonaName 
 } from './types'
 import { StepRenderer } from './StepRenderer'
 import { getToolStatusMessage } from '../../lib/constants'

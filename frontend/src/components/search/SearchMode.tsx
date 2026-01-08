@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion'
 import { Product } from '../../types'
 import { Search, Loader2 } from 'lucide-react'
-import { SearchMode as SearchModeType } from './types'
 
 interface SearchModeProps {
   mode: 'lexical' | 'hybrid'
