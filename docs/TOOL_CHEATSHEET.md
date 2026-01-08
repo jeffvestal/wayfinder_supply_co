@@ -31,13 +31,13 @@ Executes ES|QL queries directly:
   "configuration": {
     "query": "FROM user-clickstream | WHERE user_id == ? AND meta_tags IS NOT NULL | STATS count = COUNT(*) BY meta_tags | SORT count DESC | LIMIT 5",
     "params": {
-      "user_id": {"type": "string"}
+      "user_id": {"type": "keyword"}
     }
   }
 }
 ```
 
-> **Note:** Each param must be an object with a `type` field (e.g., `{"type": "string"}`), not just a type string.
+> **Note:** Each param must be an object with a `type` field. Valid types are Elasticsearch field types: `text`, `keyword`, `long`, `integer`, `double`, `float`, `boolean`, `date`, `object`, `nested`.
 
 ### 3. Index Search Tool
 
