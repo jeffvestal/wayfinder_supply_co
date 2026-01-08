@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ProductCard } from './ProductCard'
 import { ProductDetailModal } from './ProductDetailModal'
 import { HeroSection } from './HeroSection'
+import { WorkshopProgress } from './WorkshopProgress'
 import { Product, UserId } from '../types'
 import { api } from '../lib/api'
 import { Loader2, Filter } from 'lucide-react'
@@ -234,6 +235,9 @@ export function Storefront({ userId, onStartChat }: StorefrontProps) {
           onTagClick={handleTagClick}
         />
       )}
+
+      {/* Workshop Progress Sidebar */}
+      <WorkshopProgress />
     </div>
   )
 }

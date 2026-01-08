@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from routers import chat, products, cart, reviews, orders, users, clickstream, reports
+from routers import chat, products, cart, reviews, orders, users, clickstream, reports, workshop
 from middleware.logging import LoggingMiddleware
 from services.error_handler import global_exception_handler, http_exception_handler
 import logging
@@ -62,6 +62,7 @@ app.include_router(orders.router, prefix="/api", tags=["orders"])
 app.include_router(users.router, prefix="/api", tags=["users"])
 app.include_router(clickstream.router, prefix="/api", tags=["clickstream"])
 app.include_router(reports.router, prefix="/api", tags=["reports"])
+app.include_router(workshop.router, prefix="/api", tags=["workshop"])
 
 # --- Static UI serving (Instruqt unified mode) ---
 STATIC_DIR = Path(__file__).resolve().parent / "static"

@@ -510,4 +510,29 @@ export const api = {
     }
     return response;
   },
+
+  async getWorkshopStatus(): Promise<{
+    workflows: Array<{ name: string; exists: boolean; user_built: boolean }>;
+    tools: Array<{ id: string; exists: boolean; user_built: boolean }>;
+    agents: Array<{ id: string; exists: boolean; user_built: boolean }>;
+    summary: { complete: number; total: number; percentage: number };
+  }> {
+    const url = createApiUrl('/api/workshop/status');
+    try {
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    } catch (error) {
+      console.error('Failed to get workshop status:', error);
+      // Return empty status on error
+      return {
+        workflows: [],
+        tools: [],
+        agents: [],
+        summary: { complete: 0, total: 0, percentage: 0 },
+      };
+    }
+  },
 };
