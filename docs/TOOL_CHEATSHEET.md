@@ -31,11 +31,13 @@ Executes ES|QL queries directly:
   "configuration": {
     "query": "FROM user-clickstream | WHERE user_id == ? AND meta_tags IS NOT NULL | STATS count = COUNT(*) BY meta_tags | SORT count DESC | LIMIT 5",
     "params": {
-      "user_id": "string"
+      "user_id": {"type": "string"}
     }
   }
 }
 ```
+
+> **Note:** Each param must be an object with a `type` field (e.g., `{"type": "string"}`), not just a type string.
 
 ### 3. Index Search Tool
 
