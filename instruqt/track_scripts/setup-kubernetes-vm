@@ -424,21 +424,36 @@ echo "[Workshop] Deactivated Python virtual environment"
 
 ####################################################################### WARM UP ELSER MODEL
 
-echo "[Workshop] Warming up ELSER model to avoid first-search delay..."
+echo "[Workshop] Warming up ELSER model (this ensures instant semantic search)..."
 
-# Make an inference call to wake up the ELSER model
-# This forces it to deploy and load into memory so semantic searches are instant
-ELSER_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_inference/sparse_embedding/.elser-2-elastic" \
-  -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"input": "outdoor hiking gear"}' 2>&1)
+# Wait for ELSER to be ready with retries
+# The model needs time to deploy and load into memory
+ELSER_MAX_RETRIES=24  # 24 retries x 5 seconds = 2 minutes max wait
+ELSER_RETRY_COUNT=0
+ELSER_READY=false
 
-# Check if we got tokens back (successful warmup)
-if echo "$ELSER_RESPONSE" | grep -q "sparse_embedding"; then
-  echo "[Workshop] ✓ ELSER model warmed up and ready"
+while [ $ELSER_RETRY_COUNT -lt $ELSER_MAX_RETRIES ]; do
+  ELSER_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_inference/sparse_embedding/.elser-2-elastic" \
+    -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
+    -H "Content-Type: application/json" \
+    -d '{"input": "outdoor hiking gear"}' 2>&1)
+  
+  # Check if we got tokens back (successful warmup)
+  if echo "$ELSER_RESPONSE" | grep -q "sparse_embedding"; then
+    ELSER_READY=true
+    break
+  fi
+  
+  ELSER_RETRY_COUNT=$((ELSER_RETRY_COUNT + 1))
+  echo "[Workshop]   ELSER model loading... (attempt $ELSER_RETRY_COUNT/$ELSER_MAX_RETRIES)"
+  sleep 5
+done
+
+if [ "$ELSER_READY" = true ]; then
+  echo "[Workshop] ✓ ELSER model warmed up and ready for instant semantic search"
 else
-  echo "[Workshop] ⚠️  ELSER warmup call made (model may still be deploying)"
-  echo "[Workshop]     First semantic search may take 1-2 minutes"
+  echo "[Workshop] ⚠️  ELSER model still loading after 2 minutes"
+  echo "[Workshop]     First semantic search may be slow, but will work"
 fi
 
 ####################################################################### COMPLETE
