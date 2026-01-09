@@ -27,10 +27,10 @@ owner: elastic
 developers:
 - jeff.vestal@elastic.co
 show_timer: true
-idle_timeout: 14400
-timelimit: 3600
+idle_timeout: 10800
+timelimit: 10800
 lab_config:
-  extend_ttl: 18000
+  extend_ttl: 10800
   sidebar_enabled: true
   feedback_recap_enabled: true
   feedback_tab_enabled: false
@@ -39,5 +39,5 @@ lab_config:
     name: modern-dark
   override_challenge_layout: false
   hideStopButton: false
-checksum: "12048503926267007591"
+checksum: "17846339891899185548"
 enhanced_loading: false
