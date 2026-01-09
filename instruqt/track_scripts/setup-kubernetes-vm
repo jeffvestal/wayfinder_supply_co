@@ -101,7 +101,7 @@ echo "[Workshop] Reloading secure settings to pick up GCS credentials..."
 curl -s -X POST "${ELASTICSEARCH_URL}/_nodes/reload_secure_settings" \
   -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
   -H "Content-Type: application/json" >/dev/null 2>&1 || true
-sleep 2  # Brief pause for reload to complete
+sleep 20  # Allow keystore to fully propagate before snapshot restore
 
 # Restore snapshot with product catalog, reviews, and clickstream data
 echo "[Workshop] Restoring Elasticsearch snapshot..."
@@ -440,7 +440,8 @@ echo "[Workshop] Starting ELSER model warmup in background..."
 echo "[Workshop] (Track can start while model loads; first semantic search may be slightly slower)"
 
 # Background the ELSER warmup so it doesn't block track startup
-(
+# Use nohup and disown to ensure script exits immediately without waiting
+nohup bash -c '
   # Wait for ELSER to be ready with retries
   # The model needs time to deploy and load into memory
   ELSER_MAX_RETRIES=24  # 24 retries x 5 seconds = 2 minutes max wait
@@ -451,25 +452,25 @@ echo "[Workshop] (Track can start while model loads; first semantic search may b
     ELSER_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_inference/sparse_embedding/.elser-2-elastic" \
       -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
       -H "Content-Type: application/json" \
-      -d '{"input": "outdoor hiking gear"}' 2>&1)
+      -d "{\"input\": \"outdoor hiking gear\"}" 2>&1)
     
     # Check if we got tokens back (successful warmup)
     if echo "$ELSER_RESPONSE" | grep -q "sparse_embedding"; then
       ELSER_READY=true
-      echo "[Workshop] ✓ ELSER model warmed up and ready for instant semantic search" >> /var/log/elser-warmup.log 2>&1
+      echo "[Workshop] ✓ ELSER model warmed up and ready for instant semantic search"
       break
     fi
     
     ELSER_RETRY_COUNT=$((ELSER_RETRY_COUNT + 1))
-    echo "[Workshop]   ELSER model loading... (attempt $ELSER_RETRY_COUNT/$ELSER_MAX_RETRIES)" >> /var/log/elser-warmup.log 2>&1
+    echo "[Workshop]   ELSER model loading... (attempt $ELSER_RETRY_COUNT/$ELSER_MAX_RETRIES)"
     sleep 5
   done
 
   if [ "$ELSER_READY" != true ]; then
-    echo "[Workshop] ⚠️  ELSER model still loading after 2 minutes" >> /var/log/elser-warmup.log 2>&1
-    echo "[Workshop]     First semantic search may be slow, but will work" >> /var/log/elser-warmup.log 2>&1
+    echo "[Workshop] ⚠️  ELSER model still loading after 2 minutes"
+    echo "[Workshop]     First semantic search may be slow, but will work"
   fi
-) &
+' > /var/log/elser-warmup.log 2>&1 & disown
 
 echo "[Workshop] ELSER warmup running in background (check /var/log/elser-warmup.log for progress)"
 

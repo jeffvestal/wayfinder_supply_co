@@ -655,7 +655,7 @@ def main() -> int:
     
     # Create ES|QL tool - query with user_id parameter
     esql_query = """FROM user-clickstream
-| WHERE user_id == ? AND meta_tags IS NOT NULL
+| WHERE user_id == ?user_id AND meta_tags IS NOT NULL
 | STATS count = COUNT(*) BY meta_tags
 | SORT count DESC
 | LIMIT 5"""
