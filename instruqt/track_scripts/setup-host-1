@@ -20,71 +20,6 @@ if [[ -z "$GCSKEY_CE_INFRA_CONTAINERS" ]]; then
     exit 1
 fi
 
-####################################################################### WAIT FOR KUBERNETES-VM ELASTIC STACK
-
-echo "[Workshop] Waiting for Elasticsearch on kubernetes-vm..."
-MAX_RETRIES=120
-RETRY_COUNT=0
-ES_READY=false
-
-until curl -fsS "http://kubernetes-vm:30920/_cluster/health" >/dev/null 2>&1; do
-  RETRY_COUNT=$((RETRY_COUNT + 1))
-  if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-    echo "[Workshop] ERROR: Elasticsearch not ready after ${MAX_RETRIES} attempts (10 minutes)"
-    echo "[Workshop] Continuing with setup, but services may fail..."
-    break
-  fi
-  echo "  ... waiting for Elasticsearch (attempt ${RETRY_COUNT}/${MAX_RETRIES})"
-  sleep 5
-done
-
-if curl -fsS "http://kubernetes-vm:30920/_cluster/health" >/dev/null 2>&1; then
-  echo "[Workshop] ✓ Elasticsearch is reachable"
-  ES_READY=true
-  
-  # Also wait for the cluster to be at least yellow status
-  echo "[Workshop] Waiting for Elasticsearch cluster health..."
-  for i in $(seq 1 30); do
-    HEALTH=$(curl -fsS "http://kubernetes-vm:30920/_cluster/health" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
-    if [ "$HEALTH" = "green" ] || [ "$HEALTH" = "yellow" ]; then
-      echo "[Workshop] ✓ Elasticsearch cluster health: $HEALTH"
-      break
-    fi
-    echo "  ... cluster status: ${HEALTH:-unknown} (attempt ${i}/30)"
-    sleep 3
-  done
-else
-  echo "[Workshop] ⚠️  WARNING: Elasticsearch not reachable, backend may fail"
-fi
-
-# Wait for Kibana to be ready (needed for agent API calls)
-echo "[Workshop] Waiting for Kibana on kubernetes-vm..."
-for i in $(seq 1 60); do
-  if curl -fsS "http://kubernetes-vm:30001/api/status" >/dev/null 2>&1; then
-    echo "[Workshop] ✓ Kibana is reachable"
-    break
-  fi
-  echo "  ... waiting for Kibana (attempt ${i}/60)"
-  sleep 5
-done
-
-# Get environment variables from kubernetes-vm (includes ELASTICSEARCH_APIKEY)
-echo "[Workshop] Getting environment variables from kubernetes-vm..."
-for i in $(seq 1 30); do
-  ENV_VARS=$(curl -s http://kubernetes-vm:9000/env 2>/dev/null)
-  if [ -n "$ENV_VARS" ]; then
-    export $(echo "$ENV_VARS" | xargs)
-    echo "[Workshop] ✓ Environment variables loaded"
-    break
-  fi
-  echo "  ... waiting for env vars (attempt ${i}/30)"
-  sleep 3
-done
-
-if [ -z "$ELASTICSEARCH_APIKEY" ]; then
-  echo "[Workshop] ⚠️  WARNING: ELASTICSEARCH_APIKEY not set, some features may fail"
-fi
-
 ####################################################################### INSTALL NODE.JS
 
 echo "[Workshop] Installing Node.js..."
@@ -299,83 +234,6 @@ else
   echo "[Workshop] ⚠️  Frontend may not be available on port 8000 (HTTP ${FRONTEND_RESPONSE})"
 fi
 
-####################################################################### DEPLOY PRE-EXISTING WORKFLOWS AND TOOLS
-
-echo "[Workshop] Deploying pre-existing workflows and tools..."
-echo "[Workshop] (Learners will build get_customer_profile workflow, tool, and agent)"
-
-# Wait a bit more for Kibana to be fully ready
-sleep 10
-
-cd /opt/workshop-assets
-
-# Check if config/workflows directory exists
-if [ -d "config/workflows" ]; then
-    echo "[Workshop] Found config/workflows directory"
-    
-    # Deploy pre-existing workflows (not get_customer_profile - learners build that)
-    python3 -m venv venv-deploy 2>/dev/null || true
-    source venv-deploy/bin/activate
-    pip install --quiet --upgrade pip pyyaml requests 2>/dev/null || true
-    
-    # Deploy check_trip_safety and get_user_affinity workflows
-    if [ -f "config/workflows/check_trip_safety.yaml" ]; then
-        echo "[Workshop] Deploying check_trip_safety workflow..."
-        python3 -c "
-import sys
-sys.path.insert(0, '/opt/workshop-assets')
-import os
-os.environ['STANDALONE_KIBANA_URL'] = 'http://kubernetes-vm:30001'
-os.environ['STANDALONE_ELASTICSEARCH_APIKEY'] = '${ELASTICSEARCH_APIKEY}'
-from scripts.deploy_workflows import deploy_workflow
-deploy_workflow('config/workflows/check_trip_safety.yaml')
-" 2>/dev/null || echo "[Workshop] ⚠️  Could not deploy check_trip_safety workflow"
-    fi
-    
-    if [ -f "config/workflows/get_user_affinity.yaml" ]; then
-        echo "[Workshop] Deploying get_user_affinity workflow..."
-        python3 -c "
-import sys
-sys.path.insert(0, '/opt/workshop-assets')
-import os
-os.environ['STANDALONE_KIBANA_URL'] = 'http://kubernetes-vm:30001'
-os.environ['STANDALONE_ELASTICSEARCH_APIKEY'] = '${ELASTICSEARCH_APIKEY}'
-from scripts.deploy_workflows import deploy_workflow
-deploy_workflow('config/workflows/get_user_affinity.yaml')
-" 2>/dev/null || echo "[Workshop] ⚠️  Could not deploy get_user_affinity workflow"
-    fi
-    
-    deactivate
-    rm -rf venv-deploy
-else
-    echo "[Workshop] ⚠️  config/workflows directory not found, skipping workflow deployment"
-fi
-
-# Deploy pre-existing tools using create_agents.py script
-if [ -f "scripts/create_agents.py" ]; then
-    echo "[Workshop] Deploying pre-existing tools (product_search, workflow tools)..."
-    
-    python3 -m venv venv-tools 2>/dev/null || true
-    source venv-tools/bin/activate
-    pip install --quiet --upgrade pip pyyaml requests 2>/dev/null || true
-    
-    # Run create_agents.py which will deploy workflows and create tools
-    # But we'll modify it to skip agent creation (learners build trip-planner-agent)
-    echo "[Workshop] Note: Pre-existing workflows and tools are deployed"
-    echo "[Workshop]       Learners will build: get_customer_profile workflow, tool, and trip-planner-agent"
-    
-    deactivate
-    rm -rf venv-tools
-else
-    echo "[Workshop] ⚠️  scripts/create_agents.py not found, skipping tool deployment"
-fi
-
-echo "[Workshop] Pre-deployment complete"
-echo "[Workshop] Learners will build:"
-echo "  - get_customer_profile workflow (Challenge 2)"
-echo "  - tool-workflow-get-customer-profile tool (Challenge 3)"
-echo "  - trip-planner-agent (Challenge 4)"
-
 ####################################################################### COMPLETE
 
 echo "========================================="
@@ -385,10 +243,7 @@ echo "Services (unified on port 8000):"
 echo "  - Wayfinder UI + API: http://host-1:8000"
 echo "  - MCP Server: http://host-1:8002"
 echo ""
-echo "Pre-deployed components:"
-echo "  - check_trip_safety workflow"
-echo "  - get_user_affinity workflow"
-echo "  - product_search tool"
+echo "Note: Workflows and tools are deployed by kubernetes-vm"
 echo ""
 echo "Note: Frontend is served by the backend (unified serving)"
 echo "      This avoids Instruqt cross-tab authentication issues"
