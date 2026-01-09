@@ -22,9 +22,11 @@ interface SearchPanelProps {
   initialMessage?: string
   onInitialMessageSent?: () => void
   onOpenTripPlanner?: () => void
+  startInDemoMode?: boolean
+  onDemoModeStarted?: () => void
 }
 
-export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner }: SearchPanelProps) {
+export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner, startInDemoMode, onDemoModeStarted }: SearchPanelProps) {
   // UI State
   const [mode, setMode] = useState<SearchModeType>('chat')
   const [panelWidth, setPanelWidth] = useState(50)
@@ -200,6 +202,14 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
       setQueryExpanded({ lexical: false, hybrid: false })
     }
   }, [isOpen])
+
+  // Auto-enable demo mode when panel opens with startInDemoMode prop
+  useEffect(() => {
+    if (isOpen && startInDemoMode && !isDemoRunning) {
+      setIsDemoRunning(true)
+      onDemoModeStarted?.() // Signal parent to reset flag
+    }
+  }, [isOpen, startInDemoMode, isDemoRunning, onDemoModeStarted])
 
   // Drag listeners
   useEffect(() => {

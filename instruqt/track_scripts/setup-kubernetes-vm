@@ -449,7 +449,8 @@ nohup bash -c '
   ELSER_READY=false
 
   while [ $ELSER_RETRY_COUNT -lt $ELSER_MAX_RETRIES ]; do
-    ELSER_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_inference/sparse_embedding/.elser-2-elastic" \
+    # Use .elser-2-elasticsearch (local ML node for search), NOT .elser-2-elastic (Elastic Cloud ingest)
+    ELSER_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_inference/sparse_embedding/.elser-2-elasticsearch" \
       -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
       -H "Content-Type: application/json" \
       -d "{\"input\": \"outdoor hiking gear\"}" 2>&1)

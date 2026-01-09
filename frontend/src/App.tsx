@@ -35,6 +35,7 @@ function App() {
   const [orderId, setOrderId] = useState<string | null>(null)
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
   const [isDemoRunning, setIsDemoRunning] = useState(false)
+  const [demoModeRequested, setDemoModeRequested] = useState(false)
 
   // Load personas on mount
   useEffect(() => {
@@ -117,6 +118,9 @@ function App() {
     
     // Wait for persona switch
     await new Promise(resolve => setTimeout(resolve, 300))
+    
+    // Set flag to auto-show demo picker when panel opens
+    setDemoModeRequested(true)
     
     // Open Search Panel - it has its own "Watch This" demo that works
     // with wayfinder-search-agent (pre-created, no Challenge 4 needed)
@@ -441,6 +445,8 @@ function App() {
           onOpenTripPlanner={() => setCurrentView('trip-planner')}
           initialMessage={chatInitialMessage}
           onInitialMessageSent={() => setChatInitialMessage(undefined)}
+          startInDemoMode={demoModeRequested}
+          onDemoModeStarted={() => setDemoModeRequested(false)}
         />
       </ErrorBoundary>
 
