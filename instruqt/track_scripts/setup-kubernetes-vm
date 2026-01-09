@@ -95,10 +95,11 @@ source /opt/workshops/elastic-start.sh
 ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-http://localhost:30920}"
 ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
 
-# Pre-create snapshot repository with verify=false to skip write verification
-# The service account only has read access (correct for readonly restore)
-# Without this, the snapshot script retries 120+ times waiting for write permission
-echo "[Workshop] Creating snapshot repository (readonly, skip verification)..."
+# Pre-create snapshot repository with verify=false and 'default' client
+# - 'default' client is available immediately (no ECK keystore delay)
+# - 'sa' client takes ~4 minutes to be configured by ECK
+# - verify=false skips write verification (we only need read for restore)
+echo "[Workshop] Creating snapshot repository (readonly, default client, skip verification)..."
 REPO_RESPONSE=$(curl -s -X PUT "${ELASTICSEARCH_URL}/_snapshot/repo1?verify=false" \
   -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
   -H "Content-Type: application/json" -d'
@@ -107,7 +108,7 @@ REPO_RESPONSE=$(curl -s -X PUT "${ELASTICSEARCH_URL}/_snapshot/repo1?verify=fals
   "settings": {
     "bucket": "instruqt-workshop-snapshot-public",
     "base_path": "wayfinder_supply_co",
-    "client": "sa",
+    "client": "default",
     "readonly": true
   }
 }')
@@ -118,18 +119,21 @@ else
   echo "[Workshop] ⚠️  Snapshot repo creation response: $REPO_RESPONSE"
 fi
 
-# Restore snapshot with product catalog, reviews, and clickstream data
-# The repo already exists, so the script will skip repo creation
+# Restore snapshot directly (repo already exists)
 echo "[Workshop] Restoring Elasticsearch snapshot..."
-/opt/workshops/elastic-snapshot.sh \
-    -p wayfinder_supply_co \
-    -b instruqt-workshop-snapshot-public \
-    -c sa \
-    -n repo1 \
-    -s catalog_reviews_clicks \
-    -g false || {
-    echo "[Workshop] ⚠️  Could not restore snapshot, continuing..."
-}
+RESTORE_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_snapshot/repo1/catalog_reviews_clicks/_restore?wait_for_completion=true" \
+  -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
+  -H "Content-Type: application/json" -d'
+{
+  "indices": "*"
+}')
+
+if echo "$RESTORE_RESPONSE" | grep -q '"failed":0'; then
+  echo "[Workshop] ✓ Snapshot restored successfully"
+  echo "[Workshop] $RESTORE_RESPONSE"
+else
+  echo "[Workshop] ⚠️  Snapshot restore response: $RESTORE_RESPONSE"
+fi
 
 # setup openai
 source /opt/workshops/llm-key.sh
