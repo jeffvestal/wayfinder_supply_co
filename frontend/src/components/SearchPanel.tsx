@@ -72,6 +72,11 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     for (const step of steps) {
       if (step.type === 'tool_call' && step.results) {
         for (const result of step.results) {
+          // Check for Agent Builder "resource" format with data.reference.id
+          if (result?.data?.reference?.id) {
+            productIds.push(result.data.reference.id)
+          }
+          
           // Check for Agent Builder "resource" format with documents array
           if (result?.content) {
             try {
