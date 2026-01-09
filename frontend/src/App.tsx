@@ -101,14 +101,14 @@ function App() {
     setSearchPanelOpen(true)
   }
 
-  // Handle 1-Click Demo
+  // Handle 1-Click Demo - Opens Search Panel demo (works without trip-planner-agent)
   const handleStartDemo = async () => {
     setIsDemoRunning(true)
     
     // Wait a moment for overlay to show
     await new Promise(resolve => setTimeout(resolve, 500))
     
-    // Switch to Sarah Martinez persona
+    // Switch to Sarah Martinez persona for personalized results
     const sarahPersona = personas.find(p => p.id === 'ultralight_backpacker_sarah')
     if (sarahPersona) {
       setCurrentUser('ultralight_backpacker_sarah')
@@ -118,13 +118,11 @@ function App() {
     // Wait for persona switch
     await new Promise(resolve => setTimeout(resolve, 300))
     
-    // Set initial message for Trip Planner
-    setTripPlannerInitialMessage("Planning a 3-day backpacking trip to Yosemite next month. What gear do I need?")
+    // Open Search Panel - it has its own "Watch This" demo that works
+    // with wayfinder-search-agent (pre-created, no Challenge 4 needed)
+    setSearchPanelOpen(true)
     
-    // Navigate to Trip Planner
-    setCurrentView('trip-planner')
-    
-    // Hide overlay after navigation
+    // Hide overlay after panel opens
     await new Promise(resolve => setTimeout(resolve, 500))
     setIsDemoRunning(false)
   }
