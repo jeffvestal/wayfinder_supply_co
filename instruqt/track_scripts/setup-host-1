@@ -88,14 +88,41 @@ fi
 echo "[Workshop] Workshop assets directory:"
 ls -la /opt/workshop-assets/
 
+####################################################################### GET ENVIRONMENT VARIABLES FROM KUBERNETES-VM
+
+# Fetch API key from kubernetes-vm (critical for backend to authenticate to ES)
+# This is a lightweight call - doesn't wait for ES/Kibana, just the env service
+echo "[Workshop] Getting environment variables from kubernetes-vm..."
+for i in $(seq 1 60); do
+  ENV_VARS=$(curl -s http://kubernetes-vm:9000/env 2>/dev/null)
+  if [ -n "$ENV_VARS" ]; then
+    export $(echo "$ENV_VARS" | xargs)
+    echo "[Workshop] ✓ Environment variables loaded from kubernetes-vm"
+    break
+  fi
+  if [ $i -eq 60 ]; then
+    echo "[Workshop] ⚠️  WARNING: Could not fetch env vars from kubernetes-vm after 60 attempts"
+    echo "[Workshop]     Backend may not be able to authenticate to Elasticsearch"
+  fi
+  echo "  ... waiting for kubernetes-vm env service (attempt ${i}/60)"
+  sleep 2
+done
+
 ####################################################################### SET ENVIRONMENT VARIABLES
 
 export ELASTICSEARCH_URL="http://kubernetes-vm:30920"
 export KIBANA_URL="http://kubernetes-vm:30001"
 export MCP_SERVER_URL="http://localhost:8002"
 
-# Get API key from kubernetes-vm's environment (passed via instruqt)
+# Use API key from kubernetes-vm, or fall back to Instruqt-provided key
 export ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
+
+# Debug: Show if API key was loaded (masked)
+if [ -n "$ELASTICSEARCH_APIKEY" ]; then
+  echo "[Workshop] ✓ ELASTICSEARCH_APIKEY is set (${#ELASTICSEARCH_APIKEY} chars)"
+else
+  echo "[Workshop] ⚠️  WARNING: ELASTICSEARCH_APIKEY is empty - backend will fail to connect to ES"
+fi
 
 # Write environment file for services
 cat > /opt/workshop-assets/.env << EOF
