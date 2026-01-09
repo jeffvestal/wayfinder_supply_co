@@ -95,44 +95,75 @@ source /opt/workshops/elastic-start.sh
 ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-http://localhost:30920}"
 ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
 
-# Pre-create snapshot repository with verify=false and 'default' client
-# - 'default' client is available immediately (no ECK keystore delay)
-# - 'sa' client takes ~4 minutes to be configured by ECK
-# - verify=false skips write verification (we only need read for restore)
-echo "[Workshop] Creating snapshot repository (readonly, default client, skip verification)..."
-REPO_RESPONSE=$(curl -s -X PUT "${ELASTICSEARCH_URL}/_snapshot/repo1?verify=false" \
-  -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
-  -H "Content-Type: application/json" -d'
+# Wait for 'sa' GCS client to be configured by ECK (keystore secret mounting)
+# The 'sa' client is required for the snapshot bucket but takes time to be available
+echo "[Workshop] Waiting for GCS 'sa' client to be configured by ECK..."
+SA_CLIENT_READY=false
+SA_MAX_ATTEMPTS=120  # 120 * 2s = 4 minutes max
+SA_ATTEMPT=0
+
+while [ $SA_ATTEMPT -lt $SA_MAX_ATTEMPTS ]; do
+  SA_ATTEMPT=$((SA_ATTEMPT + 1))
+  
+  # Try to create repo with 'sa' client - if it fails with "Unknown client", keep waiting
+  REPO_RESPONSE=$(curl -s -X PUT "${ELASTICSEARCH_URL}/_snapshot/repo1?verify=false" \
+    -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
+    -H "Content-Type: application/json" -d'
 {
   "type": "gcs",
   "settings": {
     "bucket": "instruqt-workshop-snapshot-public",
     "base_path": "wayfinder_supply_co",
-    "client": "default",
+    "client": "sa",
     "readonly": true
   }
 }')
+  
+  if echo "$REPO_RESPONSE" | grep -q '"acknowledged":true'; then
+    echo "[Workshop] ✓ Snapshot repository created (attempt $SA_ATTEMPT)"
+    SA_CLIENT_READY=true
+    break
+  elif echo "$REPO_RESPONSE" | grep -q "Unknown client name"; then
+    # 'sa' client not yet available, keep waiting
+    if [ $((SA_ATTEMPT % 15)) -eq 0 ]; then
+      echo "[Workshop]   Still waiting for 'sa' client... (attempt $SA_ATTEMPT/$SA_MAX_ATTEMPTS)"
+    fi
+    sleep 2
+  else
+    # Some other error - might be transient, keep trying
+    echo "[Workshop]   Unexpected response (attempt $SA_ATTEMPT): $REPO_RESPONSE"
+    sleep 2
+  fi
+done
 
-if echo "$REPO_RESPONSE" | grep -q '"acknowledged":true'; then
-  echo "[Workshop] ✓ Snapshot repository created successfully"
+if [ "$SA_CLIENT_READY" != "true" ]; then
+  echo "[Workshop] ⚠️  GCS 'sa' client not available after $SA_MAX_ATTEMPTS attempts"
+  echo "[Workshop]     Falling back to external snapshot script..."
+  /opt/workshops/elastic-snapshot.sh \
+      -p wayfinder_supply_co \
+      -b instruqt-workshop-snapshot-public \
+      -c sa \
+      -n repo1 \
+      -s catalog_reviews_clicks \
+      -g false || {
+      echo "[Workshop] ⚠️  Could not restore snapshot, continuing..."
+  }
 else
-  echo "[Workshop] ⚠️  Snapshot repo creation response: $REPO_RESPONSE"
-fi
-
-# Restore snapshot directly (repo already exists)
-echo "[Workshop] Restoring Elasticsearch snapshot..."
-RESTORE_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_snapshot/repo1/catalog_reviews_clicks/_restore?wait_for_completion=true" \
-  -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
-  -H "Content-Type: application/json" -d'
+  # Restore snapshot directly (repo already exists with verify=false)
+  echo "[Workshop] Restoring Elasticsearch snapshot..."
+  RESTORE_RESPONSE=$(curl -s -X POST "${ELASTICSEARCH_URL}/_snapshot/repo1/catalog_reviews_clicks/_restore?wait_for_completion=true" \
+    -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
+    -H "Content-Type: application/json" -d'
 {
   "indices": "*"
 }')
 
-if echo "$RESTORE_RESPONSE" | grep -q '"failed":0'; then
-  echo "[Workshop] ✓ Snapshot restored successfully"
-  echo "[Workshop] $RESTORE_RESPONSE"
-else
-  echo "[Workshop] ⚠️  Snapshot restore response: $RESTORE_RESPONSE"
+  if echo "$RESTORE_RESPONSE" | grep -q '"failed":0'; then
+    echo "[Workshop] ✓ Snapshot restored successfully"
+    echo "[Workshop] $RESTORE_RESPONSE"
+  else
+    echo "[Workshop] ⚠️  Snapshot restore response: $RESTORE_RESPONSE"
+  fi
 fi
 
 # setup openai
