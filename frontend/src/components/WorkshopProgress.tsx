@@ -36,6 +36,22 @@ function getDisplayName(id: string): string {
   return DISPLAY_NAMES[id] || id
 }
 
+// Challenge information for user-built components
+const CHALLENGE_INFO: Record<string, { challenge: string; summary: string }> = {
+  'get_customer_profile': { 
+    challenge: 'Challenge 2', 
+    summary: 'Create a workflow to fetch CRM customer data' 
+  },
+  'tool-workflow-get-customer-profile': { 
+    challenge: 'Challenge 3', 
+    summary: 'Wrap your workflow as a tool for agents' 
+  },
+  'trip-planner-agent': { 
+    challenge: 'Challenge 4', 
+    summary: 'Build an AI agent that plans trips with your tools' 
+  },
+}
+
 export function WorkshopProgress({ defaultExpanded = true }: WorkshopProgressProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [status, setStatus] = useState<WorkshopStatus | null>(null)
@@ -99,6 +115,7 @@ export function WorkshopProgress({ defaultExpanded = true }: WorkshopProgressPro
       <div className="space-y-1.5">
         {items.map((item) => {
           const id = item.name || item.id || ''
+          const challengeInfo = CHALLENGE_INFO[id]
           return (
             <div 
               key={id}
@@ -109,9 +126,20 @@ export function WorkshopProgress({ defaultExpanded = true }: WorkshopProgressPro
               {renderStatusIcon(item.exists, item.user_built)}
               <span className="truncate">{getDisplayName(id)}</span>
               {item.user_built && !item.exists && (
-                <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded ml-auto flex-shrink-0">
-                  Build this!
-                </span>
+                <div className="relative group ml-auto flex-shrink-0">
+                  <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded cursor-help">
+                    Build this!
+                  </span>
+                  {/* Tooltip */}
+                  {challengeInfo && (
+                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50 pointer-events-none">
+                      <div className="bg-slate-800 border border-amber-500/30 rounded-lg p-2 text-xs w-48 shadow-xl">
+                        <div className="font-semibold text-amber-400">{challengeInfo.challenge}</div>
+                        <div className="text-gray-300 mt-1">{challengeInfo.summary}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )
