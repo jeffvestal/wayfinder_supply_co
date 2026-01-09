@@ -95,15 +95,31 @@ source /opt/workshops/elastic-start.sh
 ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-http://localhost:30920}"
 ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
 
-# Force Elasticsearch to reload secure settings to pick up GCS credentials
-# This prevents the 4.5 minute retry loop waiting for keystore propagation
-echo "[Workshop] Reloading secure settings to pick up GCS credentials..."
-curl -s -X POST "${ELASTICSEARCH_URL}/_nodes/reload_secure_settings" \
+# Pre-create snapshot repository with verify=false to skip write verification
+# The service account only has read access (correct for readonly restore)
+# Without this, the snapshot script retries 120+ times waiting for write permission
+echo "[Workshop] Creating snapshot repository (readonly, skip verification)..."
+REPO_RESPONSE=$(curl -s -X PUT "${ELASTICSEARCH_URL}/_snapshot/repo1?verify=false" \
   -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
-  -H "Content-Type: application/json" >/dev/null 2>&1 || true
-sleep 20  # Allow keystore to fully propagate before snapshot restore
+  -H "Content-Type: application/json" -d'
+{
+  "type": "gcs",
+  "settings": {
+    "bucket": "instruqt-workshop-snapshot-public",
+    "base_path": "wayfinder_supply_co",
+    "client": "sa",
+    "readonly": true
+  }
+}')
+
+if echo "$REPO_RESPONSE" | grep -q '"acknowledged":true'; then
+  echo "[Workshop] ✓ Snapshot repository created successfully"
+else
+  echo "[Workshop] ⚠️  Snapshot repo creation response: $REPO_RESPONSE"
+fi
 
 # Restore snapshot with product catalog, reviews, and clickstream data
+# The repo already exists, so the script will skip repo creation
 echo "[Workshop] Restoring Elasticsearch snapshot..."
 /opt/workshops/elastic-snapshot.sh \
     -p wayfinder_supply_co \
