@@ -98,7 +98,7 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
                         transition={{ delay: idx * 0.1 }}
                         className={isDifferent ? 'ring-2 ring-amber-500/50 rounded-lg' : ''}
                       >
-                        <ProductCard product={product} />
+                        <ProductCard product={product} userId="user_new" />
                       </motion.div>
                     )
                   })}
@@ -126,7 +126,7 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
                         transition={{ delay: idx * 0.1 }}
                         className={isDifferent ? 'ring-2 ring-primary/50 rounded-lg' : ''}
                       >
-                        <ProductCard product={product} />
+                        <ProductCard product={product} userId="ultralight_backpacker_sarah" />
                       </motion.div>
                     )
                   })}

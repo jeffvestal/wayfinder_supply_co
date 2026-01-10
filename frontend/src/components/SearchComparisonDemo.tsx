@@ -100,7 +100,7 @@ export function SearchComparisonDemo({ onClose, userId }: SearchComparisonDemoPr
                 <div className="space-y-3">
                   {lexicalResults.length > 0 ? (
                     lexicalResults.slice(0, 3).map((product) => (
-                      <ProductCard key={product.id} product={product} />
+                      <ProductCard key={product.id} product={product} userId={userId} />
                     ))
                   ) : (
                     <p className="text-gray-500 text-sm">No results</p>
@@ -123,7 +123,7 @@ export function SearchComparisonDemo({ onClose, userId }: SearchComparisonDemoPr
                 <div className="space-y-3">
                   {hybridResults.length > 0 ? (
                     hybridResults.slice(0, 3).map((product) => (
-                      <ProductCard key={product.id} product={product} />
+                      <ProductCard key={product.id} product={product} userId={userId} />
                     ))
                   ) : (
                     <p className="text-gray-500 text-sm">No results</p>
