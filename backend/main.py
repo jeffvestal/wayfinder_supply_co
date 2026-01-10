@@ -68,14 +68,28 @@ app.include_router(workshop.router, prefix="/api", tags=["workshop"])
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_HTML = STATIC_DIR / "index.html"
 
+# #region agent log
+import json;open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"backend/main.py:69","message":"App startup - checking static dir","data":{"static_dir_exists":STATIC_DIR.exists(),"static_dir_path":str(STATIC_DIR),"index_html_exists":INDEX_HTML.exists(),"index_html_path":str(INDEX_HTML)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"initial","hypothesisId":"A,B"})+'\n');
+# #endregion
+
 
 @app.get("/")
 async def root():
+    # #region agent log
+    import json;open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"backend/main.py:77","message":"Root route hit - checking index.html","data":{"index_html_exists":INDEX_HTML.exists(),"index_html_path":str(INDEX_HTML),"static_dir_exists":STATIC_DIR.exists()},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"initial","hypothesisId":"A,B,D"})+'\n');
+    # #endregion
+    
     # Prefer serving the built frontend when present (workshop/unified serving).
     if INDEX_HTML.exists():
         logger.info("Serving UI index.html from backend/static")
+        # #region agent log
+        import json;open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"backend/main.py:82","message":"Returning FileResponse for index.html","data":{"file_path":str(INDEX_HTML)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"initial","hypothesisId":"B,E"})+'\n');
+        # #endregion
         return FileResponse(INDEX_HTML)
 
+    # #region agent log
+    import json;open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"backend/main.py:87","message":"Index.html NOT found - returning JSON","data":{"index_html_path":str(INDEX_HTML)},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"initial","hypothesisId":"A,B"})+'\n');
+    # #endregion
     return JSONResponse({"message": "Wayfinder Supply Co. Backend API", "status": "running"})
 
 
@@ -87,9 +101,15 @@ async def health():
 # `html=True` enables SPA-style behavior for directory indexes (serves index.html).
 if STATIC_DIR.exists():
     logger.info("Mounting StaticFiles at / (backend/static)")
+    # #region agent log
+    import json;open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"backend/main.py:95","message":"Mounting StaticFiles","data":{"static_dir":str(STATIC_DIR),"static_dir_exists":True,"route_mount_path":"/"},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"initial","hypothesisId":"C,D"})+'\n');
+    # #endregion
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 else:
     logger.warning("Not mounting StaticFiles (backend/static missing)")
+    # #region agent log
+    import json;open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"backend/main.py:101","message":"NOT mounting StaticFiles - directory missing","data":{"static_dir":str(STATIC_DIR),"static_dir_exists":False},"timestamp":__import__('time').time()*1000,"sessionId":"debug-session","runId":"initial","hypothesisId":"A,B"})+'\n');
+    # #endregion
 
 
 if __name__ == "__main__":
