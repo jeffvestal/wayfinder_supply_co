@@ -11,6 +11,7 @@ import { motion } from 'framer-motion'
 interface StorefrontProps {
   userId: UserId
   onStartChat?: (productName: string, tag: string) => void
+  focusMode?: boolean
 }
 
 const categories = ['All', 'Camping', 'Hiking', 'Climbing', 'Water Sports', 'Winter']
@@ -107,7 +108,7 @@ const MOCK_PRODUCTS: Product[] = [
   }
 ]
 
-export function Storefront({ userId, onStartChat }: StorefrontProps) {
+export function Storefront({ userId, onStartChat, focusMode = false }: StorefrontProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('All')
@@ -237,7 +238,7 @@ export function Storefront({ userId, onStartChat }: StorefrontProps) {
       )}
 
       {/* Workshop Progress Sidebar */}
-      <WorkshopProgress />
+      {!focusMode && <WorkshopProgress />}
     </div>
   )
 }

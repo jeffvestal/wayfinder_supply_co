@@ -9,7 +9,9 @@ import { UserMenu } from './components/UserMenu'
 import { UserAccountPage } from './components/UserAccountPage'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { DemoOverlay } from './components/DemoOverlay'
-import { ShoppingCart, MapPin, Home, Menu, X, Search, Play } from 'lucide-react'
+import { PersonalizationDemo } from './components/PersonalizationDemo'
+import { SearchComparisonDemo } from './components/SearchComparisonDemo'
+import { ShoppingCart, MapPin, Home, Menu, X, Search, Play, Eye, EyeOff, Sparkles, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
 import { UserPersona } from './types'
@@ -36,6 +38,17 @@ function App() {
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
   const [isDemoRunning, setIsDemoRunning] = useState(false)
   const [demoModeRequested, setDemoModeRequested] = useState(false)
+  const [focusMode, setFocusMode] = useState(() => 
+    localStorage.getItem('wf_focus_mode') === 'true'
+  )
+  const [narrationMode, setNarrationMode] = useState(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    return urlParams.get('narration') === 'true' || localStorage.getItem('wf_narration_mode') === 'true'
+  })
+  const [showPersonalizationDemo, setShowPersonalizationDemo] = useState(false)
+  const [showSearchComparisonDemo, setShowSearchComparisonDemo] = useState(false)
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
+  const [wowDropdownOpen, setWowDropdownOpen] = useState(false)
 
   // Load personas on mount
   useEffect(() => {
@@ -47,6 +60,58 @@ function App() {
     const persona = personas.find(p => p.id === currentUser)
     setCurrentPersona(persona || null)
   }, [currentUser, personas])
+
+  // Close wow dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setWowDropdownOpen(false)
+    }
+    if (wowDropdownOpen) {
+      window.addEventListener('click', handleClickOutside)
+      return () => window.removeEventListener('click', handleClickOutside)
+    }
+  }, [wowDropdownOpen])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Focus Mode (Ctrl+Shift+F)
+      if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+        e.preventDefault()
+        setFocusMode(prev => {
+          const next = !prev
+          localStorage.setItem('wf_focus_mode', String(next))
+          return next
+        })
+      }
+      // Narration Mode (Ctrl+Shift+N)
+      else if (e.ctrlKey && e.shiftKey && e.key === 'N') {
+        e.preventDefault()
+        setNarrationMode(prev => {
+          const next = !prev
+          localStorage.setItem('wf_narration_mode', String(next))
+          return next
+        })
+      }
+      // Personalization Demo (Ctrl+Shift+1)
+      else if (e.ctrlKey && e.shiftKey && e.key === '1') {
+        e.preventDefault()
+        setShowPersonalizationDemo(true)
+      }
+      // Search Comparison Demo (Ctrl+Shift+2)
+      else if (e.ctrlKey && e.shiftKey && e.key === '2') {
+        e.preventDefault()
+        setShowSearchComparisonDemo(true)
+      }
+      // Keyboard Help (?)
+      else if (e.key === '?' && !e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        setShowKeyboardHelp(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const loadPersonas = async () => {
     try {
@@ -168,17 +233,26 @@ function App() {
                 </a>
               </div>
               {/* Mobile Menu Button */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-2 rounded-lg hover:bg-white/5 transition-colors"
-                aria-label="Toggle menu"
-              >
-                {mobileMenuOpen ? (
-                  <X className="w-6 h-6 text-white" />
-                ) : (
-                  <Menu className="w-6 h-6 text-white" />
-                )}
-              </button>
+              {!focusMode && (
+                <button
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  className="lg:hidden p-2 rounded-lg hover:bg-white/5 transition-colors"
+                  aria-label="Toggle menu"
+                >
+                  {mobileMenuOpen ? (
+                    <X className="w-6 h-6 text-white" />
+                  ) : (
+                    <Menu className="w-6 h-6 text-white" />
+                  )}
+                </button>
+              )}
+              {/* Focus Mode Indicator */}
+              {focusMode && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/20 text-primary rounded-lg text-sm">
+                  <Eye className="w-4 h-4" />
+                  <span>Focus Mode</span>
+                </div>
+              )}
               <nav className="hidden lg:flex gap-1">
                 <button
                   onClick={() => {
@@ -208,20 +282,22 @@ function App() {
                   <MapPin className="w-4 h-4" />
                   Trip Planner
                 </button>
-                <button
-                  onClick={() => {
-                    setCurrentView('cart')
-                    setMobileMenuOpen(false)
-                  }}
-                  className={`px-5 py-2.5 rounded-lg flex items-center gap-2 font-medium transition-all relative ${
-                    currentView === 'cart'
-                      ? 'bg-primary/20 text-primary'
-                      : 'text-gray-300 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  Cart
-                </button>
+                {!focusMode && (
+                  <button
+                    onClick={() => {
+                      setCurrentView('cart')
+                      setMobileMenuOpen(false)
+                    }}
+                    className={`px-5 py-2.5 rounded-lg flex items-center gap-2 font-medium transition-all relative ${
+                      currentView === 'cart'
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-gray-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    Cart
+                  </button>
+                )}
               </nav>
             </div>
             <div className="flex items-center gap-3">
@@ -234,6 +310,52 @@ function App() {
                 <Play className="w-4 h-4" />
                 Watch Demo
               </button>
+              {/* Wow Demos Dropdown */}
+              <div className="relative hidden sm:block">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setWowDropdownOpen(!wowDropdownOpen)
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all border border-purple-500/30 font-medium text-sm shadow-lg shadow-purple-500/20"
+                  title="Wow Moments"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Wow</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${wowDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {wowDropdownOpen && (
+                  <div 
+                    className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => {
+                        setShowPersonalizationDemo(true)
+                        setWowDropdownOpen(false)
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors flex items-center gap-3"
+                    >
+                      <div className="flex-1">
+                        <div className="text-white font-medium">Personalization Difference</div>
+                        <div className="text-gray-400 text-xs mt-1">Compare Guest vs Sarah results</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowSearchComparisonDemo(true)
+                        setWowDropdownOpen(false)
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors flex items-center gap-3 border-t border-slate-700"
+                    >
+                      <div className="flex-1">
+                        <div className="text-white font-medium">Search Mode Comparison</div>
+                        <div className="text-gray-400 text-xs mt-1">Lexical vs Hybrid vs Agentic</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setSearchPanelOpen(true)}
                 className="flex items-center justify-center w-10 h-10 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
@@ -241,22 +363,24 @@ function App() {
               >
                 <Search className="w-5 h-5" />
               </button>
-              <UserMenu
-                currentUserId={currentUser}
-                currentPersona={currentPersona}
-                onSwitchUser={() => {
-                  setCurrentView('account')
-                  setMobileMenuOpen(false)
-                }}
-                onClearHistory={handleClearHistory}
-              />
+              {!focusMode && (
+                <UserMenu
+                  currentUserId={currentUser}
+                  currentPersona={currentPersona}
+                  onSwitchUser={() => {
+                    setCurrentView('account')
+                    setMobileMenuOpen(false)
+                  }}
+                  onClearHistory={handleClearHistory}
+                />
+              )}
             </div>
           </div>
         </div>
 
         {/* Mobile Navigation Menu - Inside header for proper stacking */}
         <AnimatePresence>
-          {mobileMenuOpen && (
+          {mobileMenuOpen && !focusMode && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -326,7 +450,7 @@ function App() {
                 transition={{ duration: 0.2 }}
               >
                 <ErrorBoundary>
-                  <Storefront userId={currentUser} onStartChat={handleStartChatWithContext} />
+                  <Storefront userId={currentUser} onStartChat={handleStartChatWithContext} focusMode={focusMode} />
                 </ErrorBoundary>
               </motion.div>
             )}
@@ -447,11 +571,70 @@ function App() {
           onInitialMessageSent={() => setChatInitialMessage(undefined)}
           startInDemoMode={demoModeRequested}
           onDemoModeStarted={() => setDemoModeRequested(false)}
+          narrationMode={narrationMode}
         />
       </ErrorBoundary>
 
       {/* Demo Overlay */}
       <DemoOverlay isVisible={isDemoRunning} />
+
+      {/* Wow Moment Demos */}
+      {showPersonalizationDemo && (
+        <PersonalizationDemo onClose={() => setShowPersonalizationDemo(false)} />
+      )}
+      {showSearchComparisonDemo && (
+        <SearchComparisonDemo onClose={() => setShowSearchComparisonDemo(false)} userId={currentUser} />
+      )}
+
+      {/* Keyboard Help Modal */}
+      {showKeyboardHelp && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowKeyboardHelp(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-2xl"
+          >
+            <div className="flex items-center justify-between p-6 border-b border-slate-700">
+              <h2 className="text-2xl font-display font-bold text-white">Keyboard Shortcuts</h2>
+              <button
+                onClick={() => setShowKeyboardHelp(false)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-300" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between py-2 border-b border-slate-700">
+                  <span className="text-gray-300">Focus Mode</span>
+                  <kbd className="px-2 py-1 bg-slate-800 rounded text-sm text-gray-300">Ctrl+Shift+F</kbd>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-slate-700">
+                  <span className="text-gray-300">Narration Banners</span>
+                  <kbd className="px-2 py-1 bg-slate-800 rounded text-sm text-gray-300">Ctrl+Shift+N</kbd>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-slate-700">
+                  <span className="text-gray-300">Personalization Demo</span>
+                  <kbd className="px-2 py-1 bg-slate-800 rounded text-sm text-gray-300">Ctrl+Shift+1</kbd>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-slate-700">
+                  <span className="text-gray-300">Search Comparison Demo</span>
+                  <kbd className="px-2 py-1 bg-slate-800 rounded text-sm text-gray-300">Ctrl+Shift+2</kbd>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-300">Show This Help</span>
+                  <kbd className="px-2 py-1 bg-slate-800 rounded text-sm text-gray-300">?</kbd>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }

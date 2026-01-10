@@ -7,6 +7,8 @@ import { ProductDetailModal } from './ProductDetailModal'
 import { ChatMode } from './search/ChatMode'
 import { SearchMode } from './search/SearchMode'
 import { DemoMode } from './search/DemoMode'
+import { NarrationBanner } from './NarrationBanner'
+import { NARRATION_MESSAGES } from '../lib/constants'
 import { 
   SearchMode as SearchModeType, 
   ExtendedChatMessage, 
@@ -24,9 +26,10 @@ interface SearchPanelProps {
   onOpenTripPlanner?: () => void
   startInDemoMode?: boolean
   onDemoModeStarted?: () => void
+  narrationMode?: boolean
 }
 
-export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner, startInDemoMode, onDemoModeStarted }: SearchPanelProps) {
+export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner, startInDemoMode, onDemoModeStarted, narrationMode = false }: SearchPanelProps) {
   // UI State
   const [mode, setMode] = useState<SearchModeType>('chat')
   const [panelWidth, setPanelWidth] = useState(50)
@@ -60,6 +63,9 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
   const [queryExpanded, setQueryExpanded] = useState<{ lexical: boolean; hybrid: boolean }>({ lexical: false, hybrid: false })
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
   const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
+  
+  // Narration state
+  const [currentNarration, setCurrentNarration] = useState<string | null>(null)
   
   // Refs
   const dragStartX = useRef(0)
@@ -127,7 +133,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     }
     return products
   }
-
+  
   // Combined extraction helper
   const extractAndFetchProducts = async (steps: AgentStep[]) => {
     const productIds = extractProductIdsFromSteps(steps)
@@ -286,7 +292,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     try {
       let currentSteps: AgentStep[] = []
       let currentContent = ''
-
+      
       await api.streamChat(messageText, userId, (event: StreamEvent) => {
         const { type, data } = event
 
@@ -386,16 +392,29 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
 
   const handleSearch = async (query: string) => {
     if (!query.trim() || isLoading) return
-    
+
     setIsLoading(true)
     setInput('')
     const personalizedUserId = personalizationEnabled ? userId : undefined
+
+    // Show narration banner
+    if (narrationMode) {
+      const narrationKey = mode === 'hybrid' ? 'hybrid_search' : 'lexical_search'
+      setCurrentNarration(narrationKey)
+      setTimeout(() => setCurrentNarration(null), 3000)
+    }
 
     try {
       const results = mode === 'hybrid' 
         ? await api.hybridSearch(query, 10, personalizedUserId)
         : await api.lexicalSearch(query, 10, personalizedUserId)
       setSearchResults(results.products)
+      
+      // Show personalized narration if applicable
+      if (narrationMode && personalizationEnabled) {
+        setCurrentNarration('personalized')
+        setTimeout(() => setCurrentNarration(null), 3000)
+      }
     } catch (error) {
       console.error('Search error:', error)
     } finally {
@@ -428,17 +447,17 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     const demoQuery = DEMO_QUERIES[queryType].query
     const personalizedUserId = personalizationEnabled ? userId : undefined
     
-    setIsLoading(true)
-    try {
+      setIsLoading(true)
+      try {
       const results = await api.lexicalSearch(demoQuery, 10, personalizedUserId)
-      setDemoLexicalResults(results.products)
-      setDemoLexicalQuery(results.es_query || null)
-      setDemoLexicalRawHits(results.raw_hits || [])
-    } catch (error) {
-      console.error('Demo lexical search failed:', error)
-    } finally {
-      setIsLoading(false)
-    }
+        setDemoLexicalResults(results.products)
+        setDemoLexicalQuery(results.es_query || null)
+        setDemoLexicalRawHits(results.raw_hits || [])
+      } catch (error) {
+        console.error('Demo lexical search failed:', error)
+      } finally {
+        setIsLoading(false)
+      }
   }
 
   const advanceDemo = async () => {
@@ -451,6 +470,13 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     if (demoStep === 'lexical') {
       setDemoStep('hybrid')
       setIsLoading(true)
+      
+      // Show narration
+      if (narrationMode) {
+        setCurrentNarration('hybrid_search')
+        setTimeout(() => setCurrentNarration(null), 3000)
+      }
+      
       try {
         const results = await api.hybridSearch(demoQuery, 10, personalizedUserId)
         setDemoHybridResults(results.products)
@@ -464,6 +490,12 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     } else if (demoStep === 'hybrid') {
       setDemoStep('agentic')
       setIsLoading(true)
+      
+      // Show narration
+      if (narrationMode) {
+        setCurrentNarration('agent_start')
+        setTimeout(() => setCurrentNarration(null), 3000)
+      }
       
       const assistantMessageId = Date.now().toString()
       const assistantMessage: ExtendedChatMessage = {
@@ -584,6 +616,14 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
 
             {/* Panel Content */}
             <div className={`flex flex-col w-full ${getModeBgClass(mode)} shadow-2xl border-l border-slate-700`}>
+              {/* Narration Banner */}
+              {narrationMode && currentNarration && NARRATION_MESSAGES[currentNarration] && (
+                <NarrationBanner
+                  message={NARRATION_MESSAGES[currentNarration].message}
+                  icon={NARRATION_MESSAGES[currentNarration].icon}
+                  visible={true}
+                />
+              )}
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-slate-700">
                 <h2 className="text-xl font-display font-bold text-white">Search & Chat</h2>
