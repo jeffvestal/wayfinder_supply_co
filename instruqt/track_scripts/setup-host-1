@@ -164,8 +164,10 @@ npm install
 echo "[Workshop] Building frontend for production..."
 if npm run build; then
   echo "[Workshop] ✓ Frontend build successful"
+  echo "{\"location\":\"setup-host-1: build\",\"message\":\"Frontend build successful\",\"data\":{},\"timestamp\":$(date +%s)000,\"sessionId\":\"frontend-debug\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}" >> /Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log
 else
   echo "[Workshop] ✗ Frontend build FAILED!"
+  echo "{\"location\":\"setup-host-1: build\",\"message\":\"Frontend build FAILED\",\"data\":{},\"timestamp\":$(date +%s)000,\"sessionId\":\"frontend-debug\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}" >> /Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log
   echo "[Workshop] Check if dist/ directory exists:"
   ls -la dist/ 2>/dev/null || echo "[Workshop] dist/ does not exist"
 fi
@@ -181,8 +183,10 @@ if [ -d "dist" ] && [ -f "dist/index.html" ]; then
   cp -r dist/* /opt/workshop-assets/backend/static/
   echo "[Workshop] ✓ Frontend files copied to backend/static/"
   ls -la /opt/workshop-assets/backend/static/
+  echo "{\"location\":\"setup-host-1: copy\",\"message\":\"Frontend files copied\",\"data\":{\"backend_static_exists\":$([ -d /opt/workshop-assets/backend/static ] && echo true || echo false),\"backend_index_exists\":$([ -f /opt/workshop-assets/backend/static/index.html ] && echo true || echo false)},\"timestamp\":$(date +%s)000,\"sessionId\":\"frontend-debug\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}" >> /Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log
 else
   echo "[Workshop] ⚠️  WARNING: dist/index.html not found, frontend may not work"
+  echo "{\"location\":\"setup-host-1: verify\",\"message\":\"Build output verification FAILED\",\"data\":{\"dist_exists\":$([ -d dist ] && echo true || echo false),\"index_html_exists\":$([ -f dist/index.html ] && echo true || echo false)},\"timestamp\":$(date +%s)000,\"sessionId\":\"frontend-debug\",\"runId\":\"run1\",\"hypothesisId\":\"A,B\"}" >> /Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log
 fi
 
 # NOTE: Frontend is now served by the backend on port 8000 (unified serving)
