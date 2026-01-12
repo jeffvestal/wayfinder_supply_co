@@ -13,7 +13,7 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
   const [guestResults, setGuestResults] = useState<Product[]>([])
   const [sarahResults, setSarahResults] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const query = 'lightweight tent for backpacking'
+  const query = 'backpacking gear'
 
   useEffect(() => {
     const runComparison = async () => {
