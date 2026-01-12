@@ -29,3 +29,6 @@ export function NarrationBanner({ message, icon, visible }: NarrationBannerProps
   )
 }
 
+
+
+
