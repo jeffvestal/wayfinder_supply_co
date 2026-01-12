@@ -259,6 +259,39 @@ async def hybrid_search(
     es = get_elastic_client()
     
     # Build retriever config for Linear combination (weighted)
+    lexical_query = {
+        "multi_match": {
+            "query": q,
+            "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
+            "type": "best_fields",
+            "fuzziness": "AUTO"
+        }
+    }
+
+    # Add personalization if user_id provided
+    personalized = False
+    if user_id:
+        prefs = get_user_preferences(user_id, es)
+        if prefs["tags"] or prefs["categories"]:
+            personalized = True
+            lexical_query = {
+                "function_score": {
+                    "query": lexical_query,
+                    "functions": [
+                        {
+                            "filter": {"terms": {"tags": prefs["tags"]}},
+                            "weight": 1.5
+                        },
+                        {
+                            "filter": {"terms": {"category": prefs["categories"]}},
+                            "weight": 1.3
+                        }
+                    ],
+                    "boost_mode": "multiply",
+                    "score_mode": "sum"
+                }
+            }
+
     retriever_config = {
         "linear": {
             "retrievers": [
@@ -280,14 +313,7 @@ async def hybrid_search(
                 {
                     "retriever": {
                         "standard": {
-                            "query": {
-                                "multi_match": {
-                                    "query": q,
-                                    "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
-                                    "type": "best_fields",
-                                    "fuzziness": "AUTO"
-                                }
-                            }
+                            "query": lexical_query
                         }
                     },
                     "weight": 0.3  # Lexical for keyword boost
@@ -318,12 +344,6 @@ async def hybrid_search(
         
         products = []
         raw_hits = []
-        
-        # Get user preferences for post-search personalization boost indicator
-        personalized = False
-        if user_id:
-            prefs = get_user_preferences(user_id, es)
-            personalized = bool(prefs["tags"] or prefs["categories"])
         
         for hit in response["hits"]["hits"]:
             product = hit["_source"]
