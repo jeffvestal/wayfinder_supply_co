@@ -23,7 +23,15 @@ fi
 ####################################################################### INSTALL NODE.JS
 
 echo "[Workshop] Installing Node.js..."
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Add retry loop for apt update due to potential mirror sync issues
+for i in $(seq 1 5); do
+  if curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && apt-get update; then
+    echo "[Workshop] ✓ apt update successful"
+    break
+  fi
+  echo "  ... apt update failed (attempt $i/5), retrying in 5s..."
+  sleep 5
+done
 apt-get install -y nodejs
 
 ####################################################################### INSTALL PYTHON DEPENDENCIES

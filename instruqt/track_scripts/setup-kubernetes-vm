@@ -88,12 +88,23 @@ fi
 
 ####################################################################### STARTUP
 
+# Install system dependencies needed for Python environment
+echo "[Workshop] Installing system dependencies..."
+apt-get update
+apt-get install -y python3-pip python3-venv
+
 # finish elastic install
 source /opt/workshops/elastic-start.sh
 
 # Set Elasticsearch connection variables (may be set by elastic-start.sh, but ensure defaults)
 ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-http://localhost:30920}"
 ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
+
+# Reload secure settings to ensure 'sa' client is recognized
+echo "[Workshop] Reloading Elasticsearch secure settings..."
+curl -s -X POST "${ELASTICSEARCH_URL}/_nodes/reload_secure_settings" \
+  -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" > /dev/null
+sleep 5 # Give it a moment to propagate
 
 # Wait for 'sa' GCS client to be configured by ECK (keystore secret mounting)
 # The 'sa' client is required for the snapshot bucket but takes time to be available
@@ -127,6 +138,9 @@ while [ $SA_ATTEMPT -lt $SA_MAX_ATTEMPTS ]; do
     # 'sa' client not yet available, keep waiting
     if [ $((SA_ATTEMPT % 15)) -eq 0 ]; then
       echo "[Workshop]   Still waiting for 'sa' client... (attempt $SA_ATTEMPT/$SA_MAX_ATTEMPTS)"
+      # Try reloading secure settings again in case it helps
+      curl -s -X POST "${ELASTICSEARCH_URL}/_nodes/reload_secure_settings" \
+        -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" > /dev/null
     fi
     sleep 2
   else
@@ -160,11 +174,27 @@ else
 
   if echo "$RESTORE_RESPONSE" | grep -q '"failed":0'; then
     echo "[Workshop] ✓ Snapshot restored successfully"
-    echo "[Workshop] $RESTORE_RESPONSE"
   else
     echo "[Workshop] ⚠️  Snapshot restore response: $RESTORE_RESPONSE"
   fi
 fi
+
+# Verify critical index exists before proceeding
+echo "[Workshop] Verifying product-catalog index exists..."
+for i in $(seq 1 30); do
+  INDEX_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${ELASTICSEARCH_URL}/product-catalog" \
+    -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}")
+  if [ "$INDEX_STATUS" = "200" ]; then
+    echo "[Workshop] ✓ Index 'product-catalog' is ready"
+    break
+  fi
+  if [ $i -eq 30 ]; then
+    echo "[Workshop] ⚠️  WARNING: 'product-catalog' index NOT found after 30 attempts"
+    echo "[Workshop]     Agent tool creation will likely fail"
+  fi
+  echo "  ... waiting for index (attempt ${i}/30)"
+  sleep 2
+done
 
 # setup openai
 source /opt/workshops/llm-key.sh
@@ -398,11 +428,21 @@ fi
 echo "[Workshop] Setting up Python environment for agent creation..."
 cd /opt/workshop-assets
 
+# Robust virtual environment creation
 echo "[Workshop] Creating Python virtual environment..."
-python3 -m venv venv
+rm -rf venv
+if python3 -m venv venv; then
+  echo "[Workshop] ✓ Virtual environment created"
+else
+  echo "[Workshop] ⚠️  venv creation failed, attempting with --without-pip"
+  python3 -m venv venv --without-pip
+  curl https://bootstrap.pypa.io/get-pip.py | ./venv/bin/python3
+fi
+
 source venv/bin/activate
 
 echo "[Workshop] Python version: $(python3 --version)"
+echo "[Workshop] Pip version: $(pip --version)"
 echo "[Workshop] Installing Python dependencies..."
 pip install --upgrade pip
 pip install pyyaml requests python-dotenv elasticsearch
