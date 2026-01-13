@@ -17,12 +17,6 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
         return {"tags": [], "categories": []}
     
     try:
-        # #region agent log
-        try:
-            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Entry","data":{"user_id":user_id},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H2"})+'\n')
-        except Exception: pass
-        # #endregion
-
         # Get top tags from clickstream
         tag_response = es.search(
             index="user-clickstream",
@@ -45,33 +39,19 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
             }
         )
         
-        # #region agent log
-        try:
-            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Tag response","data":{"hits":tag_response.get("hits",{}).get("total",{}),"aggs":tag_response.get("aggregations",{})},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H3"})+'\n')
-        except Exception: pass
-        # #endregion
-
         tags = [bucket["key"] for bucket in tag_response.get("aggregations", {}).get("top_tags", {}).get("buckets", [])]
         
         # Get top categories by looking at products user viewed
-        category_query = {
-            "bool": {
-                "must": [
-                    {"term": {"user_id": user_id}},
-                    {"term": {"action": "view_item"}}
-                ]
-            }
-        }
-        
-        # #region agent log
-        try:
-            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Category query","data":{"query":category_query},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H4"})+'\n')
-        except Exception: pass
-        # #endregion
-
         category_response = es.search(
             index="user-clickstream",
-            query=category_query,
+            query={
+                "bool": {
+                    "must": [
+                        {"term": {"user_id": user_id}},
+                        {"term": {"action": "view_item"}}
+                    ]
+                }
+            },
             size=0,
             aggs={
                 "product_ids": {
@@ -82,35 +62,17 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                 }
             }
         )
-
-        # #region agent log
-        try:
-            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Category response","data":{"hits":category_response.get("hits",{}).get("total",{}),"aggs":category_response.get("aggregations",{})},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H1"})+'\n')
-        except Exception: pass
-        # #endregion
-
         product_ids = [bucket["key"] for bucket in category_response.get("aggregations", {}).get("product_ids", {}).get("buckets", [])]
         
         categories = []
         if product_ids:
             # Get categories from products
             products_response = es.mget(index="product-catalog", ids=product_ids[:20])
-            # #region agent log
-            try:
-                import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Mget products","data":{"ids":product_ids[:20],"found":[d.get("found") for d in products_response.get("docs",[])]},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H5"})+'\n')
-            except Exception: pass
-            # #endregion
             for doc in products_response.get("docs", []):
                 if doc.get("found") and "_source" in doc:
                     cat = doc["_source"].get("category")
                     if cat and cat not in categories:
                         categories.append(cat)
-        
-        # #region agent log
-        try:
-            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Final result","data":{"tags":tags,"categories":categories},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H1"})+'\n')
-        except Exception: pass
-        # #endregion
         
         logger.info(f"User preferences for {user_id}: tags={tags}, categories={categories}")
         return {"tags": tags, "categories": categories}
@@ -118,66 +80,6 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
         # If anything fails, return empty preferences
         logger.error(f"Error getting user preferences for {user_id}: {str(e)}")
         return {"tags": [], "categories": []}
-
-
-@router.get("/products/debug/clickstream/{user_id}")
-async def debug_clickstream(user_id: str):
-    """Debug endpoint to check clickstream data for a user."""
-    es = get_elastic_client()
-    try:
-        # Check if index exists
-        exists = es.indices.exists(index="user-clickstream")
-        
-        # Search for raw documents for this user
-        raw_docs = es.search(
-            index="user-clickstream",
-            query={"term": {"user_id": user_id}},
-            size=5
-        )
-        
-        # Get global stats for the index
-        global_stats = es.count(index="user-clickstream")
-        
-        # Get a sample of ANY documents to see what user_ids exist
-        sample_any = es.search(
-            index="user-clickstream",
-            query={"match_all": {}},
-            size=5
-        )
-        
-        # Check for tags aggregation for this user
-        tag_aggs = es.search(
-            index="user-clickstream",
-            query={
-                "bool": {
-                    "must": [
-                        {"term": {"user_id": user_id}},
-                        {"exists": {"field": "meta_tags"}}
-                    ]
-                }
-            },
-            size=0,
-            aggs={
-                "top_tags": {
-                    "terms": {
-                        "field": "meta_tags",
-                        "size": 5
-                    }
-                }
-            }
-        )
-        
-        return {
-            "index_exists": exists,
-            "user_id": user_id,
-            "total_docs_in_index": global_stats["count"],
-            "user_hits": raw_docs["hits"]["total"]["value"],
-            "sample_user_docs": raw_docs["hits"]["hits"],
-            "sample_any_docs": sample_any["hits"]["hits"],
-            "tag_aggs": tag_aggs.get("aggregations", {})
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 
 @router.get("/products")

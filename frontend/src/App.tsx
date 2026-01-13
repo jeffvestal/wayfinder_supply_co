@@ -26,7 +26,7 @@ const LEGACY_LOYALTY_TIERS: Record<string, string> = {
 type View = 'storefront' | 'trip-planner' | 'cart' | 'checkout' | 'order-confirmation' | 'account'
 
 function App() {
-  const [currentUser, setCurrentUser] = useState<string>('ultralight_backpacker_sarah')
+  const [currentUser, setCurrentUser] = useState<string>('user_member')
   const [currentPersona, setCurrentPersona] = useState<UserPersona | null>(null)
   const [personas, setPersonas] = useState<UserPersona[]>([])
   const [currentView, setCurrentView] = useState<View>('storefront')
