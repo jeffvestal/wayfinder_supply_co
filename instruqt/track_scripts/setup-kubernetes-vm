@@ -91,7 +91,8 @@ fi
 # Install system dependencies needed for Python environment
 echo "[Workshop] Installing system dependencies..."
 for i in $(seq 1 5); do
-  if apt-get update && apt-get install -y python3-pip python3-venv python3.10-venv; then
+  # Use generic python3-venv instead of versioned one for better compatibility
+  if apt-get update && apt-get install -y python3-pip python3-venv; then
     echo "[Workshop] ✓ System dependencies installed"
     break
   fi

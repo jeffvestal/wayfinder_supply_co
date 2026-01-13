@@ -37,8 +37,10 @@ apt-get install -y nodejs
 ####################################################################### INSTALL PYTHON DEPENDENCIES
 
 echo "[Workshop] Installing Python dependencies..."
+# Add retry loop for apt update due to potential mirror sync issues
 for i in $(seq 1 5); do
-  if apt-get update && apt-get install -y python3-pip python3-venv python3.10-venv; then
+  # Use generic python3-venv instead of versioned one for better compatibility
+  if apt-get update && apt-get install -y python3-pip python3-venv; then
     echo "[Workshop] ✓ Python dependencies installed"
     break
   fi
@@ -110,7 +112,12 @@ echo "[Workshop] Getting environment variables from kubernetes-vm..."
 for i in $(seq 1 60); do
   ENV_VARS=$(curl -s http://kubernetes-vm:9000/env 2>/dev/null)
   if [ -n "$ENV_VARS" ]; then
-    export $(echo "$ENV_VARS" | xargs)
+    # Parse and export each variable explicitly
+    while read -r line; do
+      if [[ $line == *"="* ]]; then
+        export "$line"
+      fi
+    done <<< "$(echo "$ENV_VARS" | xargs -n1)"
     echo "[Workshop] ✓ Environment variables loaded from kubernetes-vm"
     break
   fi
@@ -151,7 +158,16 @@ EOF
 echo "[Workshop] Setting up MCP server..."
 cd /opt/workshop-assets/mcp_server
 
-python3 -m venv venv
+# Robust virtual environment creation
+rm -rf venv
+if python3 -m venv venv; then
+  echo "[Workshop] ✓ Virtual environment created for MCP server"
+else
+  echo "[Workshop] ⚠️  venv creation failed for MCP server, attempting with --without-pip"
+  python3 -m venv venv --without-pip
+  curl https://bootstrap.pypa.io/get-pip.py | ./venv/bin/python3
+fi
+
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -160,7 +176,13 @@ pip install -r requirements.txt
 echo "[Workshop] Starting MCP server on port 8002..."
 nohup /opt/workshop-assets/mcp_server/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002 > /var/log/mcp-server.log 2>&1 &
 MCP_PID=$!
-echo "[Workshop] MCP server started (PID: $MCP_PID)"
+sleep 2
+if ! ps -p $MCP_PID > /dev/null; then
+  echo "[Workshop] ✗ ERROR: MCP server failed to start! Last 10 lines of /var/log/mcp-server.log:"
+  tail -n 10 /var/log/mcp-server.log
+else
+  echo "[Workshop] MCP server started (PID: $MCP_PID)"
+fi
 
 deactivate
 
@@ -207,7 +229,16 @@ fi
 echo "[Workshop] Setting up backend proxy..."
 cd /opt/workshop-assets/backend
 
-python3 -m venv venv
+# Robust virtual environment creation
+rm -rf venv
+if python3 -m venv venv; then
+  echo "[Workshop] ✓ Virtual environment created for backend"
+else
+  echo "[Workshop] ⚠️  venv creation failed for backend, attempting with --without-pip"
+  python3 -m venv venv --without-pip
+  curl https://bootstrap.pypa.io/get-pip.py | ./venv/bin/python3
+fi
+
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -221,7 +252,13 @@ MCP_SERVER_URL="${MCP_SERVER_URL}" \
 ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY}" \
 nohup /opt/workshop-assets/backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /var/log/backend.log 2>&1 &
 BACKEND_PID=$!
-echo "[Workshop] Backend server started (PID: $BACKEND_PID)"
+sleep 2
+if ! ps -p $BACKEND_PID > /dev/null; then
+  echo "[Workshop] ✗ ERROR: Backend server failed to start! Last 20 lines of /var/log/backend.log:"
+  tail -n 20 /var/log/backend.log
+else
+  echo "[Workshop] Backend server started (PID: $BACKEND_PID)"
+fi
 
 deactivate
 
