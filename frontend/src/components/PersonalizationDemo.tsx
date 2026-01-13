@@ -14,6 +14,7 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
   const [sarahResults, setSarahResults] = useState<Product[]>([])
   const [guestDebug, setGuestDebug] = useState<any>(null)
   const [sarahDebug, setSarahDebug] = useState<any>(null)
+  const [clickstreamDebug, setClickstreamDebug] = useState<any>(null)
   const [showDebug, setShowDebug] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const query = 'backpacking gear'
@@ -29,6 +30,15 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
         // Search as Sarah (ultralight backpacker)
         const sarahSearch = await api.hybridSearch(query, 10, 'ultralight_backpacker_sarah')
         setSarahDebug(sarahSearch)
+
+        // Get clickstream debug info
+        try {
+          const response = await fetch(`${api.getBaseUrl()}/products/debug/clickstream/ultralight_backpacker_sarah`)
+          const data = await response.json()
+          setClickstreamDebug(data)
+        } catch (e) {
+          console.error('Failed to fetch clickstream debug:', e)
+        }
         
         setGuestResults(guestSearch.products)
         setSarahResults(sarahSearch.products)
@@ -93,18 +103,26 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
               <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
           ) : showDebug ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
+            <div className="grid grid-cols-1 gap-6">
               <div className="space-y-4">
-                <h3 className="font-mono text-sm text-primary uppercase tracking-wider">Guest User API Response</h3>
-                <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono text-cyan-400 overflow-auto max-h-[60vh] border border-white/10">
-                  {JSON.stringify(guestDebug, (k, v) => k === 'raw_hits' ? undefined : v, 2)}
+                <h3 className="font-mono text-sm text-primary uppercase tracking-wider">Sarah Clickstream Data (Remote VM)</h3>
+                <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono text-amber-400 overflow-auto max-h-[40vh] border border-white/10">
+                  {JSON.stringify(clickstreamDebug, null, 2)}
                 </pre>
               </div>
-              <div className="space-y-4">
-                <h3 className="font-mono text-sm text-primary uppercase tracking-wider">Sarah User API Response</h3>
-                <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono text-green-400 overflow-auto max-h-[60vh] border border-white/10">
-                  {JSON.stringify(sarahDebug, (k, v) => k === 'raw_hits' ? undefined : v, 2)}
-                </pre>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
+                <div className="space-y-4">
+                  <h3 className="font-mono text-sm text-primary uppercase tracking-wider">Guest User API Response</h3>
+                  <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono text-cyan-400 overflow-auto max-h-[60vh] border border-white/10">
+                    {JSON.stringify(guestDebug, (k, v) => k === 'raw_hits' ? undefined : v, 2)}
+                  </pre>
+                </div>
+                <div className="space-y-4">
+                  <h3 className="font-mono text-sm text-primary uppercase tracking-wider">Sarah User API Response</h3>
+                  <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono text-green-400 overflow-auto max-h-[60vh] border border-white/10">
+                    {JSON.stringify(sarahDebug, (k, v) => k === 'raw_hits' ? undefined : v, 2)}
+                  </pre>
+                </div>
               </div>
             </div>
           ) : (

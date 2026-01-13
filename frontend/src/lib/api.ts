@@ -81,6 +81,10 @@ export interface TripEntities {
 }
 
 export const api = {
+  getBaseUrl(): string {
+    return API_URL || window.location.origin;
+  },
+
   async parseTripContext(message: string): Promise<TripContext> {
     const url = createApiUrl('/api/parse-trip-context');
     url.searchParams.set('message', message);

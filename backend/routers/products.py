@@ -120,6 +120,54 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
         return {"tags": [], "categories": []}
 
 
+@router.get("/debug/clickstream/{user_id}")
+async def debug_clickstream(user_id: str):
+    """Debug endpoint to check clickstream data for a user."""
+    es = get_elastic_client()
+    try:
+        # Check if index exists
+        exists = es.indices.exists(index="user-clickstream")
+        
+        # Search for raw documents
+        raw_docs = es.search(
+            index="user-clickstream",
+            query={"term": {"user_id": user_id}},
+            size=10
+        )
+        
+        # Check for tags aggregation
+        tag_aggs = es.search(
+            index="user-clickstream",
+            query={
+                "bool": {
+                    "must": [
+                        {"term": {"user_id": user_id}},
+                        {"exists": {"field": "meta_tags"}}
+                    ]
+                }
+            },
+            size=0,
+            aggs={
+                "top_tags": {
+                    "terms": {
+                        "field": "meta_tags",
+                        "size": 5
+                    }
+                }
+            }
+        )
+        
+        return {
+            "index_exists": exists,
+            "user_id": user_id,
+            "total_hits": raw_docs["hits"]["total"]["value"],
+            "sample_docs": raw_docs["hits"]["hits"],
+            "tag_aggs": tag_aggs.get("aggregations", {})
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/products")
 async def list_products(
     category: Optional[str] = None,
