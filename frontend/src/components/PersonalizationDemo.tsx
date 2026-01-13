@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Product } from '../types'
 import { api } from '../lib/api'
 import { ProductCard } from './ProductCard'
-import { Loader2, X } from 'lucide-react'
+import { Loader2, X, Terminal } from 'lucide-react'
 
 interface PersonalizationDemoProps {
   onClose: () => void
@@ -12,6 +12,9 @@ interface PersonalizationDemoProps {
 export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
   const [guestResults, setGuestResults] = useState<Product[]>([])
   const [sarahResults, setSarahResults] = useState<Product[]>([])
+  const [guestDebug, setGuestDebug] = useState<any>(null)
+  const [sarahDebug, setSarahDebug] = useState<any>(null)
+  const [showDebug, setShowDebug] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const query = 'backpacking gear'
 
@@ -21,9 +24,11 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
       try {
         // Search as guest (no personalization)
         const guestSearch = await api.hybridSearch(query, 10, undefined)
+        setGuestDebug(guestSearch)
         
         // Search as Sarah (ultralight backpacker)
         const sarahSearch = await api.hybridSearch(query, 10, 'ultralight_backpacker_sarah')
+        setSarahDebug(sarahSearch)
         
         setGuestResults(guestSearch.products)
         setSarahResults(sarahSearch.products)
@@ -61,12 +66,24 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
               Same query: &quot;{query}&quot;
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-300" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-sm ${
+                showDebug ? 'bg-primary text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'
+              }`}
+              title="Show Debug Info"
+            >
+              <Terminal className="w-4 h-4" />
+              <span className="hidden sm:inline">Debug Info</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-300" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -74,6 +91,21 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          ) : showDebug ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
+              <div className="space-y-4">
+                <h3 className="font-mono text-sm text-primary uppercase tracking-wider">Guest User API Response</h3>
+                <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono text-cyan-400 overflow-auto max-h-[60vh] border border-white/10">
+                  {JSON.stringify(guestDebug, (k, v) => k === 'raw_hits' ? undefined : v, 2)}
+                </pre>
+              </div>
+              <div className="space-y-4">
+                <h3 className="font-mono text-sm text-primary uppercase tracking-wider">Sarah User API Response</h3>
+                <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono text-green-400 overflow-auto max-h-[60vh] border border-white/10">
+                  {JSON.stringify(sarahDebug, (k, v) => k === 'raw_hits' ? undefined : v, 2)}
+                </pre>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

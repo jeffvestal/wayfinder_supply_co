@@ -77,7 +77,7 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
         return {"tags": tags, "categories": categories}
     except Exception as e:
         # If anything fails, return empty preferences
-        logger.error(f"Error getting user preferences for {user_id}: {e}")
+        logger.error(f"Error getting user preferences for {user_id}: {str(e)}")
         return {"tags": [], "categories": []}
 
 
@@ -189,11 +189,6 @@ async def lexical_search(
         query = base_query
         if user_id:
             prefs = get_user_preferences(user_id, es)
-            # #region agent log
-            try:
-                import json, time; open('/tmp/wow_demo.log','a').write(json.dumps({"location":"products.py:lexical","message":"Prefs for lexical","data":{"user_id":user_id,"prefs":prefs},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"A"})+'\n')
-            except Exception: pass
-            # #endregion
             if prefs["tags"] or prefs["categories"]:
                 query = {
                     "function_score": {
@@ -213,12 +208,6 @@ async def lexical_search(
                     }
                 }
         
-        # #region agent log
-        try:
-            import json, time; open('/tmp/wow_demo.log','a').write(json.dumps({"location":"products.py:lexical","message":"Final lexical query","data":{"query":query},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"B"})+'\n')
-        except Exception: pass
-        # #endregion
-
         response = es.search(
             index="product-catalog",
             query=query,
@@ -232,9 +221,6 @@ async def lexical_search(
         )
         
         # #region agent log
-        try:
-            import json, time; open('/tmp/wow_demo.log','a').write(json.dumps({"location":"products.py:lexical","message":"Lexical response","data":{"hits":len(response["hits"]["hits"]),"total":response["hits"]["total"]["value"]},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"B"})+'\n')
-        except Exception: pass
         # #endregion
         
         products = []
@@ -254,12 +240,17 @@ async def lexical_search(
                     "highlight": hit.get("highlight", {})
                 })
         
+        user_prefs = None
+        if user_id:
+            user_prefs = get_user_preferences(user_id, es)
+
         return {
             "products": products,
             "total": response["hits"]["total"]["value"],
             "query": q,
             "es_query": query,  # The actual Elasticsearch query
-            "raw_hits": raw_hits,  # Top 3 raw response documents
+            "user_prefs": user_prefs,
+            "raw_hits": raw_hits,
             "search_type": "lexical",
             "personalized": user_id is not None
         }
@@ -293,11 +284,6 @@ async def hybrid_search(
     personalized = False
     if user_id:
         prefs = get_user_preferences(user_id, es)
-        # #region agent log
-        try:
-            import json, time; open('/tmp/wow_demo.log','a').write(json.dumps({"location":"products.py:hybrid","message":"Prefs for hybrid","data":{"user_id":user_id,"prefs":prefs},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"A"})+'\n')
-        except Exception: pass
-        # #endregion
         if prefs["tags"] or prefs["categories"]:
             personalized = True
             logger.info(f"Applying STRONG personalization for {user_id} in hybrid search")
@@ -349,18 +335,16 @@ async def hybrid_search(
         }
     }
     
-    # #region agent log
-    try:
-        import json, time; open('/tmp/wow_demo.log','a').write(json.dumps({"location":"products.py:hybrid","message":"Final retriever config","data":{"config":retriever_config},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"C"})+'\n')
-    except Exception: pass
-    # #endregion
-
     # Build the es_query representation for display
     es_query_display = {
         "retriever": retriever_config,
         "highlight": {"fields": {"title": {}, "description": {}}}
     }
     
+    user_prefs = None
+    if user_id:
+        user_prefs = get_user_preferences(user_id, es)
+
     try:
         # Use retriever as top-level parameter (correct syntax for ES Python client)
         response = es.search(
@@ -376,9 +360,6 @@ async def hybrid_search(
         )
         
         # #region agent log
-        try:
-            import json, time; open('/tmp/wow_demo.log','a').write(json.dumps({"location":"products.py:hybrid","message":"Hybrid response","data":{"hits":len(response["hits"]["hits"]),"total":response["hits"]["total"]["value"]},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"C"})+'\n')
-        except Exception: pass
         # #endregion
         
         products = []
@@ -404,6 +385,7 @@ async def hybrid_search(
             "total": response["hits"]["total"]["value"],
             "query": q,
             "es_query": es_query_display,
+            "user_prefs": user_prefs,
             "raw_hits": raw_hits,
             "search_type": "hybrid_linear",
             "personalized": personalized
