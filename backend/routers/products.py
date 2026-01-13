@@ -74,7 +74,6 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                     if cat and cat not in categories:
                         categories.append(cat)
         
-        logger.info(f"User preferences for {user_id}: tags={tags}, categories={categories}")
         return {"tags": tags, "categories": categories}
     except Exception as e:
         # If anything fails, return empty preferences
@@ -287,7 +286,6 @@ async def hybrid_search(
         prefs = get_user_preferences(user_id, es)
         if prefs["tags"] or prefs["categories"]:
             personalized = True
-            logger.info(f"Applying STRONG personalization for {user_id} in hybrid search")
             lexical_query = {
                 "function_score": {
                     "query": lexical_query,
