@@ -128,14 +128,24 @@ async def debug_clickstream(user_id: str):
         # Check if index exists
         exists = es.indices.exists(index="user-clickstream")
         
-        # Search for raw documents
+        # Search for raw documents for this user
         raw_docs = es.search(
             index="user-clickstream",
             query={"term": {"user_id": user_id}},
-            size=10
+            size=5
         )
         
-        # Check for tags aggregation
+        # Get global stats for the index
+        global_stats = es.count(index="user-clickstream")
+        
+        # Get a sample of ANY documents to see what user_ids exist
+        sample_any = es.search(
+            index="user-clickstream",
+            query={"match_all": {}},
+            size=5
+        )
+        
+        # Check for tags aggregation for this user
         tag_aggs = es.search(
             index="user-clickstream",
             query={
@@ -160,8 +170,10 @@ async def debug_clickstream(user_id: str):
         return {
             "index_exists": exists,
             "user_id": user_id,
-            "total_hits": raw_docs["hits"]["total"]["value"],
-            "sample_docs": raw_docs["hits"]["hits"],
+            "total_docs_in_index": global_stats["count"],
+            "user_hits": raw_docs["hits"]["total"]["value"],
+            "sample_user_docs": raw_docs["hits"]["hits"],
+            "sample_any_docs": sample_any["hits"]["hits"],
             "tag_aggs": tag_aggs.get("aggregations", {})
         }
     except Exception as e:
