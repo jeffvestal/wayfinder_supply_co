@@ -90,8 +90,14 @@ fi
 
 # Install system dependencies needed for Python environment
 echo "[Workshop] Installing system dependencies..."
-apt-get update
-apt-get install -y python3-pip python3-venv
+for i in $(seq 1 5); do
+  if apt-get update && apt-get install -y python3-pip python3-venv python3.10-venv; then
+    echo "[Workshop] ✓ System dependencies installed"
+    break
+  fi
+  echo "  ... apt install failed (attempt $i/5), retrying in 5s..."
+  sleep 5
+done
 
 # finish elastic install
 source /opt/workshops/elastic-start.sh
@@ -104,7 +110,8 @@ ELASTICSEARCH_APIKEY="${ELASTICSEARCH_APIKEY:-${ELASTIC_API_KEY}}"
 echo "[Workshop] Reloading Elasticsearch secure settings..."
 curl -s -X POST "${ELASTICSEARCH_URL}/_nodes/reload_secure_settings" \
   -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" > /dev/null
-sleep 5 # Give it a moment to propagate
+echo "[Workshop] Waiting 20 seconds for keystore reload to propagate..."
+sleep 20 # Give it more time to propagate across all nodes
 
 # Wait for 'sa' GCS client to be configured by ECK (keystore secret mounting)
 # The 'sa' client is required for the snapshot bucket but takes time to be available
@@ -116,7 +123,8 @@ SA_ATTEMPT=0
 while [ $SA_ATTEMPT -lt $SA_MAX_ATTEMPTS ]; do
   SA_ATTEMPT=$((SA_ATTEMPT + 1))
   
-  # Try to create repo with 'sa' client - if it fails with "Unknown client", keep waiting
+  # Try to create repo with 'sa' client - use verify=false to avoid immediate verification check
+  # which often triggers the "Unknown client" error before the setting is fully hot-reloaded
   REPO_RESPONSE=$(curl -s -X PUT "${ELASTICSEARCH_URL}/_snapshot/repo1?verify=false" \
     -H "Authorization: ApiKey ${ELASTICSEARCH_APIKEY}" \
     -H "Content-Type: application/json" -d'
@@ -136,7 +144,7 @@ while [ $SA_ATTEMPT -lt $SA_MAX_ATTEMPTS ]; do
     break
   elif echo "$REPO_RESPONSE" | grep -q "Unknown client name"; then
     # 'sa' client not yet available, keep waiting
-    if [ $((SA_ATTEMPT % 15)) -eq 0 ]; then
+    if [ $((SA_ATTEMPT % 10)) -eq 0 ]; then
       echo "[Workshop]   Still waiting for 'sa' client... (attempt $SA_ATTEMPT/$SA_MAX_ATTEMPTS)"
       # Try reloading secure settings again in case it helps
       curl -s -X POST "${ELASTICSEARCH_URL}/_nodes/reload_secure_settings" \

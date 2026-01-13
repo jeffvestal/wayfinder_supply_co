@@ -37,8 +37,14 @@ apt-get install -y nodejs
 ####################################################################### INSTALL PYTHON DEPENDENCIES
 
 echo "[Workshop] Installing Python dependencies..."
-apt-get update
-apt-get install -y python3-pip python3-venv
+for i in $(seq 1 5); do
+  if apt-get update && apt-get install -y python3-pip python3-venv python3.10-venv; then
+    echo "[Workshop] ✓ Python dependencies installed"
+    break
+  fi
+  echo "  ... apt install failed (attempt $i/5), retrying in 5s..."
+  sleep 5
+done
 
 ####################################################################### DOWNLOAD WORKSHOP ASSETS
 
