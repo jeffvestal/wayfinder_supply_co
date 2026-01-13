@@ -120,7 +120,7 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
         return {"tags": [], "categories": []}
 
 
-@router.get("/debug/clickstream/{user_id}")
+@router.get("/products/debug/clickstream/{user_id}")
 async def debug_clickstream(user_id: str):
     """Debug endpoint to check clickstream data for a user."""
     es = get_elastic_client()

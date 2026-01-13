@@ -33,7 +33,7 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
 
         // Get clickstream debug info
         try {
-          const response = await fetch(`${api.getBaseUrl()}/products/debug/clickstream/ultralight_backpacker_sarah`)
+          const response = await fetch(`${api.getBaseUrl()}/api/products/debug/clickstream/ultralight_backpacker_sarah`)
           const data = await response.json()
           setClickstreamDebug(data)
         } catch (e) {
