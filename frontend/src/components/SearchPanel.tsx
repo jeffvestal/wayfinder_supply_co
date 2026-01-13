@@ -427,6 +427,9 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setIsProductModalOpen(true)
   }
 
+  // Demo user ID - user_member (Alex Hiker) has clickstream data for personalization
+  const DEMO_USER_ID = 'user_member' as UserId
+
   // Demo functionality
   const runDemo = async (queryType: DemoQueryType) => {
     setSelectedDemoQuery(queryType)
@@ -445,7 +448,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     setSearchResults([])
     
     const demoQuery = DEMO_QUERIES[queryType].query
-    const personalizedUserId = personalizationEnabled ? userId : undefined
+    const personalizedUserId = personalizationEnabled ? DEMO_USER_ID : undefined
     
       setIsLoading(true)
       try {
@@ -464,8 +467,8 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
     if (isLoading || !selectedDemoQuery) return
 
     const demoQuery = DEMO_QUERIES[selectedDemoQuery].query
-    const personalizedUserId = personalizationEnabled ? userId : undefined
-    const chatUserId = personalizationEnabled ? userId : 'user_new'
+    const personalizedUserId = personalizationEnabled ? DEMO_USER_ID : undefined
+    const chatUserId = personalizationEnabled ? DEMO_USER_ID : 'user_new'
     
     if (demoStep === 'lexical') {
       setDemoStep('hybrid')
@@ -698,7 +701,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               <div className="flex-1 overflow-y-auto p-4">
                 {isDemoRunning ? (
                   <DemoMode
-                    userId={userId}
+                    userId={personalizationEnabled ? DEMO_USER_ID : userId}
                     isLoading={isLoading}
                     personalizationEnabled={personalizationEnabled}
                     demoStep={demoStep}

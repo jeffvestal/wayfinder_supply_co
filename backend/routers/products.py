@@ -90,13 +90,13 @@ async def list_products(
     """
     List products from Elasticsearch.
     """
-    es = get_elastic_client()
-    
-    query = {"match_all": {}}
-    if category:
-        query = {"term": {"category": category}}
-    
     try:
+        es = get_elastic_client()
+        
+        query = {"match_all": {}}
+        if category:
+            query = {"term": {"category": category}}
+        
         response = es.search(
             index="product-catalog",
             query=query,

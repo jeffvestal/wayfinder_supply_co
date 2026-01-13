@@ -45,10 +45,12 @@ app.add_middleware(LoggingMiddleware)
 
 # CORS middleware - allow all origins for workshop/Instruqt environments
 # Instruqt URLs are dynamic: https://host-1-3000-{participant_id}.env.play.instruqt.com
+# Note: allow_credentials=True is removed because Instruqt proxy often adds its own,
+# leading to "true,true" which causes browser errors.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -67,7 +69,6 @@ app.include_router(workshop.router, prefix="/api", tags=["workshop"])
 # --- Static UI serving (Instruqt unified mode) ---
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_HTML = STATIC_DIR / "index.html"
-
 
 @app.get("/")
 async def root():

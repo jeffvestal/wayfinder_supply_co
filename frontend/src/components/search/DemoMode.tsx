@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { Product, UserId } from '../../types'
 import { 
   Search, Loader2, ChevronRight, ChevronDown, MessageSquare, 
-  Zap, BookOpen, Database, Target, FileText, Plus, ShoppingCart, Check 
+  Zap, BookOpen, Database, Target, FileText, Plus, ShoppingCart, Check, Sparkles 
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { 
@@ -278,6 +278,12 @@ export function DemoMode({
                       >
                         <h5 className="font-medium text-white text-sm">{product.title}</h5>
                         <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
+                        {product.explanation && (
+                          <div className="mt-2 flex items-start gap-2 text-[11px] text-amber-400">
+                            <Sparkles className="w-3 h-3 shrink-0 mt-0.5" />
+                            <span>{product.explanation}</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {demoLexicalResults.length > 3 && (
@@ -362,6 +368,12 @@ export function DemoMode({
                       >
                         <h5 className="font-medium text-white text-sm">{product.title}</h5>
                         <p className="text-xs text-gray-400 mt-1">${product.price?.toFixed(2)}</p>
+                        {product.explanation && (
+                          <div className="mt-2 flex items-start gap-2 text-[11px] text-cyan-400">
+                            <Sparkles className="w-3 h-3 shrink-0 mt-0.5" />
+                            <span>{product.explanation}</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {demoHybridResults.length > 3 && (

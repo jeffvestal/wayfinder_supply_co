@@ -62,7 +62,7 @@ export const FALLBACK_PRODUCT_IMAGE =
 
 // Persona display names
 export const PERSONA_NAMES: Record<string, string> = {
-  'user_member': '👤 Sarah - Ultralight Hiker',
+  'user_member': '🏔️ Alex Hiker - Experienced Member',
   'user_business': '👔 Mike - Family Adventurer',
   'user_new': '🆕 New Visitor',
   'ultralight_backpacker_sarah': '👤 Sarah Martinez',
