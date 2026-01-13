@@ -223,6 +223,10 @@ async def lexical_search(
         # #region agent log
         # #endregion
         
+        user_prefs = None
+        if user_id:
+            user_prefs = get_user_preferences(user_id, es)
+
         products = []
         raw_hits = []
         for hit in response["hits"]["hits"]:
@@ -230,6 +234,22 @@ async def lexical_search(
             product["id"] = hit["_id"]
             product["_score"] = hit["_score"]
             product["_highlight"] = hit.get("highlight", {})
+            
+            # Add personalization explanation if applicable
+            if user_prefs:
+                matching_tags = [t for t in product.get("tags", []) if t in user_prefs.get("tags", [])]
+                matching_cat = product.get("category") in user_prefs.get("categories", [])
+                
+                reasons = []
+                if matching_tags:
+                    tags_str = ", ".join(matching_tags)
+                    reasons.append(f"matches your interest in {tags_str}")
+                if matching_cat:
+                    reasons.append(f"is in your preferred category {product.get('category')}")
+                
+                if reasons:
+                    product["explanation"] = "This item " + " and ".join(reasons)
+            
             products.append(product)
             # Store raw hit for query viewer (top 3 only)
             if len(raw_hits) < 3:
@@ -240,10 +260,6 @@ async def lexical_search(
                     "highlight": hit.get("highlight", {})
                 })
         
-        user_prefs = None
-        if user_id:
-            user_prefs = get_user_preferences(user_id, es)
-
         return {
             "products": products,
             "total": response["hits"]["total"]["value"],
@@ -369,6 +385,22 @@ async def hybrid_search(
             product["id"] = hit["_id"]
             product["_score"] = hit.get("_score")
             product["_highlight"] = hit.get("highlight", {})
+            
+            # Add personalization explanation if applicable
+            if user_prefs:
+                matching_tags = [t for t in product.get("tags", []) if t in user_prefs.get("tags", [])]
+                matching_cat = product.get("category") in user_prefs.get("categories", [])
+                
+                reasons = []
+                if matching_tags:
+                    tags_str = ", ".join(matching_tags)
+                    reasons.append(f"matches your interest in {tags_str}")
+                if matching_cat:
+                    reasons.append(f"is in your preferred category {product.get('category')}")
+                
+                if reasons:
+                    product["explanation"] = "This item " + " and ".join(reasons)
+            
             products.append(product)
             # Store raw hit for query viewer (top 3 only)
             if len(raw_hits) < 3:

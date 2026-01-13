@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Product } from '../types'
 import { api } from '../lib/api'
 import { ProductCard } from './ProductCard'
-import { Loader2, X } from 'lucide-react'
+import { Loader2, X, Sparkles } from 'lucide-react'
 
 interface PersonalizationDemoProps {
   onClose: () => void
@@ -128,6 +128,15 @@ export function PersonalizationDemo({ onClose }: PersonalizationDemoProps) {
                         className={isDifferent ? 'ring-2 ring-primary/50 rounded-lg p-1' : ''}
                       >
                         <ProductCard product={product} userId="user_member" />
+                        {product.explanation && (
+                          <div className="mt-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg flex items-start gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                            <p className="text-[11px] text-gray-300 leading-tight">
+                              <span className="text-primary font-medium">Personalization: </span>
+                              {product.explanation}
+                            </p>
+                          </div>
+                        )}
                       </motion.div>
                     )
                   })}

@@ -8,6 +8,7 @@ export interface Product {
   price: number;
   tags: string[];
   image_url: string;
+  explanation?: string;
   average_rating?: number;
   review_count?: number;
   attributes?: {
