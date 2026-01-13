@@ -650,6 +650,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
                       setIsDemoRunning(true)
                       setDemoStep('intro')
                       setSelectedDemoQuery(null)
+                      setPersonalizationEnabled(true) // Auto-enable for the "Wow" moment
                     }}
                     disabled={isDemoRunning}
                     className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-lg transition-colors flex items-center gap-1.5 text-white"
@@ -701,7 +702,7 @@ export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitial
               <div className="flex-1 overflow-y-auto p-4">
                 {isDemoRunning ? (
                   <DemoMode
-                    userId={personalizationEnabled ? DEMO_USER_ID : userId}
+                    userId={DEMO_USER_ID} // Always show Alex Hiker during demo
                     isLoading={isLoading}
                     personalizationEnabled={personalizationEnabled}
                     demoStep={demoStep}
