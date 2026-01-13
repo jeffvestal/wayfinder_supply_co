@@ -17,6 +17,12 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
         return {"tags": [], "categories": []}
     
     try:
+        # #region agent log
+        try:
+            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Entry","data":{"user_id":user_id},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H2"})+'\n')
+        except Exception: pass
+        # #endregion
+
         # Get top tags from clickstream
         tag_response = es.search(
             index="user-clickstream",
@@ -38,19 +44,34 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                 }
             }
         )
+        
+        # #region agent log
+        try:
+            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Tag response","data":{"hits":tag_response.get("hits",{}).get("total",{}),"aggs":tag_response.get("aggregations",{})},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H3"})+'\n')
+        except Exception: pass
+        # #endregion
+
         tags = [bucket["key"] for bucket in tag_response.get("aggregations", {}).get("top_tags", {}).get("buckets", [])]
         
         # Get top categories by looking at products user viewed
+        category_query = {
+            "bool": {
+                "must": [
+                    {"term": {"user_id": user_id}},
+                    {"term": {"action": "view_item"}}
+                ]
+            }
+        }
+        
+        # #region agent log
+        try:
+            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Category query","data":{"query":category_query},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H4"})+'\n')
+        except Exception: pass
+        # #endregion
+
         category_response = es.search(
             index="user-clickstream",
-            query={
-                "bool": {
-                    "must": [
-                        {"term": {"user_id": user_id}},
-                        {"term": {"action": "view_item"}}
-                    ]
-                }
-            },
+            query=category_query,
             size=0,
             aggs={
                 "product_ids": {
@@ -61,17 +82,35 @@ def get_user_preferences(user_id: Optional[str], es) -> dict:
                 }
             }
         )
+
+        # #region agent log
+        try:
+            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Category response","data":{"hits":category_response.get("hits",{}).get("total",{}),"aggs":category_response.get("aggregations",{})},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H1"})+'\n')
+        except Exception: pass
+        # #endregion
+
         product_ids = [bucket["key"] for bucket in category_response.get("aggregations", {}).get("product_ids", {}).get("buckets", [])]
         
         categories = []
         if product_ids:
             # Get categories from products
             products_response = es.mget(index="product-catalog", ids=product_ids[:20])
+            # #region agent log
+            try:
+                import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Mget products","data":{"ids":product_ids[:20],"found":[d.get("found") for d in products_response.get("docs",[])]},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H5"})+'\n')
+            except Exception: pass
+            # #endregion
             for doc in products_response.get("docs", []):
                 if doc.get("found") and "_source" in doc:
                     cat = doc["_source"].get("category")
                     if cat and cat not in categories:
                         categories.append(cat)
+        
+        # #region agent log
+        try:
+            import json, time; open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log','a').write(json.dumps({"location":"products.py:get_user_prefs","message":"Final result","data":{"tags":tags,"categories":categories},"timestamp":time.time()*1000,"sessionId":"wow-debug","runId":"run1","hypothesisId":"H1"})+'\n')
+        except Exception: pass
+        # #endregion
         
         logger.info(f"User preferences for {user_id}: tags={tags}, categories={categories}")
         return {"tags": tags, "categories": categories}
