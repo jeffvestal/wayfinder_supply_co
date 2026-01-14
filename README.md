@@ -403,10 +403,24 @@ Each persona has 8-15 browsing sessions with realistic shopping journeys (e.g., 
 
 ### How Personalization Works
 
-1. **User Context** — When a user starts a chat, the `get_user_affinity` workflow queries their clickstream
-2. **Category Analysis** — The system aggregates which product categories/tags the user browses most
-3. **AI Recommendations** — The trip planner agent uses this context to prioritize relevant products
-4. **Real-Time Updates** — For the guest user, new clicks immediately influence recommendations
+Wayfinder implements personalization by modifying Elasticsearch queries on the fly based on a user's profile. Instead of a separate "black-box" recommendation engine, it uses explicit **Query-Time Boosting**.
+
+#### 1. Data Collection (The Inputs)
+We collect behavioral data to understand intent:
+*   **Synthetic Data:** Pre-generated history for demo personas (like Sarah Martinez) ensures the system already "knows" their preferences (e.g., "Ultralight" or "Expedition") for immediate impact during demos.
+*   **Real-time Data (Guest User):** When a human visitor clicks on product cards or adds items to their cart, the React frontend immediately sends these events to the backend via the `/api/clickstream/events` endpoint.
+    *   **Data Collected:** We track the `user_id`, `action` (view_item, add_to_cart), `product_id`, and associated `meta_tags` (e.g., "waterproof", "lightweight", "sub-10lb").
+
+#### 2. Profile Aggregation
+The system aggregates these events from the `user-clickstream` index to build a lightweight **User Profile**. This profile is essentially a set of weighted preferences derived from the frequency and type of their interactions.
+*   **Example Profile:** `{ "brand_preference": "TrailBlazer (2.5)", "category_preference": "Tents (1.3)" }`
+
+#### 3. Query-Time Boosting
+When a search is performed (e.g., "backpacking gear"), the application constructs a **Compound Query** using Elasticsearch's `function_score`:
+1.  **Match:** It finds all items matching the text "backpacking gear".
+2.  **Boost:** It effectively asks Elasticsearch: *"Find items matching 'backpacking gear', BUT multiply the score by 2.5 if the brand is TrailBlazer and by 1.3 if the category is Tents."*
+
+**The Result:** The search results are technically accurate for the query, but the specific items that align with that user's unique behavior are "nudged" to the top of the list for a tailored experience.
 
 ### Guest User: Interactive Demo Mode
 
