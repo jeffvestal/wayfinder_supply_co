@@ -6,9 +6,10 @@ import { ItineraryModal } from './ItineraryModal'
 import { 
   Send, Loader2, Calendar, Mountain, ChevronDown, ChevronRight,
   Plus, Compass, Backpack, CheckCircle2, Clock,
-  Tent, Map, RefreshCw
+  Tent, Map, RefreshCw, MapPin, CloudSun
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface TripPlannerProps {
   userId: UserId
@@ -137,6 +138,50 @@ function parseProductsFromResponse(content: string): { catalogProducts: string[]
   return { catalogProducts, otherItems, gearSearchTerms }
 }
 
+// Custom ReactMarkdown components for rich formatting
+const markdownComponents = {
+  h1: ({ children }: { children?: React.ReactNode }) => (
+    <h1 className="text-xl font-display font-bold text-white mb-3 flex items-center gap-2">
+      <Compass className="w-5 h-5 text-primary" />
+      {children}
+    </h1>
+  ),
+  h2: ({ children }: { children?: React.ReactNode }) => {
+    const text = String(children).toLowerCase()
+    return (
+      <h2 className="text-lg font-display font-semibold text-white mt-4 mb-2 flex items-center gap-2">
+        {text.includes('weather') && <CloudSun className="w-4 h-4 text-amber-500" />}
+        {text.includes('gear') && <Backpack className="w-4 h-4 text-primary" />}
+        {text.includes('recommend') && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+        {text.includes('overview') && <Map className="w-4 h-4 text-blue-400" />}
+        {text.includes('itinerary') && <Calendar className="w-4 h-4 text-purple-400" />}
+        {text.includes('safety') && <Mountain className="w-4 h-4 text-orange-400" />}
+        {children}
+      </h2>
+    )
+  },
+  h3: ({ children }: { children?: React.ReactNode }) => (
+    <h3 className="text-base font-semibold text-gray-200 mt-3 mb-1">
+      {children}
+    </h3>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="space-y-1 my-2">{children}</ul>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="flex items-start gap-2 text-gray-300">
+      <span className="text-primary mt-1">•</span>
+      <span>{children}</span>
+    </li>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold text-white">{children}</strong>
+  ),
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="text-gray-300 mb-2 leading-relaxed">{children}</p>
+  ),
+}
+
 export function TripPlanner({ 
   userId, 
   initialMessage, 
@@ -144,25 +189,26 @@ export function TripPlanner({
   messages,
   setMessages,
   tripContext,
-  setTripContext: _setTripContext,
-  originalContext: _originalContext,
-  setOriginalContext: _setOriginalContext,
+  setTripContext,
+  originalContext,
+  setOriginalContext,
   suggestedProducts,
   setSuggestedProducts,
   otherRecommendedItems,
   setOtherRecommendedItems,
   itinerary,
-  setItinerary: _setItinerary,
+  setItinerary,
   messageTraces,
   setMessageTraces
 }: TripPlannerProps) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [stepsExpanded, setStepsExpanded] = useState<Record<string, boolean>>({})
+  const [expandedThinking, setExpandedThinking] = useState(false)
   const [isItineraryOpen, setIsItineraryOpen] = useState(false)
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
   const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
   const [searchingGear, setSearchingGear] = useState(false)
+  const [contextModified, setContextModified] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialMessageSentRef = useRef(false)
 
@@ -183,6 +229,15 @@ export function TripPlanner({
     }
   }, [initialMessage])
 
+  // Check if context has been modified
+  useEffect(() => {
+    const modified = 
+      tripContext.destination !== originalContext.destination ||
+      tripContext.dates !== originalContext.dates ||
+      tripContext.activity !== originalContext.activity
+    setContextModified(modified)
+  }, [tripContext, originalContext])
+
   const handleAddToCart = async (product: SuggestedProduct) => {
     try {
       setAddingToCart(product.id)
@@ -198,15 +253,25 @@ export function TripPlanner({
     }
   }
 
+  const handleUpdatePlan = async () => {
+    if (isLoading) return
+    const updateMessage = `Update my trip plan: Going to ${tripContext.destination} ${tripContext.dates} for ${tripContext.activity}`
+    setOriginalContext({ ...tripContext })
+    setContextModified(false)
+    await sendMessage(updateMessage)
+  }
+
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
+    const isFirstMessage = !tripContext.destination && !tripContext.dates && !tripContext.activity
+
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
       content,
-      timestamp: new Date(),
-    }
+        timestamp: new Date(),
+      }
 
     const assistantMessageId = (Date.now() + 1).toString()
     const assistantMessage: ChatMessage = {
@@ -217,8 +282,28 @@ export function TripPlanner({
     }
 
     setMessages(prev => [...prev, userMessage, assistantMessage])
-    setInput('')
-    setIsLoading(true)
+      setInput('')
+      setIsLoading(true)
+      setExpandedThinking(false)
+
+    // Parse context on first message (non-blocking)
+    if (isFirstMessage) {
+      api.parseTripContext(content)
+        .then((parsed) => {
+          if (parsed.destination || parsed.dates || parsed.activity) {
+            const newContext = {
+              destination: parsed.destination || '',
+              dates: parsed.dates || '',
+              activity: parsed.activity || '',
+            }
+            setTripContext(newContext)
+            setOriginalContext(newContext)
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to parse trip context:', error)
+        })
+    }
 
     try {
       // Check if the trip-planner-agent exists first
@@ -295,6 +380,21 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
         setOtherRecommendedItems(otherItems)
       }
 
+      // Extract itinerary from response
+      try {
+        const result = await api.extractItinerary(fullContent)
+      if (result.days && result.days.length > 0) {
+          const days: ItineraryDay[] = result.days.map((d: { day: number; title?: string; activities?: string[] }) => ({
+          day: d.day,
+          title: d.title || `Day ${d.day}`,
+          activities: d.activities || [],
+        }))
+        setItinerary(days)
+      }
+    } catch (error) {
+      console.error('Failed to extract itinerary:', error)
+      }
+
       // If we found catalog products or gear search terms, fetch them
       if (catalogProducts.length > 0 || gearSearchTerms.length > 0) {
         setSearchingGear(true)
@@ -358,268 +458,346 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
     }
   }
 
-  const toggleSteps = (messageId: string) => {
-    setStepsExpanded(prev => ({
-      ...prev,
-      [messageId]: !prev[messageId]
-    }))
-  }
+  // Get current status for thought trace display
+  const currentStatus = messages.length > 0 
+    ? getCurrentStatus(messageTraces[messages[messages.length - 1]?.id] || [], isLoading)
+    : ''
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)] bg-slate-950">
-      {/* Trip Header Context */}
-      <div className="bg-slate-900 border-b border-white/10 p-4">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/20 rounded-lg">
-              <Compass className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Destination</div>
-              <div className="text-sm font-medium text-white">{tripContext.destination || 'Not set'}</div>
-            </div>
-            </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/20 rounded-lg">
-              <Calendar className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Dates</div>
-              <div className="text-sm font-medium text-white">{tripContext.dates || 'Not set'}</div>
-          </div>
-                    </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/20 rounded-lg">
-              <Mountain className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Activity</div>
-              <div className="text-sm font-medium text-white">{tripContext.activity || 'Not set'}</div>
-                    </div>
-          </div>
-          
-          <div className="ml-auto flex items-center gap-2">
-            {itinerary.length > 0 && (
-              <button
-                onClick={() => setIsItineraryOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
-              >
-                        <Map className="w-4 h-4" />
-                <span>View Itinerary</span>
-              </button>
-            )}
-                    </div>
-                  </div>
-                </div>
+    <div className="h-[calc(100vh-5rem)] bg-slate-950 flex flex-col overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 flex flex-col min-h-0 w-full">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4"
+        >
+          <h1 className="text-3xl font-display font-bold text-white mb-1">
+            Trip Planner
+          </h1>
+          <p className="text-gray-400 text-sm">
+            Plan your perfect adventure with AI-powered recommendations
+          </p>
+        </motion.div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col overflow-hidden border-r border-white/10">
-          <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-            {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6">
-                <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Compass className="w-10 h-10 text-primary animate-pulse" />
-                          </div>
-                <div>
-                  <h3 className="text-xl font-display font-bold text-white mb-2">Adventure Trip Planner</h3>
-                  <p className="text-gray-400">
-                    Tell me where you want to go and what you want to do. I'll help you plan the perfect trip and find the right gear.
-                        </p>
-                      </div>
-                <div className="grid grid-cols-1 gap-2 w-full">
-                  <button
-                    onClick={() => setInput("Plan a 3-day backpacking trip in the Enchantments, Washington for this July")}
-                    className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
+        {/* Trip Context Inputs - Editable */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-4"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="glass rounded-xl p-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-400 mb-1.5">
+                <MapPin className="w-3.5 h-3.5 text-primary" />
+                Destination
+              </label>
+              <input
+                type="text"
+                value={tripContext.destination}
+                onChange={(e) => setTripContext({ ...tripContext, destination: e.target.value })}
+                placeholder="e.g., Rocky Mountains"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="glass rounded-xl p-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-400 mb-1.5">
+                <Calendar className="w-3.5 h-3.5 text-primary" />
+                Dates
+              </label>
+              <input
+                type="text"
+                value={tripContext.dates}
+                onChange={(e) => setTripContext({ ...tripContext, dates: e.target.value })}
+                placeholder="e.g., This weekend"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="glass rounded-xl p-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-400 mb-1.5">
+                <Mountain className="w-3.5 h-3.5 text-primary" />
+                Activity
+              </label>
+              <input
+                type="text"
+                value={tripContext.activity}
+                onChange={(e) => setTripContext({ ...tripContext, activity: e.target.value })}
+                placeholder="e.g., Backpacking"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            {/* Update Plan Button */}
+            <div className="flex items-end">
+              {contextModified ? (
+                <button
+                    onClick={handleUpdatePlan}
+                    disabled={isLoading}
+                  className="w-full px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
                   >
-                    "Plan a 3-day backpacking trip in the Enchantments, Washington..."
-                  </button>
-                        <button
-                    onClick={() => setInput("I want to go car camping in Zion National Park next week with my family")}
-                    className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
-                  >
-                    "I want to go car camping in Zion National Park..."
-                  </button>
+                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    Update Plan
+                </button>
+              ) : itinerary.length > 0 ? (
+                <button
+                  onClick={() => setIsItineraryOpen(true)}
+                  className="w-full px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all text-sm font-medium flex items-center justify-center gap-2 border border-primary/30"
+                >
+                  <Map className="w-4 h-4" />
+                  View Itinerary
+                </button>
+              ) : (
+                <div className="w-full px-4 py-2 bg-white/5 text-gray-500 rounded-lg text-sm text-center border border-white/10">
+                  Start planning below
                 </div>
-              </div>
-            ) : (
-              messages.map((msg, idx) => (
-                <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  {/* Thought Trace - Moved above the bubble for assistant */}
-                  {msg.role === 'assistant' && messageTraces[msg.id] && messageTraces[msg.id].length > 0 && (
-                    <div className="mb-2 ml-4">
-                      <button
-                        onClick={() => toggleSteps(msg.id)}
-                        className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
-                      >
-                        {stepsExpanded[msg.id] ? (
-                          <ChevronDown className="w-3 h-3" />
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
+          {/* Chat Area */}
+          <div className="flex-1 flex flex-col min-h-0 glass rounded-xl overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              {messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6">
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Compass className="w-8 h-8 text-primary animate-pulse" />
+                    </div>
+                  <div>
+                    <h3 className="text-lg font-display font-bold text-white mb-2">Adventure Trip Planner</h3>
+                    <p className="text-gray-400 text-sm">
+                      Tell me where you want to go and what you want to do. I'll help plan the perfect trip and find the right gear.
+                      </p>
+                    </div>
+                  <div className="grid grid-cols-1 gap-2 w-full">
+                    <button
+                      onClick={() => setInput("Plan a 3-day backpacking trip in the Enchantments, Washington for this July")}
+                      className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
+                    >
+                      "Plan a 3-day backpacking trip in the Enchantments, Washington..."
+                    </button>
+                    <button
+                      onClick={() => setInput("I want to go car camping in Zion National Park next week with my family")}
+                      className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
+                    >
+                      "I want to go car camping in Zion National Park..."
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                messages.map((message, index) => (
+                  <div key={message.id}>
+                      <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-2xl p-4 ${
+                            message.role === 'user'
+                          ? 'bg-primary text-white rounded-tr-none' 
+                          : 'bg-slate-800/80 text-gray-200 border border-white/10 rounded-tl-none'
+                      }`}>
+                        {message.role === 'assistant' && message.content ? (
+                          <div className="prose-custom">
+                            <ReactMarkdown components={markdownComponents}>
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        ) : message.content ? (
+                          <p className="text-sm">{message.content}</p>
                         ) : (
-                          <ChevronRight className="w-3 h-3" />
+                          <div className="flex gap-2">
+                            <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" />
+                            <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.2s]" />
+                            <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.4s]" />
+                          </div>
                         )}
-                        {isLoading && idx === messages.length - 1 ? (
-                          <span className="flex items-center gap-1.5">
+                      </div>
+                    </div>
+                    
+                    {/* Thinking section under user message */}
+                    {message.role === 'user' && (
+                      (index === messages.length - 2 && (isLoading || (messageTraces[messages[messages.length - 1]?.id]?.length || 0) > 0)) ||
+                      messageTraces[messages[index + 1]?.id]?.length > 0
+                    ) && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="ml-4 mt-2"
+                      >
+                        <button
+                          onClick={() => setExpandedThinking(!expandedThinking)}
+                          className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors py-1"
+                        >
+                          {expandedThinking ? (
+                            <ChevronDown className="w-3 h-3" />
+                          ) : (
+                            <ChevronRight className="w-3 h-3" />
+                          )}
+                          {isLoading && index === messages.length - 2 ? (
+                            <span className="flex items-center gap-2">
                               <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                            <span>{getCurrentStatus(messageTraces[msg.id], true)}</span>
+                              <span className="text-primary font-medium">{currentStatus}</span>
                             </span>
                           ) : (
-                          <span className="flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3 h-3 text-green-500" />
-                            <span>Completed {messageTraces[msg.id].length} steps</span>
+                            <span className="flex items-center gap-2">
+                              <CheckCircle2 className="w-3 h-3 text-green-400" />
+                              <span>Completed {(messageTraces[messages[index + 1]?.id] || []).length} steps</span>
                             </span>
                           )}
                         </button>
                         
-                      {stepsExpanded[msg.id] && (
-                        <div className="mt-2 space-y-1 w-full max-w-[85%]">
-                          {messageTraces[msg.id].map((event, eventIdx) => (
-                            <div key={eventIdx} className="text-[11px] bg-slate-900/50 border border-white/5 rounded px-2 py-1 flex items-center gap-2">
-                              {event.event === 'reasoning' && <Clock className="w-3 h-3 text-blue-400" />}
-                              {event.event === 'tool_call' && <RefreshCw className="w-3 h-3 text-primary animate-spin" />}
-                              {event.event === 'tool_result' && <CheckCircle2 className="w-3 h-3 text-green-500" />}
-                              <span className="text-gray-400">
-                                {event.event === 'reasoning' ? 'Reasoning' : 
-                                 event.event === 'tool_call' ? `Calling ${event.data.tool_id}` : 
-                                 'Processed results'}
-                                      </span>
-                            </div>
-                          ))}
+                        <AnimatePresence>
+                          {expandedThinking && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="mt-2 ml-4 space-y-2 border-l-2 border-slate-600 pl-3"
+                            >
+                              {(index === messages.length - 2 
+                                ? (messageTraces[messages[messages.length - 1]?.id] || [])
+                                : (messageTraces[messages[index + 1]?.id] || [])
+                              ).map((trace, idx) => (
+                                <div key={idx} className="text-xs">
+                                  {trace.event === 'reasoning' && (
+                                    <div className="flex items-start gap-2 text-gray-400">
+                                      <Clock className="w-3 h-3 mt-0.5 text-blue-400" />
+                                      <span>{typeof trace.data === 'string' ? trace.data : trace.data?.reasoning}</span>
+                                    </div>
+                                  )}
+                                  {trace.event === 'tool_call' && (
+                                    <div className="flex items-start gap-2 text-gray-400">
+                                      <RefreshCw className="w-3 h-3 mt-0.5 text-primary animate-spin" />
+                                      <span>Calling {trace.data?.tool_id}</span>
+                                    </div>
+                                  )}
+                                  {trace.event === 'tool_result' && (
+                                    <div className="flex items-start gap-2 text-gray-400">
+                                      <CheckCircle2 className="w-3 h-3 mt-0.5 text-green-400" />
+                                      <span>Processed results</span>
                                     </div>
                                   )}
                                 </div>
-                  )}
-
-                  <div className={`max-w-[85%] rounded-2xl p-4 ${
-                    msg.role === 'user' 
-                      ? 'bg-primary text-white rounded-tr-none' 
-                      : 'bg-slate-900 text-gray-200 border border-white/10 rounded-tl-none'
-                  }`}>
-                    {msg.content ? (
-                      <div className="prose prose-invert prose-sm max-w-none">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" />
-                        <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.2s]" />
-                        <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.4s]" />
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    )}
                 </div>
+                ))
               )}
-                  </div>
-                </div>
-              ))
-              )}
-            <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} />
             </div>
 
-          {/* Input Area */}
-          <div className="p-4 bg-slate-900/50 border-t border-white/10">
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault()
-                sendMessage(input)
-              }}
-              className="relative"
-            >
+            {/* Input Area */}
+            <div className="p-4 bg-slate-900/50 border-t border-white/10">
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  sendMessage(input)
+                }}
+                className="relative"
+              >
                 <input
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                placeholder="Where should we go next?"
-                disabled={isLoading}
-                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
+                  placeholder="Where should we go next?"
+                  disabled={isLoading}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
                 />
                 <button
                   type="submit"
-                disabled={!input.trim() || isLoading}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50"
+                  disabled={!input.trim() || isLoading}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50"
                 >
-                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>
             </form>
           </div>
                   </div>
 
-        {/* Recommendations Sidebar */}
-        <div className="w-96 overflow-y-auto bg-slate-900/30 p-4 space-y-6 custom-scrollbar">
-          {/* Suggested Gear */}
+          {/* Recommendations Sidebar */}
+          <div className="w-80 flex-shrink-0 glass rounded-xl overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            {/* Suggested Gear */}
                             <div>
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Backpack className="w-4 h-4 text-primary" />
-                Recommended Gear
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Backpack className="w-3.5 h-3.5 text-primary" />
+                  Recommended Gear
                               </h4>
-              {searchingGear && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-            </div>
-            
-            {suggestedProducts.length > 0 ? (
-                              <div className="space-y-3">
-                {suggestedProducts.map(product => (
-                  <div key={product.id} className="bg-slate-900 border border-white/10 rounded-xl p-3 flex gap-3 hover:border-primary/30 transition-all group">
-                    <div className="w-16 h-16 bg-white/5 rounded-lg overflow-hidden flex-shrink-0">
+                {searchingGear && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+              </div>
+              
+              {suggestedProducts.length > 0 ? (
+                <div className="space-y-2">
+                  {suggestedProducts.map(product => (
+                    <div key={product.id} className="bg-slate-800/50 border border-white/10 rounded-lg p-2.5 flex gap-2.5 hover:border-primary/30 transition-all group">
+                      <div className="w-14 h-14 bg-white/5 rounded-lg overflow-hidden flex-shrink-0">
                                     {product.image_url ? (
-                        <img src={product.image_url} alt={product.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Mountain className="w-6 h-6 text-gray-700" />
+                          <img src={product.image_url} alt={product.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Mountain className="w-5 h-5 text-gray-700" />
                                       </div>
                                     )}
-                    </div>
+                      </div>
                                     <div className="flex-1 min-w-0">
-                      <h5 className="text-xs font-bold text-white truncate mb-1">{product.title}</h5>
-                      <div className="text-xs text-primary font-bold mb-1">${product.price}</div>
-                      {product.reason && (
-                        <div className="text-[10px] text-gray-500 line-clamp-2 italic leading-tight">
-                          {product.reason}
-                        </div>
-                      )}
+                        <h5 className="text-xs font-bold text-white truncate mb-0.5">{product.title}</h5>
+                        <div className="text-xs text-primary font-bold">${product.price}</div>
+                        {product.reason && (
+                          <div className="text-[10px] text-gray-500 line-clamp-1 italic">
+                            {product.reason}
+                          </div>
+                        )}
                                     </div>
                                     <button
                                       onClick={() => handleAddToCart(product)}
-                      disabled={addingToCart === product.id || justAddedToCart === product.id}
-                      className={`p-2 rounded-lg transition-all duration-300 ${
-                        justAddedToCart === product.id 
-                          ? 'bg-green-500 scale-110 animate-pulse text-white' 
-                          : 'bg-primary/20 hover:bg-primary/30 text-primary'
-                      } disabled:opacity-50`}
-                      title={justAddedToCart === product.id ? 'Added!' : 'Add to cart'}
-                    >
-                      {addingToCart === product.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : justAddedToCart === product.id ? (
-                        <CheckCircle2 className="w-4 h-4" />
-                      ) : (
-                                      <Plus className="w-4 h-4" />
-                      )}
+                        disabled={addingToCart === product.id || justAddedToCart === product.id}
+                        className={`p-1.5 rounded-lg transition-all duration-300 ${
+                          justAddedToCart === product.id 
+                            ? 'bg-green-500 scale-110 animate-pulse text-white' 
+                            : 'bg-primary/20 hover:bg-primary/30 text-primary'
+                        } disabled:opacity-50`}
+                        title={justAddedToCart === product.id ? 'Added!' : 'Add to cart'}
+                      >
+                        {addingToCart === product.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : justAddedToCart === product.id ? (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
                                     </button>
                                   </div>
                                 ))}
                               </div>
-            ) : (
-              <div className="bg-slate-900/50 border border-dashed border-white/10 rounded-xl p-8 text-center">
-                <Tent className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-                <p className="text-xs text-gray-500">I'll suggest relevant gear as we plan your adventure.</p>
+              ) : (
+                <div className="bg-slate-800/30 border border-dashed border-white/10 rounded-lg p-6 text-center">
+                  <Tent className="w-6 h-6 text-gray-700 mx-auto mb-2" />
+                  <p className="text-[10px] text-gray-500">I'll suggest relevant gear as we plan your adventure.</p>
                             </div>
                           )}
-          </div>
+            </div>
                           
-          {/* Other Items Checklist */}
+            {/* Other Items Checklist */}
                           {otherRecommendedItems.length > 0 && (
-            <div className="pt-4 border-t border-white/10">
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                Essential Checklist
+              <div className="pt-3 border-t border-white/10">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                  Essential Checklist
                                 </h4>
-              <div className="space-y-2">
+                <div className="space-y-1.5">
                                         {otherRecommendedItems.map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
-                    <input type="checkbox" className="mt-1 rounded border-white/10 bg-slate-950 text-primary focus:ring-0 focus:ring-offset-0" />
-                    <span className="text-xs text-gray-300 leading-tight">{item}</span>
+                    <div key={idx} className="flex items-start gap-2 p-1.5 rounded-lg hover:bg-white/5 transition-colors">
+                      <input type="checkbox" className="mt-0.5 rounded border-white/10 bg-slate-950 text-primary focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5" />
+                      <span className="text-[11px] text-gray-300 leading-tight">{item}</span>
                                     </div>
-                ))}
+                  ))}
                               </div>
                           </div>
-          )}
+                      )}
+          </div>
         </div>
       </div>
       
