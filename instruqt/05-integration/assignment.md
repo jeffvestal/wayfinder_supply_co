@@ -75,6 +75,7 @@ Now let's see them work together!
 Just like chatting with our agent in Kibana, this custom Trip Planner will give varying answers (Because its the same agent!).
 But, you should see a similar trip plan
 ![CleanShot 2025-12-16 at 11.33.26@2x.png](../assets/CleanShot%202025-12-16%20at%2011.33.26%402x.png)
+_note:_ Your plan will be different since you are running at a different date!
 
 4. **Review the Thought Trace** <br>
 Also just as we did in Kibana, we can view the thought trace of the agent. Here click on `Completed xx steps`
@@ -99,14 +100,30 @@ Our trip planner extracts
 
 ## Step 3: Test Personalization
 
-1. Switch to different user personas using the user switcher (top right)
+Now that the system is fully integrated, let's explore how the **Agentic** experience differs from standard search and how your new workflow enables deep personalization.
 
-2. Try the same query with different users:
-   - **Jordan Explorer** (new user) - Should get general recommendations
-   - **Alex Hiker** (Platinum, ultralight) - Should see premium, lightweight gear
-   - **Casey Campground** (Business) - Should see bulk pricing options
+### Option A: The "Wow" Moments (Easy Review)
+If you want to see the power of personalization and agentic search quickly, we've built specific comparison tools:
 
-3. Notice how your `get_customer_profile` workflow provides different data for each user!
+1. **Watch Demo (One-Click):** Click the [button label="Watch Demo"](tab-0) button in the header. This runs a fully automated walkthrough comparing Lexical, Hybrid, and Agentic search for a complex trip planning query.
+2. **"Wow" Dropdown:** Click the [button label="Wow"](tab-0) dropdown in the header:
+   - **Personalization Difference:** Directly compares search results for a **Guest User** vs. **Alex Hiker** (who has a deep history of ultralight gear).
+   - **Search Mode Comparison:** Shows a side-by-side view of Lexical, Hybrid, and Agentic results for the same query.
+
+### Option B: Interactive Testing (Persona Switching)
+To manually test how your `get_customer_profile` workflow impacts the AI's recommendations:
+
+1. **Switch Users:** Click the user icon in the top right header → click **Switch User** → Select a persona.
+2. **Try a Query:** In the **Trip Planner** or the **Search & Chat** panel, ask:
+   ```
+   Suggest some gear for a camping trip
+   ```
+3. **Compare the results:**
+   - **Jordan Explorer (New User):** Should receive general, entry-level camping gear.
+   - **Alex Hiker (Platinum/Ultralight):** Should see high-end, weight-conscious recommendations (e.g., Summit Pro series).
+   - **Casey Campground (Business):** Should see recommendations that include bulk options or durable, fleet-ready gear.
+
+4. **Verify the Workflow:** Expand the `Completed xx steps` trace above the assistant bubble. You should see the ✅ `get_customer_profile` workflow being called to fetch these unique preferences!
 
 ---
 
