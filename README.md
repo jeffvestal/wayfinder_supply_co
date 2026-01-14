@@ -43,9 +43,8 @@ This workshop showcases how to build an intelligent, conversational shopping exp
    docker-compose up --build
    ```
 
-4. **Access the app**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
+4. **Access the application**:
+   - Unified Frontend & Backend API: http://localhost:8000
    - MCP Server: http://localhost:8001
 
 ### Instruqt Environment
@@ -55,7 +54,7 @@ The workshop runs on Instruqt with two VMs:
 | VM | Services | Purpose |
 |----|----------|---------|
 | `kubernetes-vm` | Elasticsearch, Kibana, Agent Builder | Elastic Stack |
-| `host-1` | Frontend, Backend, MCP Server | Application layer |
+| `host-1` | Unified UI/Backend (Port 8000), MCP Server (Port 8002) | Application layer |
 
 Setup scripts in `instruqt/track_scripts/` handle all configuration.
 
@@ -76,8 +75,7 @@ python scripts/validate_setup.py --mode standalone
 ```
 
 **Access the application:**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
+- Unified Frontend & Backend API: http://localhost:8000
 - MCP Server: http://localhost:8001
 
 For detailed setup instructions, see [Standalone Demo Setup](#standalone-demo-setup) below.
@@ -157,6 +155,7 @@ Full catalog covers 10 categories with ~150 products:
 - **Context Extraction** — Automatic parsing of destination, dates, and activities
 - **Suggested Gear** — Real-time product recommendations from the catalog
 - **Day-by-Day Itinerary** — Structured trip plans with export/download options
+- **PDF Trip Reports** — Download professional PDF itineraries with suggested gear lists
 - **Thought Trace** — Expandable panel showing agent reasoning and tool calls
 - **Quick Chat** — Floating chat button for quick questions anywhere in the app
 
@@ -277,8 +276,7 @@ Run the complete demo outside of Instruqt using Docker containers connected to y
    ```
 
 4. **Access the application**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
+   - Unified Frontend & Backend API: http://localhost:8000
    - MCP Server: http://localhost:8001
 
 #### Understanding Credential Prefixes
@@ -443,12 +441,47 @@ The **Guest User** (`user_new`) enables live, interactive demonstrations of pers
    - Stats reset to 0
    - Start fresh with a new scenario
 
-#### Best Practices
+### Personalization Integration
 
-- **Build a Story**: Browse related products (e.g., all tents, then sleeping bags) to create a coherent preference profile
-- **Compare Users**: After demo with Guest User, switch to Sarah Martinez and ask the same question to show different recommendations
-- **Show the Data**: Use the Events modal to show exactly what was tracked
-- **Explain the Flow**: Point out how the AI references "based on your browsing history" in responses
+The personalization engine integrates user behavior into search queries using a multi-step process:
+
+#### 1. Extracting User Preferences
+The backend analyzes the `user-clickstream` index to aggregate the most common `meta_tags` and `categories` the user has interacted with.
+
+```python
+# Extracting top preferences from clickstream
+def get_user_preferences(user_id: Optional[str], es) -> dict:
+    # Aggregates top tags and categories user interacted with
+    # Returns: {"tags": ["ultralight", "hiking"], "categories": ["Tents"]}
+```
+
+#### 2. Lexical Search Boosting
+Standard keyword searches are wrapped in an Elasticsearch `function_score` query. This "nudges" results that match the user's profile to the top.
+
+```json
+{
+  "function_score": {
+    "query": { "match": { "title": "backpacking gear" } },
+    "functions": [
+      {
+        "filter": { "terms": { "tags": ["ultralight", "expedition"] } },
+        "weight": 1.5
+      },
+      {
+        "filter": { "terms": { "category": ["Tents"] } },
+        "weight": 1.3
+      }
+    ],
+    "boost_mode": "multiply"
+  }
+}
+```
+
+#### 3. Hybrid Search Integration
+In hybrid mode, personalization is applied to the **lexical retriever** within a linear combination. This ensures that even conceptual semantic results are influenced by the user's historical preferences.
+
+*   **Semantic weight (0.7):** ELSER results for conceptual matching.
+*   **Lexical weight (0.3):** Personalized keyword results with high boost weights (e.g., 10.0x for tags).
 
 ## Workshop Flow
 
