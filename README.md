@@ -408,8 +408,9 @@ Wayfinder implements personalization by modifying Elasticsearch queries on the f
 #### 1. Data Collection (The Inputs)
 We collect behavioral data to understand intent:
 *   **Synthetic Data:** Pre-generated history for demo personas (like Sarah Martinez) ensures the system already "knows" their preferences (e.g., "Ultralight" or "Expedition") for immediate impact during demos.
-*   **Real-time Data (Guest User):** When a human visitor clicks on product cards or adds items to their cart, the React frontend immediately sends these events to the backend via the `/api/clickstream/events` endpoint.
-    *   **Data Collected:** We track the `user_id`, `action` (view_item, add_to_cart), `product_id`, and associated `meta_tags` (e.g., "waterproof", "lightweight", "sub-10lb").
+*   **Real-time Data (Guest User):** When a human visitor clicks on product cards or adds items to their cart, the React frontend immediately sends these events to the backend.
+    *   **Elasticsearch Storage:** Unlike some systems that use temporary browser sessions, Wayfinder indexes guest activity **directly into Elasticsearch** in real-time. This ensures that the very next search query can immediately leverage the new data for personalization.
+    *   **Data Collected:** We track the `user_id` (usually `user_new`), `action` (view_item, add_to_cart), `product_id`, and associated `meta_tags` (e.g., "waterproof", "lightweight", "sub-10lb").
 
 #### 2. Profile Aggregation
 The system aggregates these events from the `user-clickstream` index to build a lightweight **User Profile**. This profile is essentially a set of weighted preferences derived from the frequency and type of their interactions.
@@ -428,7 +429,7 @@ The **Guest User** (`user_new`) enables live, interactive demonstrations of pers
 
 #### Features
 
-- **Real-Time Tracking** — Every product view and cart add is recorded immediately
+- **Real-Time Tracking** — Every product view and cart add is recorded immediately to Elasticsearch
 - **Live Stats** — User menu shows live counts of views and cart adds
 - **Event History** — Click on "Views" or "Cart Adds" to see detailed event list
 - **Clear History** — Reset all tracked events with one click
