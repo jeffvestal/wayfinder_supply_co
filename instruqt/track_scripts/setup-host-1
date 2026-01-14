@@ -198,10 +198,11 @@ echo "[Workshop] Installing npm dependencies..."
 npm install
 
 echo "[Workshop] Building frontend for production..."
-if npm run build; then
+if npm run build > /var/log/frontend-build.log 2>&1; then
   echo "[Workshop] ✓ Frontend build successful"
 else
-  echo "[Workshop] ✗ Frontend build FAILED!"
+  echo "[Workshop] ✗ Frontend build FAILED! Last 50 lines of /var/log/frontend-build.log:"
+  tail -n 50 /var/log/frontend-build.log
   echo "[Workshop] Check if dist/ directory exists:"
   ls -la dist/ 2>/dev/null || echo "[Workshop] dist/ does not exist"
 fi
