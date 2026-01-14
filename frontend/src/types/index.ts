@@ -92,6 +92,14 @@ export interface ItineraryDay {
   gear_needed?: string[];
 }
 
+export interface SuggestedProduct {
+  id: string;
+  title: string;
+  price: number;
+  image_url?: string;
+  reason?: string;
+}
+
 export interface UserPersona {
   id: string;
   name: string;

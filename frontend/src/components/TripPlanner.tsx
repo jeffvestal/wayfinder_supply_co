@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChatMessage, UserId, ThoughtTraceEvent } from '../types'
+import { ChatMessage, UserId, ThoughtTraceEvent, SuggestedProduct, ItineraryDay } from '../types'
 import { api } from '../lib/api'
 import { getToolStatusMessage } from '../lib/constants'
 import { ItineraryModal } from './ItineraryModal'
@@ -30,22 +30,6 @@ interface TripPlannerProps {
   setItinerary: React.Dispatch<React.SetStateAction<ItineraryDay[]>>
   messageTraces: Record<string, ThoughtTraceEvent[]>
   setMessageTraces: React.Dispatch<React.SetStateAction<Record<string, ThoughtTraceEvent[]>>>
-}
-
-interface SuggestedProduct {
-  id: string
-  title: string
-  price: number
-  image_url?: string
-  reason?: string
-}
-
-interface ItineraryDay {
-  day: number
-  title: string
-  activities: string[]
-  weather?: string
-  gear_needed?: string[]
 }
 
 // Get current thinking status from trace events
@@ -143,36 +127,15 @@ function parseProductsFromResponse(content: string): { catalogProducts: string[]
         !item.match(/^(Weather|Conditions|Temperatures|Snow|Rain|Wind|Road|Mountain|Start|Explore|Hike|Reserve)/i) &&
         !item.match(/^(Note|What|Why|How|When|Where)/i)) {
       
-      if (hasBrand && !catalogProducts.includes(item)) {
-        catalogProducts.push(item)
-      } else if (!hasBrand && !otherItems.includes(item)) {
-        // Check if it looks like a gear item (contains category keyword)
-        const isGearItem = GEAR_CATEGORIES.some(cat => item.toLowerCase().includes(cat))
-        if (isGearItem) {
-          otherItems.push(item)
-        }
+      if (hasBrand) {
+        if (!catalogProducts.includes(item)) catalogProducts.push(item)
+      } else {
+        if (!otherItems.includes(item)) otherItems.push(item)
       }
     }
   }
   
-  // Filter out items that are too long or look like headers/descriptions
-  const filteredOtherItems = [...new Set(otherItems)].filter(item => {
-    // Remove items that are too long (likely descriptions, not product names)
-    if (item.length > 100) return false
-    // Remove items that look like full sentences or descriptions
-    if (item.match(/^[A-Z][a-z]+ [a-z]+ [a-z]+/)) {
-      // Check if it's a gear item or just a description
-      const hasGearKeyword = GEAR_CATEGORIES.some(cat => item.toLowerCase().includes(cat))
-      if (!hasGearKeyword && item.split(' ').length > 5) return false
-    }
-    return true
-  }).slice(0, 10)
-  
-  return {
-    catalogProducts: [...new Set(catalogProducts)].slice(0, 6),
-    otherItems: filteredOtherItems,
-    gearSearchTerms: [...new Set(gearSearchTerms)].slice(0, 8)
-  }
+  return { catalogProducts, otherItems, gearSearchTerms }
 }
 
 export function TripPlanner({ 
@@ -196,417 +159,39 @@ export function TripPlanner({
 }: TripPlannerProps) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [thoughtTrace, setThoughtTrace] = useState<ThoughtTraceEvent[]>([])
-  const [expandedThinking, setExpandedThinking] = useState(false)
-  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null)
+  const [stepsExpanded, setStepsExpanded] = useState<Record<string, boolean>>({})
+  const [isItineraryOpen, setIsItineraryOpen] = useState(false)
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
   const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
-  
-  const [contextModified, setContextModified] = useState(false)
-  const [cartExpanded, setCartExpanded] = useState(true)
-  const [otherItemsExpanded, setOtherItemsExpanded] = useState(false)
-  const [itineraryExpanded, setItineraryExpanded] = useState(true)
-  const [itineraryModalOpen, setItineraryModalOpen] = useState(false)
+  const [searchingGear, setSearchingGear] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const initialMessageSentRef = useRef(false)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    scrollToBottom()
   }, [messages])
 
-  // Check if trip-planner-agent exists on mount
+  // Handle initial message if provided
   useEffect(() => {
-    api.checkAgentExists('trip-planner-agent')
-      .then(exists => setAgentAvailable(exists))
-      .catch(() => setAgentAvailable(false))
-  }, [])
-
-  // Handle initial message when provided (for demo flow)
-  useEffect(() => {
-    if (initialMessage && !isLoading && messages.length === 0 && agentAvailable !== false) {
-      // Auto-send the initial message
-      sendMessage(initialMessage, false).then(() => {
-        onInitialMessageSent?.()
-      })
+    if (initialMessage && !initialMessageSentRef.current) {
+      initialMessageSentRef.current = true
+      sendMessage(initialMessage)
+      if (onInitialMessageSent) onInitialMessageSent()
     }
-  }, [initialMessage, agentAvailable])
-
-  // Check if context has been modified
-  useEffect(() => {
-    const modified = 
-      tripContext.destination !== originalContext.destination ||
-      tripContext.dates !== originalContext.dates ||
-      tripContext.activity !== originalContext.activity
-    setContextModified(modified)
-  }, [tripContext, originalContext])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
-
-    const messageText = input.trim()
-    const isFirstMessage = !tripContext.destination && !tripContext.dates && !tripContext.activity
-
-    // Only parse context on FIRST message when boxes are empty
-    // For follow-ups, skip parsing and send immediately
-    if (isFirstMessage) {
-      // Show user message immediately
-      const userMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: messageText,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, userMessage])
-      setInput('')
-      setIsLoading(true)
-      setThoughtTrace([])
-      setExpandedThinking(false)
-
-      // Parse context in parallel (don't block on it)
-      api.parseTripContext(messageText)
-        .then((parsed) => {
-          if (parsed.destination || parsed.dates || parsed.activity) {
-            const newContext = {
-              destination: parsed.destination || tripContext.destination,
-              dates: parsed.dates || tripContext.dates,
-              activity: parsed.activity || tripContext.activity,
-            }
-            setTripContext(newContext)
-            setOriginalContext(newContext)
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to parse trip context:', error)
-        })
-
-      // Start chat stream immediately (don't wait for context parsing)
-      await sendMessage(messageText, false) // false = don't add user message again
-    } else {
-      // Follow-up message - send immediately without parsing
-      await sendMessage(messageText)
-    }
-  }
-
-  const handleUpdatePlan = async () => {
-    if (isLoading) return
-    const updateMessage = `Update my trip plan: Going to ${tripContext.destination} ${tripContext.dates} for ${tripContext.activity}`
-    setOriginalContext({ ...tripContext })
-    setContextModified(false)
-    await sendMessage(updateMessage)
-  }
-
-  const sendMessage = async (messageText: string, addUserMessage: boolean = true) => {
-    // Generate a unique ID for this message's trace
-    const currentMessageId = Date.now().toString()
-    
-    if (addUserMessage) {
-      const userMessage: ChatMessage = {
-        id: currentMessageId,
-        role: 'user',
-        content: messageText,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, userMessage])
-    }
-    
-    setInput('')
-    setIsLoading(true)
-    setThoughtTrace([])
-    setExpandedThinking(false)
-    
-    // Track the current user message ID for storing the trace
-    const userMessageId = addUserMessage ? currentMessageId : messages[messages.length - 1]?.id || currentMessageId
-    
-    // Collect trace events locally so we can save them at the end
-    const localTraceEvents: ThoughtTraceEvent[] = []
-
-    try {
-      let currentAssistantMessage: ChatMessage | null = null
-      let messageContent = ''
-
-      await api.streamChat(messageText, userId, (event) => {
-        const data = event.data
-
-        if (event.type === 'reasoning') {
-          const traceEvent: ThoughtTraceEvent = {
-            event: 'reasoning',
-            data: data.reasoning || data,
-            timestamp: new Date(),
-          }
-          localTraceEvents.push(traceEvent)
-          setThoughtTrace((prev) => [...prev, traceEvent])
-        } else if (event.type === 'tool_call') {
-          if (!data.tool_id || !data.params || Object.keys(data.params).length === 0) return
-          const traceEvent: ThoughtTraceEvent = {
-            event: 'tool_call',
-            data: {
-              tool_id: data.tool_id,
-              params: data.params,
-              tool_call_id: data.tool_call_id,
-            },
-            timestamp: new Date(),
-          }
-          localTraceEvents.push(traceEvent)
-          setThoughtTrace((prev) => [...prev, traceEvent])
-        } else if (event.type === 'tool_result') {
-          const traceEvent: ThoughtTraceEvent = {
-            event: 'tool_result',
-            data: {
-              tool_call_id: data.tool_call_id,
-              results: data.results,
-            },
-            timestamp: new Date(),
-          }
-          localTraceEvents.push(traceEvent)
-          setThoughtTrace((prev) => [...prev, traceEvent])
-          
-          // Extract products from search results (product_search tool)
-          // Results can be an array or an object with products array
-          let productsArray: any[] = []
-          if (Array.isArray(data.results)) {
-            productsArray = data.results
-          } else if (data.results && typeof data.results === 'object') {
-            // Check if results has a products array
-            if (Array.isArray(data.results.products)) {
-              productsArray = data.results.products
-            } else if (data.results.hits && Array.isArray(data.results.hits)) {
-              // Elasticsearch search response format
-              productsArray = data.results.hits.map((hit: any) => ({
-                ...hit._source,
-                id: hit._id,
-              }))
-            } else {
-              // Try to extract any array-like structure
-              const keys = Object.keys(data.results)
-              for (const key of keys) {
-                if (Array.isArray(data.results[key]) && data.results[key].length > 0) {
-                  productsArray = data.results[key]
-                  break
-                }
-              }
-            }
-          }
-          
-          if (productsArray.length > 0) {
-            const products = productsArray
-              .filter((r: any) => r && (r.title || r.name) && r.price)
-              .map((r: any) => ({
-                id: r.id || r._id || r.sku || `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                title: r.title || r.name,
-                price: typeof r.price === 'number' ? r.price : parseFloat(r.price) || 0,
-                image_url: r.image_url || r.image,
-                reason: (r.description || r.reason || '').slice(0, 100),
-              }))
-              .filter((p: SuggestedProduct) => p.price > 0)
-            
-            if (products.length > 0) {
-              setSuggestedProducts((prev) => {
-                const existingIds = new Set(prev.map(p => p.id))
-                const newProducts = products.filter((p: SuggestedProduct) => !existingIds.has(p.id))
-                const combined = [...prev, ...newProducts]
-                const unique = combined.filter((p, idx, arr) => 
-                  arr.findIndex(pp => pp.id === p.id) === idx
-                )
-                return unique.slice(0, 6)
-              })
-            }
-          }
-        } else if (event.type === 'message_chunk') {
-          messageContent += data.text_chunk || ''
-          if (!currentAssistantMessage) {
-            currentAssistantMessage = {
-              id: data.message_id || Date.now().toString(),
-              role: 'assistant',
-              content: messageContent,
-              timestamp: new Date(),
-            }
-            setMessages((prev) => [...prev, currentAssistantMessage!])
-          } else {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === currentAssistantMessage!.id
-                  ? { ...msg, content: messageContent }
-                  : msg
-              )
-            )
-          }
-        } else if (event.type === 'message_complete') {
-          messageContent = data.message_content || messageContent
-          if (currentAssistantMessage) {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === currentAssistantMessage!.id
-                  ? { ...msg, content: messageContent }
-                  : msg
-              )
-            )
-          }
-          
-          // Extract itinerary using agent (replaces fragile regex)
-          extractItineraryFromResponse(messageContent)
-          
-          // Skip slow entity extraction - products already extracted from tool_result events
-          // Use fallback regex extraction as backup (runs in parallel, won't hurt)
-          extractProductsFromResponseFallback(messageContent)
-        }
-      }, 'trip-planner-agent')
-    } catch (error) {
-      console.error('Chat error:', error)
-      const errorMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, errorMessage])
-    } finally {
-      setIsLoading(false)
-      // Store the thought trace for this message so it persists after assistant responds
-      if (localTraceEvents.length > 0) {
-        setMessageTraces(prev => ({
-          ...prev,
-          [userMessageId]: localTraceEvents
-        }))
-      }
-    }
-  }
-
-  const extractItineraryFromResponse = async (content: string) => {
-    try {
-      const result = await api.extractItinerary(content)
-      if (result.days && result.days.length > 0) {
-        const days: ItineraryDay[] = result.days.map(d => ({
-          day: d.day,
-          title: d.title || `Day ${d.day}`,
-          activities: d.activities || [],
-        }))
-        setItinerary(days)
-      }
-    } catch (error) {
-      console.error('Failed to extract itinerary:', error)
-      // Fallback: create simple overview if extraction fails
-      if (content.length > 100) {
-        const bulletPoints = content
-          .split(/[•\-\n]/)
-          .map(a => a.trim())
-          .filter(a => a.length > 20 && a.length < 200)
-          .slice(0, 6)
-        
-        if (bulletPoints.length >= 2) {
-          setItinerary([{
-            day: 1,
-            title: 'Trip Overview',
-            activities: bulletPoints,
-          }])
-        }
-      }
-    }
-  }
-
-  // Regex-based extraction (fallback if tool_result doesn't capture products)
-  const extractProductsFromResponseFallback = async (content: string) => {
-    const { catalogProducts, otherItems, gearSearchTerms } = parseProductsFromResponse(content)
-    
-    const existingIds = new Set<string>()
-    
-    // Search all catalog products in parallel
-    const catalogSearchPromises = catalogProducts.map(async (productName) => {
-      try {
-        const searchResult = await api.searchProducts(productName, 1)
-        if (searchResult.products && searchResult.products.length > 0) {
-          const product = searchResult.products[0]
-          if (product.price > 0) {
-            return {
-              id: product.id || product._id,
-              title: product.title || productName,
-              price: product.price,
-              image_url: product.image_url,
-              reason: product.description?.slice(0, 100),
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`Failed to search for product "${productName}":`, error)
-      }
-      return null
-    })
-    
-    // Also search gear terms in parallel
-    const gearSearchPromises = gearSearchTerms.slice(0, 4).map(async (term) => {
-      try {
-        const searchResult = await api.searchProducts(term, 1)
-        if (searchResult.products && searchResult.products.length > 0) {
-          const product = searchResult.products[0]
-          if (product.price > 0) {
-            return {
-              id: product.id || product._id,
-              title: product.title,
-              price: product.price,
-              image_url: product.image_url,
-              reason: `Great for ${term}`,
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`Failed semantic search for "${term}":`, error)
-      }
-      return null
-    })
-    
-    // Wait for all searches
-    const [catalogResults, gearResults] = await Promise.all([
-      Promise.all(catalogSearchPromises),
-      Promise.all(gearSearchPromises)
-    ])
-    
-    // Combine and dedupe
-    const allResults = [...catalogResults, ...gearResults]
-    const foundProducts: SuggestedProduct[] = allResults
-      .filter((p): p is NonNullable<typeof p> => p !== null)
-      .filter(p => {
-        if (existingIds.has(p.id)) return false
-        existingIds.add(p.id)
-        return true
-      })
-      .slice(0, 6)
-    
-    if (foundProducts.length > 0) {
-      setSuggestedProducts((prev) => {
-        const combined = [...prev, ...foundProducts]
-        const unique = combined.filter((p, idx, arr) => 
-          arr.findIndex(pp => pp.id === p.id) === idx
-        )
-        return unique.slice(0, 6)
-      })
-    }
-    
-    if (otherItems.length > 0) {
-      setOtherRecommendedItems((prev) => {
-        const combined = [...prev, ...otherItems]
-        const unique = combined.filter((item, idx, arr) => 
-          arr.findIndex(ii => ii.toLowerCase() === item.toLowerCase()) === idx
-        )
-        const filtered = unique.filter(item => 
-          !foundProducts.some(fp => item.toLowerCase().includes(fp.title.toLowerCase().split(' ')[0]))
-        )
-        const final = filtered.filter(item => {
-          if (item.length > 100) return false
-          if (item.split(' ').length > 8 && !GEAR_CATEGORIES.some(cat => item.toLowerCase().includes(cat))) {
-            return false
-          }
-          return true
-        }).slice(0, 10)
-        return final
-      })
-    }
-  }
+  }, [initialMessage])
 
   const handleAddToCart = async (product: SuggestedProduct) => {
-    setAddingToCart(product.id)
     try {
-      await api.addToCart(userId, product.id, 1)
+      setAddingToCart(product.id)
+      await api.addToCart(userId, product.id)
+      
+      // Visual feedback
       setJustAddedToCart(product.id)
-      setTimeout(() => setJustAddedToCart(null), 1500)
+      setTimeout(() => setJustAddedToCart(null), 2000)
     } catch (error) {
       console.error('Failed to add to cart:', error)
     } finally {
@@ -614,571 +199,386 @@ export function TripPlanner({
     }
   }
 
-  const currentStatus = getCurrentStatus(thoughtTrace, isLoading)
+  const sendMessage = async (content: string) => {
+    if (!content.trim() || isLoading) return
+
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content,
+      timestamp: new Date(),
+    }
+
+    const assistantMessageId = (Date.now() + 1).toString()
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+    }
+
+    setMessages(prev => [...prev, userMessage, assistantMessage])
+    setInput('')
+    setIsLoading(true)
+
+    try {
+      let fullContent = ''
+      
+      await api.streamTripPlanner(content, userId, (event) => {
+        if (event.event === 'content') {
+          fullContent += event.data
+          setMessages(prev => prev.map(msg => 
+            msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg
+          ))
+        } else {
+          // Store all other events (reasoning, tool_call, tool_result) in traces
+          setMessageTraces(prev => {
+            const currentTraces = prev[assistantMessageId] || []
+            return {
+              ...prev,
+              [assistantMessageId]: [...currentTraces, event]
+            }
+          })
+        }
+      })
+
+      // Once complete, parse for context, itinerary, and products
+      const { catalogProducts, otherItems, gearSearchTerms } = parseProductsFromResponse(fullContent)
+      
+      if (otherItems.length > 0) {
+        setOtherRecommendedItems(otherItems)
+      }
+
+      // If we found catalog products or gear search terms, fetch them
+      if (catalogProducts.length > 0 || gearSearchTerms.length > 0) {
+        setSearchingGear(true)
+        try {
+          // 1. First search for specific brand products mentioned
+          const foundProducts: SuggestedProduct[] = []
+          
+          for (const productName of catalogProducts) {
+            const results = await api.searchProducts(productName, 1)
+            if (results.length > 0) {
+              const p = results[0]
+              if (!foundProducts.find(fp => fp.id === p.id)) {
+                foundProducts.push({
+                  id: p.id,
+                  title: p.title,
+                  price: p.price,
+                  image_url: p.image_url,
+                  reason: 'Highly recommended for your trip'
+                })
+              }
+            }
+          }
+
+          // 2. Then search for gear categories if we don't have enough products
+          if (foundProducts.length < 4 && gearSearchTerms.length > 0) {
+            for (const term of gearSearchTerms.slice(0, 3)) {
+              const results = await api.searchProducts(term, 2)
+              for (const p of results) {
+                if (!foundProducts.find(fp => fp.id === p.id)) {
+                  foundProducts.push({
+                    id: p.id,
+                    title: p.title,
+                    price: p.price,
+                    image_url: p.image_url,
+                    reason: `Perfect ${term} for your activity`
+                  })
+                }
+              }
+            }
+          }
+
+          if (foundProducts.length > 0) {
+            setSuggestedProducts(foundProducts)
+          }
+        } catch (err) {
+          console.error('Failed to search products:', err)
+        } finally {
+          setSearchingGear(false)
+        }
+      }
+
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessageId ? { ...msg, content: 'I apologize, but I encountered an error. Please try again.' } : msg
+      ))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const toggleSteps = (messageId: string) => {
+    setStepsExpanded(prev => ({
+      ...prev,
+      [messageId]: !prev[messageId]
+    }))
+  }
 
   return (
-    <div className="h-[calc(100vh-5rem)] bg-slate-950 flex flex-col overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 flex flex-col min-h-0 w-full">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <h1 className="text-4xl font-display font-bold text-white mb-2">
-            Trip Planner
-          </h1>
-          <p className="text-gray-300">
-            Plan your perfect adventure with AI-powered recommendations
-          </p>
-        </motion.div>
-
-        {/* Trip Context Inputs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-6"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="glass rounded-xl p-4">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
-                <MapPin className="w-4 h-4 text-primary" />
-                Destination
-              </label>
-              <input
-                type="text"
-                value={tripContext.destination}
-                onChange={(e) => setTripContext({ ...tripContext, destination: e.target.value })}
-                placeholder="e.g., Rocky Mountains"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+    <div className="flex flex-col h-[calc(100vh-5rem)] bg-slate-950">
+      {/* Trip Header Context */}
+      <div className="bg-slate-900 border-b border-white/10 p-4">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/20 rounded-lg">
+              <Compass className="w-5 h-5 text-primary" />
             </div>
-            <div className="glass rounded-xl p-4">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
-                <Calendar className="w-4 h-4 text-primary" />
-                Dates
-              </label>
-              <input
-                type="text"
-                value={tripContext.dates}
-                onChange={(e) => setTripContext({ ...tripContext, dates: e.target.value })}
-                placeholder="e.g., This weekend"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div className="glass rounded-xl p-4">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
-                <Mountain className="w-4 h-4 text-primary" />
-                Activity
-              </label>
-              <input
-                type="text"
-                value={tripContext.activity}
-                onChange={(e) => setTripContext({ ...tripContext, activity: e.target.value })}
-                placeholder="e.g., Camping, Hiking"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            {/* Update Plan Button */}
-            <div className="flex items-end">
-              <AnimatePresence>
-                {contextModified && (
-                  <motion.button
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    onClick={handleUpdatePlan}
-                    disabled={isLoading}
-                    className="w-full bg-primary hover:bg-primary-dark text-white px-4 py-3 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 font-medium shadow-lg shadow-primary/20"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Update Plan
-                  </motion.button>
-                )}
-              </AnimatePresence>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Destination</div>
+              <div className="text-sm font-medium text-white">{tripContext.destination || 'Not set'}</div>
             </div>
           </div>
-        </motion.div>
-
-        {/* Main Content Area */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-          {/* Chat Section */}
-          <div className={`lg:col-span-2 flex flex-col rounded-2xl overflow-hidden transition-all duration-500 h-full ${
-            messages.length === 0 
-              ? 'bg-slate-200 shadow-xl border border-slate-300' 
-              : 'bg-transparent'
-          }`}>
-            {/* Messages */}
-            <div className={`flex-1 overflow-y-auto transition-all duration-500 ${
-              messages.length === 0 ? 'p-6' : 'p-4'
-            }`}>
-              {agentAvailable === false ? (
-                <div className="flex items-center justify-center h-full text-center">
-                  <div className="max-w-md">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/20 flex items-center justify-center">
-                      <AlertTriangle className="w-8 h-8 text-amber-400" />
-                    </div>
-                    <h3 className="text-2xl font-display font-bold text-white mb-2">
-                      Trip Planner Not Available
-                    </h3>
-                    <p className="text-gray-400 mb-2">
-                      The Trip Planner agent hasn't been created yet.
-                    </p>
-                    <p className="text-gray-500 text-sm">
-                      Complete Challenge 4 to enable this feature.
-                    </p>
-                  </div>
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-center">
-                  <div>
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Compass className="w-8 h-8 text-primary" />
-                    </div>
-                    <h3 className="text-2xl font-display font-bold text-slate-800 mb-2">
-                      Start Planning Your Adventure
-                    </h3>
-                    <p className="text-slate-600 mb-4">
-                      Tell me about your trip and I'll recommend the perfect gear
-                    </p>
-                    <div className="text-sm text-slate-500 space-y-1">
-                      <p className="flex items-center justify-center gap-2">
-                        <Tent className="w-4 h-4" />
-                        "I'm going camping in the Rockies this weekend"
-                      </p>
-                      <p className="flex items-center justify-center gap-2">
-                        <Map className="w-4 h-4" />
-                        "Planning a 3-day backpacking trip in Yosemite"
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {messages.map((message, index) => (
-                    <motion.div
-                      key={message.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                    >
-                      <div className={`flex flex-col w-full ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        {/* Thought Trace - Moved above the bubble for assistant */}
-                        {message.role === 'assistant' && (
-                          (index === messages.length - 1 && (isLoading || thoughtTrace.length > 0)) ||
-                          messageTraces[messages[index - 1]?.id]?.length > 0
-                        ) && (
-                          <div className="mb-2 ml-4">
-                            <button
-                              onClick={() => setExpandedThinking(!expandedThinking)}
-                              className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
-                            >
-                              {expandedThinking ? (
-                                <ChevronDown className="w-3 h-3" />
-                              ) : (
-                                <ChevronRight className="w-3 h-3" />
-                              )}
-                              {isLoading && index === messages.length - 1 ? (
-                                <span className="flex items-center gap-1.5">
-                                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                                  <span className="text-primary font-medium">{currentStatus}</span>
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-1.5">
-                                  <CheckCircle2 className="w-3 h-3 text-green-500" />
-                                  <span>Completed {(messageTraces[messages[index - 1]?.id] || thoughtTrace).length} steps</span>
-                                </span>
-                              )}
-                            </button>
-                            
-                            <AnimatePresence>
-                              {expandedThinking && (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: 'auto' }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  className="mt-2 ml-6 space-y-2 border-l-2 border-slate-600 pl-4 w-full max-w-[85%]"
-                                >
-                                  {(index === messages.length - 1 ? thoughtTrace : messageTraces[messages[index - 1]?.id] || []).map((trace, idx) => (
-                                    <div key={idx} className="text-xs">
-                                      {trace.event === 'reasoning' && (
-                                        <div className="flex items-start gap-2 text-slate-400">
-                                          <Clock className="w-3 h-3 mt-0.5 text-blue-400" />
-                                          <span>{typeof trace.data === 'string' ? trace.data : trace.data?.reasoning}</span>
-                                        </div>
-                                      )}
-                                      {trace.event === 'tool_call' && (
-                                        <div className="flex items-start gap-2 text-slate-400">
-                                          <Backpack className="w-3 h-3 mt-0.5 text-amber-400" />
-                                          <span>
-                                            <span className="font-medium">{getToolStatusMessage(trace.data?.tool_id)}</span>
-                                            {trace.data?.params && Object.keys(trace.data.params).length > 0 && (
-                                              <span className="text-slate-500 ml-1">
-                                                ({Object.values(trace.data.params).join(', ')})
-                                              </span>
-                                            )}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        )}
-
-                        {/* Message bubble */}
-                        <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div
-                            className={`max-w-[85%] rounded-2xl px-5 py-3 shadow-lg ${
-                              message.role === 'user'
-                                ? 'bg-primary text-white'
-                                : 'bg-white text-slate-800 shadow-sm border border-slate-200'
-                            }`}
-                          >
-                          {message.role === 'assistant' ? (
-                            <div className="prose prose-sm max-w-none prose-headings:text-slate-800 prose-p:text-slate-700 prose-strong:text-slate-800 prose-li:text-slate-700">
-                              <ReactMarkdown
-                                components={{
-                                  h1: ({ children }) => (
-                                    <h1 className="text-xl font-display font-bold text-slate-800 mb-3 flex items-center gap-2">
-                                      <Compass className="w-5 h-5 text-primary" />
-                                      {children}
-                                    </h1>
-                                  ),
-                                  h2: ({ children }) => (
-                                    <h2 className="text-lg font-display font-semibold text-slate-800 mt-4 mb-2 flex items-center gap-2">
-                                      {String(children).toLowerCase().includes('weather') && <CloudSun className="w-4 h-4 text-amber-500" />}
-                                      {String(children).toLowerCase().includes('gear') && <Backpack className="w-4 h-4 text-primary" />}
-                                      {String(children).toLowerCase().includes('recommend') && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                                      {children}
-                                    </h2>
-                                  ),
-                                  h3: ({ children }) => (
-                                    <h3 className="text-base font-semibold text-slate-700 mt-3 mb-1">
-                                      {children}
-                                    </h3>
-                                  ),
-                                  ul: ({ children }) => (
-                                    <ul className="space-y-1 my-2">{children}</ul>
-                                  ),
-                                  li: ({ children }) => (
-                                    <li className="flex items-start gap-2 text-slate-700">
-                                      <span className="text-primary mt-1">•</span>
-                                      <span>{children}</span>
-                                    </li>
-                                  ),
-                                  strong: ({ children }) => (
-                                    <strong className="font-semibold text-slate-800">{children}</strong>
-                                  ),
-                                  p: ({ children }) => (
-                                    <p className="text-slate-700 mb-2 leading-relaxed">{children}</p>
-                                  ),
-                                }}
-                              >
-                                {message.content}
-                              </ReactMarkdown>
-                            </div>
-                          ) : (
-                            <p className="text-sm">{message.content}</p>
-                          )}
-                          <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-white/70' : 'text-slate-400'}`}>
-                            {message.timestamp.toLocaleTimeString()}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                  ))}
-                </div>
-              )}
-              {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
-                <div className="flex justify-start mt-4">
-                  <div className="bg-white rounded-2xl px-5 py-3 flex items-center gap-2 shadow-lg border border-slate-200">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    <span className="text-slate-600">{currentStatus}</span>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} className="h-2" />
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/20 rounded-lg">
+              <Calendar className="w-5 h-5 text-primary" />
             </div>
-
-            {/* Input */}
-            <form onSubmit={handleSubmit} className={`border-t p-4 transition-all duration-500 ${
-              messages.length === 0 
-                ? 'border-slate-300 bg-slate-100' 
-                : 'border-slate-700/50 bg-slate-900/50 backdrop-blur-sm'
-            }`}>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Tell me about your trip..."
-                  className={`flex-1 rounded-xl px-4 py-3 transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${
-                    messages.length === 0
-                      ? 'bg-white border border-slate-300 text-slate-800 placeholder-slate-400'
-                      : 'bg-white/90 backdrop-blur-sm border border-white/20 text-slate-800 placeholder-slate-500'
-                  }`}
-                  disabled={isLoading || agentAvailable === false}
-                />
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading || agentAvailable === false}
-                  className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium shadow-lg shadow-primary/20 hover:shadow-primary/40"
-                >
-                  <Send className="w-4 h-4" />
-                  Send
-                </button>
-              </div>
-            </form>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Dates</div>
+              <div className="text-sm font-medium text-white">{tripContext.dates || 'Not set'}</div>
+            </div>
           </div>
-
-          {/* Right Panel - Suggested Cart & Itinerary */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Suggested Cart */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="glass rounded-2xl overflow-hidden"
-            >
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/20 rounded-lg">
+              <Mountain className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Activity</div>
+              <div className="text-sm font-medium text-white">{tripContext.activity || 'Not set'}</div>
+            </div>
+          </div>
+          
+          <div className="ml-auto flex items-center gap-2">
+            {itinerary.length > 0 && (
               <button
-                onClick={() => setCartExpanded(!cartExpanded)}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                onClick={() => setIsItineraryOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                    <ShoppingCart className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-display font-semibold text-white">Suggested Gear</h3>
-                    <p className="text-xs text-gray-400">
-                      {suggestedProducts.length} in catalog
-                      {otherRecommendedItems.length > 0 && ` • ${otherRecommendedItems.length} other items`}
-                    </p>
-                  </div>
-                </div>
-                {cartExpanded ? (
-                  <ChevronDown className="w-5 h-5 text-gray-400" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
-                )}
+                <Map className="w-4 h-4" />
+                <span>View Itinerary</span>
               </button>
-              
-              <AnimatePresence>
-                {cartExpanded && (
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: 'auto' }}
-                    exit={{ height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="p-4 pt-0 space-y-4 max-h-[400px] overflow-y-auto">
-                      {/* From Our Catalog Section */}
-                      {suggestedProducts.length === 0 && otherRecommendedItems.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-4">
-                          Gear recommendations will appear here
-                        </p>
-                      ) : (
-                        <>
-                          {suggestedProducts.length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2 flex items-center gap-2">
-                                <CheckCircle2 className="w-3 h-3 text-green-400" />
-                                From Our Catalog
-                              </h4>
-                              <div className="space-y-3">
-                                {suggestedProducts.map((product) => (
-                                  <div
-                                    key={product.id}
-                                    className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10 hover:border-primary/30 transition-colors"
-                                  >
-                                    {product.image_url ? (
-                                      <img
-                                        src={product.image_url}
-                                        alt={product.title}
-                                        className="w-12 h-12 rounded-lg object-cover"
-                                      />
-                                    ) : (
-                                      <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center">
-                                        <Backpack className="w-6 h-6 text-slate-500" />
-                                      </div>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium text-white truncate">{product.title}</p>
-                                      <p className="text-xs text-primary font-semibold">${product.price.toFixed(2)}</p>
-                                    </div>
-                                    <button
-                                      onClick={() => handleAddToCart(product)}
-                                      disabled={addingToCart === product.id || justAddedToCart === product.id}
-                                      className={`p-2 rounded-lg transition-all duration-300 ${
-                                        justAddedToCart === product.id 
-                                          ? 'bg-green-500 scale-110 animate-pulse text-white' 
-                                          : 'bg-primary/20 hover:bg-primary/30 text-primary'
-                                      } disabled:opacity-50`}
-                                      title={justAddedToCart === product.id ? 'Added!' : 'Add to cart'}
-                                    >
-                                      {addingToCart === product.id ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                      ) : justAddedToCart === product.id ? (
-                                        <CheckCircle2 className="w-4 h-4" />
-                                      ) : (
-                                        <Plus className="w-4 h-4" />
-                                      )}
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Other Recommended Items Section */}
-                          {otherRecommendedItems.length > 0 && (
-                            <div>
-                              <button
-                                onClick={() => setOtherItemsExpanded(!otherItemsExpanded)}
-                                className="w-full flex items-center justify-between mb-2"
-                              >
-                                <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wide flex items-center gap-2">
-                                  <Backpack className="w-3 h-3 text-amber-400" />
-                                  Other Recommended Items
-                                  <span className="text-gray-500 normal-case">({otherRecommendedItems.length})</span>
-                                </h4>
-                                {otherItemsExpanded ? (
-                                  <ChevronDown className="w-3 h-3 text-gray-400" />
-                                ) : (
-                                  <ChevronRight className="w-3 h-3 text-gray-400" />
-                                )}
-                              </button>
-                              <AnimatePresence>
-                                {otherItemsExpanded && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="max-h-[200px] overflow-y-auto pr-2">
-                                      <ul className="space-y-2 pl-4">
-                                        {otherRecommendedItems.map((item, idx) => (
-                                          <li
-                                            key={idx}
-                                            className="text-xs text-gray-400 flex items-start gap-2"
-                                          >
-                                            <span className="text-gray-600 mt-1">•</span>
-                                            <span>{item}</span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-2 italic">
-                                      These items aren't in our catalog yet, but we're working on adding them!
-                                    </p>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-
-            {/* Itinerary */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="glass rounded-2xl overflow-hidden"
-            >
-              <button
-                onClick={() => setItineraryExpanded(!itineraryExpanded)}
-                className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                    <Map className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-display font-semibold text-white">Trip Itinerary</h3>
-                    <p className="text-xs text-gray-400">{itinerary.length > 0 ? `${itinerary.length} day plan` : 'Day-by-day breakdown'}</p>
-                  </div>
-                </div>
-                {itineraryExpanded ? (
-                  <ChevronDown className="w-5 h-5 text-gray-400" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
-                )}
-              </button>
-              
-              <AnimatePresence>
-                {itineraryExpanded && (
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: 'auto' }}
-                    exit={{ height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="p-4 pt-0 space-y-3 max-h-[400px] overflow-y-auto">
-                      {itinerary.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-4">
-                          Your trip itinerary will appear here
-                        </p>
-                      ) : (
-                        itinerary.map((day) => (
-                          <div
-                            key={day.day}
-                            className="p-3 bg-white/5 rounded-xl border border-white/10"
-                          >
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center">
-                                <span className="text-xs font-bold text-amber-400">{day.day}</span>
-                              </div>
-                              <h4 className="text-sm font-semibold text-white">{day.title}</h4>
-                            </div>
-                            <ul className="space-y-1 ml-8">
-                              {day.activities.map((activity, idx) => (
-                                <li key={idx} className="text-xs text-gray-300 flex items-start gap-2">
-                                  {idx === 0 ? (
-                                    <Sun className="w-3 h-3 mt-0.5 text-amber-400 flex-shrink-0" />
-                                  ) : idx === day.activities.length - 1 ? (
-                                    <Moon className="w-3 h-3 mt-0.5 text-blue-400 flex-shrink-0" />
-                                  ) : (
-                                    <span className="w-3 h-3 flex items-center justify-center text-gray-500">•</span>
-                                  )}
-                                  <span>{activity}</span>
-                                </li>
-                              ))}
-                            </ul>
-                            {day.weather && (
-                              <div className="mt-2 ml-8 flex items-center gap-1 text-xs text-gray-400">
-                                <Thermometer className="w-3 h-3" />
-                                {day.weather}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
+            )}
           </div>
         </div>
       </div>
-      
-      {/* Itinerary Modal */}
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col overflow-hidden border-r border-white/10">
+          <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            {messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6">
+                <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Compass className="w-10 h-10 text-primary animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-display font-bold text-white mb-2">Adventure Trip Planner</h3>
+                  <p className="text-gray-400">
+                    Tell me where you want to go and what you want to do. I'll help you plan the perfect trip and find the right gear.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-2 w-full">
+                  <button
+                    onClick={() => setInput("Plan a 3-day backpacking trip in the Enchantments, Washington for this July")}
+                    className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
+                  >
+                    "Plan a 3-day backpacking trip in the Enchantments, Washington..."
+                  </button>
+                  <button
+                    onClick={() => setInput("I want to go car camping in Zion National Park next week with my family")}
+                    className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
+                  >
+                    "I want to go car camping in Zion National Park..."
+                  </button>
+                </div>
+              </div>
+            ) : (
+              messages.map((msg, idx) => (
+                <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  {/* Thought Trace - Moved above the bubble for assistant */}
+                  {msg.role === 'assistant' && messageTraces[msg.id] && messageTraces[msg.id].length > 0 && (
+                    <div className="mb-2 ml-4">
+                      <button
+                        onClick={() => toggleSteps(msg.id)}
+                        className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                      >
+                        {stepsExpanded[msg.id] ? (
+                          <ChevronDown className="w-3 h-3" />
+                        ) : (
+                          <ChevronRight className="w-3 h-3" />
+                        )}
+                        {isLoading && idx === messages.length - 1 ? (
+                          <span className="flex items-center gap-1.5">
+                            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                            <span>{getCurrentStatus(messageTraces[msg.id], true)}</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3 text-green-500" />
+                            <span>Completed {messageTraces[msg.id].length} steps</span>
+                          </span>
+                        )}
+                      </button>
+                      
+                      {stepsExpanded[msg.id] && (
+                        <div className="mt-2 space-y-1 w-full max-w-[85%]">
+                          {messageTraces[msg.id].map((event, eventIdx) => (
+                            <div key={eventIdx} className="text-[11px] bg-slate-900/50 border border-white/5 rounded px-2 py-1 flex items-center gap-2">
+                              {event.event === 'reasoning' && <Clock className="w-3 h-3 text-blue-400" />}
+                              {event.event === 'tool_call' && <RefreshCw className="w-3 h-3 text-primary animate-spin" />}
+                              {event.event === 'tool_result' && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                              <span className="text-gray-400">
+                                {event.event === 'reasoning' ? 'Reasoning' : 
+                                 event.event === 'tool_call' ? `Calling ${event.data.tool_id}` : 
+                                 'Processed results'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className={`max-w-[85%] rounded-2xl p-4 ${
+                    msg.role === 'user' 
+                      ? 'bg-primary text-white rounded-tr-none' 
+                      : 'bg-slate-900 text-gray-200 border border-white/10 rounded-tl-none'
+                  }`}>
+                    {msg.content ? (
+                      <div className="prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" />
+                        <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.2s]" />
+                        <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.4s]" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 bg-slate-900/50 border-t border-white/10">
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault()
+                sendMessage(input)
+              }}
+              className="relative"
+            >
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Where should we go next?"
+                disabled={isLoading}
+                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50"
+              >
+                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Recommendations Sidebar */}
+        <div className="w-96 overflow-y-auto bg-slate-900/30 p-4 space-y-6 custom-scrollbar">
+          {/* Suggested Gear */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Backpack className="w-4 h-4 text-primary" />
+                Recommended Gear
+              </h4>
+              {searchingGear && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+            </div>
+            
+            {suggestedProducts.length > 0 ? (
+              <div className="space-y-3">
+                {suggestedProducts.map(product => (
+                  <div key={product.id} className="bg-slate-900 border border-white/10 rounded-xl p-3 flex gap-3 hover:border-primary/30 transition-all group">
+                    <div className="w-16 h-16 bg-white/5 rounded-lg overflow-hidden flex-shrink-0">
+                      {product.image_url ? (
+                        <img src={product.image_url} alt={product.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Mountain className="w-6 h-6 text-gray-700" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h5 className="text-xs font-bold text-white truncate mb-1">{product.title}</h5>
+                      <div className="text-xs text-primary font-bold mb-1">${product.price}</div>
+                      {product.reason && (
+                        <div className="text-[10px] text-gray-500 line-clamp-2 italic leading-tight">
+                          {product.reason}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleAddToCart(product)}
+                      disabled={addingToCart === product.id || justAddedToCart === product.id}
+                      className={`p-2 rounded-lg transition-all duration-300 ${
+                        justAddedToCart === product.id 
+                          ? 'bg-green-500 scale-110 animate-pulse text-white' 
+                          : 'bg-primary/20 hover:bg-primary/30 text-primary'
+                      } disabled:opacity-50`}
+                      title={justAddedToCart === product.id ? 'Added!' : 'Add to cart'}
+                    >
+                      {addingToCart === product.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : justAddedToCart === product.id ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-slate-900/50 border border-dashed border-white/10 rounded-xl p-8 text-center">
+                <Tent className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+                <p className="text-xs text-gray-500">I'll suggest relevant gear as we plan your adventure.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Other Items Checklist */}
+          {otherRecommendedItems.length > 0 && (
+            <div className="pt-4 border-t border-white/10">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                Essential Checklist
+              </h4>
+              <div className="space-y-2">
+                {otherRecommendedItems.map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+                    <input type="checkbox" className="mt-1 rounded border-white/10 bg-slate-950 text-primary focus:ring-0 focus:ring-offset-0" />
+                    <span className="text-xs text-gray-300 leading-tight">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       <ItineraryModal
+        isOpen={isItineraryOpen}
+        onClose={() => setIsItineraryOpen(false)}
         itinerary={itinerary}
-        isOpen={itineraryModalOpen}
-        onClose={() => setItineraryModalOpen(false)}
       />
     </div>
   )

@@ -14,21 +14,22 @@ import { SearchComparisonDemo } from './components/SearchComparisonDemo'
 import { ShoppingCart, MapPin, Home, Menu, X, Search, Play, Eye, Sparkles, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
-import { UserPersona, ChatMessage, ThoughtTraceEvent } from './types'
+import { UserPersona, ChatMessage, ThoughtTraceEvent, SuggestedProduct, ItineraryDay } from './types'
 import { 
   SearchMode as SearchModeType, 
   ExtendedChatMessage, 
   AgentStep 
 } from './components/search/types'
 
-// Legacy user loyalty tiers (for backward compatibility)
-const LEGACY_LOYALTY_TIERS: Record<string, string> = {
-  'user_new': 'none',
-  'user_member': 'platinum',
-  'user_business': 'business',
-}
-
 type View = 'storefront' | 'trip-planner' | 'cart' | 'checkout' | 'order-confirmation' | 'account'
+
+const LEGACY_LOYALTY_TIERS: Record<string, string> = {
+  'user_member': 'gold',
+  'user_business': 'platinum',
+  'ultralight_backpacker_sarah': 'gold',
+  'family_camper_mike': 'silver',
+  'winter_mountaineer_alex': 'gold'
+}
 
 function App() {
   const [currentUser, setCurrentUser] = useState<string>('user_member')
@@ -56,9 +57,9 @@ function App() {
     dates: '',
     activity: '',
   })
-  const [plannerSuggestedProducts, setPlannerSuggestedProducts] = useState<any[]>([])
+  const [plannerSuggestedProducts, setPlannerSuggestedProducts] = useState<SuggestedProduct[]>([])
   const [plannerOtherRecommendedItems, setPlannerOtherRecommendedItems] = useState<string[]>([])
-  const [plannerItinerary, setPlannerItinerary] = useState<any[]>([])
+  const [plannerItinerary, setPlannerItinerary] = useState<ItineraryDay[]>([])
   const [plannerMessageTraces, setPlannerMessageTraces] = useState<Record<string, ThoughtTraceEvent[]>>({})
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
