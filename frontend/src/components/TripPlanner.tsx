@@ -1,15 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChatMessage, UserId, ThoughtTraceEvent, SuggestedProduct, ItineraryDay } from '../types'
-import { api } from '../lib/api'
+import { api, StreamEvent } from '../lib/api'
 import { getToolStatusMessage } from '../lib/constants'
 import { ItineraryModal } from './ItineraryModal'
 import { 
-  Send, Loader2, MapPin, Calendar, Mountain, ChevronDown, ChevronRight,
-  ShoppingCart, Plus, Compass, CloudSun, Backpack, CheckCircle2, Clock,
-  Tent, Thermometer, Map, Sun, Moon, RefreshCw, AlertTriangle
+  Send, Loader2, Calendar, Mountain, ChevronDown, ChevronRight,
+  Plus, Compass, Backpack, CheckCircle2, Clock,
+  Tent, Map, RefreshCw
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { motion, AnimatePresence } from 'framer-motion'
 
 interface TripPlannerProps {
   userId: UserId
@@ -145,15 +144,15 @@ export function TripPlanner({
   messages,
   setMessages,
   tripContext,
-  setTripContext,
-  originalContext,
-  setOriginalContext,
+  setTripContext: _setTripContext,
+  originalContext: _originalContext,
+  setOriginalContext: _setOriginalContext,
   suggestedProducts,
   setSuggestedProducts,
   otherRecommendedItems,
   setOtherRecommendedItems,
   itinerary,
-  setItinerary,
+  setItinerary: _setItinerary,
   messageTraces,
   setMessageTraces
 }: TripPlannerProps) {
@@ -202,12 +201,12 @@ export function TripPlanner({
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return
 
-    const userMessage: ChatMessage = {
+      const userMessage: ChatMessage = {
       id: Date.now().toString(),
-      role: 'user',
+        role: 'user',
       content,
-      timestamp: new Date(),
-    }
+        timestamp: new Date(),
+      }
 
     const assistantMessageId = (Date.now() + 1).toString()
     const assistantMessage: ChatMessage = {
@@ -224,23 +223,30 @@ export function TripPlanner({
     try {
       let fullContent = ''
       
-      await api.streamTripPlanner(content, userId, (event) => {
-        if (event.event === 'content') {
+      // Use the generic streamChat with the trip-planner-agent ID
+      await api.streamChat(content, userId, (event: StreamEvent) => {
+        if (event.type === 'content') {
           fullContent += event.data
           setMessages(prev => prev.map(msg => 
             msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg
           ))
         } else {
           // Store all other events (reasoning, tool_call, tool_result) in traces
+          // Map event.type to event.event for compatibility with ThoughtTraceEvent
+          const traceEvent: ThoughtTraceEvent = {
+            event: event.type,
+            data: event.data,
+            timestamp: new Date()
+          }
           setMessageTraces(prev => {
             const currentTraces = prev[assistantMessageId] || []
             return {
               ...prev,
-              [assistantMessageId]: [...currentTraces, event]
+              [assistantMessageId]: [...currentTraces, traceEvent]
             }
           })
         }
-      })
+      }, 'trip-planner-agent')
 
       // Once complete, parse for context, itinerary, and products
       const { catalogProducts, otherItems, gearSearchTerms } = parseProductsFromResponse(fullContent)
@@ -258,8 +264,8 @@ export function TripPlanner({
           
           for (const productName of catalogProducts) {
             const results = await api.searchProducts(productName, 1)
-            if (results.length > 0) {
-              const p = results[0]
+            if (results.products && results.products.length > 0) {
+              const p = results.products[0]
               if (!foundProducts.find(fp => fp.id === p.id)) {
                 foundProducts.push({
                   id: p.id,
@@ -276,21 +282,23 @@ export function TripPlanner({
           if (foundProducts.length < 4 && gearSearchTerms.length > 0) {
             for (const term of gearSearchTerms.slice(0, 3)) {
               const results = await api.searchProducts(term, 2)
-              for (const p of results) {
-                if (!foundProducts.find(fp => fp.id === p.id)) {
-                  foundProducts.push({
-                    id: p.id,
-                    title: p.title,
-                    price: p.price,
-                    image_url: p.image_url,
-                    reason: `Perfect ${term} for your activity`
-                  })
+              if (results.products) {
+                for (const p of results.products) {
+                  if (!foundProducts.find(fp => fp.id === p.id)) {
+                    foundProducts.push({
+                      id: p.id,
+                      title: p.title,
+                      price: p.price,
+                      image_url: p.image_url,
+                      reason: `Perfect ${term} for your activity`
+                    })
+                  }
                 }
               }
             }
           }
-
-          if (foundProducts.length > 0) {
+    
+    if (foundProducts.length > 0) {
             setSuggestedProducts(foundProducts)
           }
         } catch (err) {
@@ -330,7 +338,7 @@ export function TripPlanner({
               <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Destination</div>
               <div className="text-sm font-medium text-white">{tripContext.destination || 'Not set'}</div>
             </div>
-          </div>
+            </div>
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/20 rounded-lg">
               <Calendar className="w-5 h-5 text-primary" />
@@ -338,16 +346,16 @@ export function TripPlanner({
             <div>
               <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Dates</div>
               <div className="text-sm font-medium text-white">{tripContext.dates || 'Not set'}</div>
-            </div>
           </div>
+                    </div>
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/20 rounded-lg">
               <Mountain className="w-5 h-5 text-primary" />
-            </div>
-            <div>
+                  </div>
+                  <div>
               <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Activity</div>
               <div className="text-sm font-medium text-white">{tripContext.activity || 'Not set'}</div>
-            </div>
+                    </div>
           </div>
           
           <div className="ml-auto flex items-center gap-2">
@@ -356,13 +364,13 @@ export function TripPlanner({
                 onClick={() => setIsItineraryOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
               >
-                <Map className="w-4 h-4" />
+                        <Map className="w-4 h-4" />
                 <span>View Itinerary</span>
               </button>
             )}
-          </div>
-        </div>
-      </div>
+                    </div>
+                  </div>
+                </div>
 
       <div className="flex-1 flex overflow-hidden">
         {/* Chat Area */}
@@ -372,13 +380,13 @@ export function TripPlanner({
               <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6">
                 <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
                   <Compass className="w-10 h-10 text-primary animate-pulse" />
-                </div>
+                          </div>
                 <div>
                   <h3 className="text-xl font-display font-bold text-white mb-2">Adventure Trip Planner</h3>
                   <p className="text-gray-400">
                     Tell me where you want to go and what you want to do. I'll help you plan the perfect trip and find the right gear.
-                  </p>
-                </div>
+                        </p>
+                      </div>
                 <div className="grid grid-cols-1 gap-2 w-full">
                   <button
                     onClick={() => setInput("Plan a 3-day backpacking trip in the Enchantments, Washington for this July")}
@@ -386,7 +394,7 @@ export function TripPlanner({
                   >
                     "Plan a 3-day backpacking trip in the Enchantments, Washington..."
                   </button>
-                  <button
+                        <button
                     onClick={() => setInput("I want to go car camping in Zion National Park next week with my family")}
                     className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
                   >
@@ -411,17 +419,17 @@ export function TripPlanner({
                         )}
                         {isLoading && idx === messages.length - 1 ? (
                           <span className="flex items-center gap-1.5">
-                            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                              <Loader2 className="w-3 h-3 animate-spin text-primary" />
                             <span>{getCurrentStatus(messageTraces[msg.id], true)}</span>
-                          </span>
-                        ) : (
+                            </span>
+                          ) : (
                           <span className="flex items-center gap-1.5">
                             <CheckCircle2 className="w-3 h-3 text-green-500" />
                             <span>Completed {messageTraces[msg.id].length} steps</span>
-                          </span>
-                        )}
-                      </button>
-                      
+                            </span>
+                          )}
+                        </button>
+                        
                       {stepsExpanded[msg.id] && (
                         <div className="mt-2 space-y-1 w-full max-w-[85%]">
                           {messageTraces[msg.id].map((event, eventIdx) => (
@@ -433,12 +441,12 @@ export function TripPlanner({
                                 {event.event === 'reasoning' ? 'Reasoning' : 
                                  event.event === 'tool_call' ? `Calling ${event.data.tool_id}` : 
                                  'Processed results'}
-                              </span>
+                                      </span>
                             </div>
                           ))}
-                        </div>
-                      )}
-                    </div>
+                                    </div>
+                                  )}
+                                </div>
                   )}
 
                   <div className={`max-w-[85%] rounded-2xl p-4 ${
@@ -455,14 +463,14 @@ export function TripPlanner({
                         <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" />
                         <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.2s]" />
                         <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:0.4s]" />
-                      </div>
-                    )}
+                </div>
+              )}
                   </div>
                 </div>
               ))
-            )}
+              )}
             <div ref={messagesEndRef} />
-          </div>
+            </div>
 
           {/* Input Area */}
           <div className="p-4 bg-slate-900/50 border-t border-white/10">
@@ -473,51 +481,51 @@ export function TripPlanner({
               }}
               className="relative"
             >
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
                 placeholder="Where should we go next?"
                 disabled={isLoading}
                 className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
-              />
-              <button
-                type="submit"
+                />
+                <button
+                  type="submit"
                 disabled={!input.trim() || isLoading}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50"
-              >
+                >
                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-              </button>
+                </button>
             </form>
           </div>
-        </div>
+                  </div>
 
         {/* Recommendations Sidebar */}
         <div className="w-96 overflow-y-auto bg-slate-900/30 p-4 space-y-6 custom-scrollbar">
           {/* Suggested Gear */}
-          <div>
+                            <div>
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Backpack className="w-4 h-4 text-primary" />
                 Recommended Gear
-              </h4>
+                              </h4>
               {searchingGear && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
             </div>
             
             {suggestedProducts.length > 0 ? (
-              <div className="space-y-3">
+                              <div className="space-y-3">
                 {suggestedProducts.map(product => (
                   <div key={product.id} className="bg-slate-900 border border-white/10 rounded-xl p-3 flex gap-3 hover:border-primary/30 transition-all group">
                     <div className="w-16 h-16 bg-white/5 rounded-lg overflow-hidden flex-shrink-0">
-                      {product.image_url ? (
+                                    {product.image_url ? (
                         <img src={product.image_url} alt={product.title} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <Mountain className="w-6 h-6 text-gray-700" />
-                        </div>
-                      )}
+                                      </div>
+                                    )}
                     </div>
-                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0">
                       <h5 className="text-xs font-bold text-white truncate mb-1">{product.title}</h5>
                       <div className="text-xs text-primary font-bold mb-1">${product.price}</div>
                       {product.reason && (
@@ -525,9 +533,9 @@ export function TripPlanner({
                           {product.reason}
                         </div>
                       )}
-                    </div>
-                    <button
-                      onClick={() => handleAddToCart(product)}
+                                    </div>
+                                    <button
+                                      onClick={() => handleAddToCart(product)}
                       disabled={addingToCart === product.id || justAddedToCart === product.id}
                       className={`p-2 rounded-lg transition-all duration-300 ${
                         justAddedToCart === product.id 
@@ -541,40 +549,40 @@ export function TripPlanner({
                       ) : justAddedToCart === product.id ? (
                         <CheckCircle2 className="w-4 h-4" />
                       ) : (
-                        <Plus className="w-4 h-4" />
+                                      <Plus className="w-4 h-4" />
                       )}
-                    </button>
-                  </div>
-                ))}
-              </div>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
             ) : (
               <div className="bg-slate-900/50 border border-dashed border-white/10 rounded-xl p-8 text-center">
                 <Tent className="w-8 h-8 text-gray-700 mx-auto mb-2" />
                 <p className="text-xs text-gray-500">I'll suggest relevant gear as we plan your adventure.</p>
-              </div>
-            )}
+                            </div>
+                          )}
           </div>
-
+                          
           {/* Other Items Checklist */}
-          {otherRecommendedItems.length > 0 && (
+                          {otherRecommendedItems.length > 0 && (
             <div className="pt-4 border-t border-white/10">
               <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
                 <CheckCircle2 className="w-4 h-4 text-green-500" />
                 Essential Checklist
-              </h4>
+                                </h4>
               <div className="space-y-2">
-                {otherRecommendedItems.map((item, idx) => (
+                                        {otherRecommendedItems.map((item, idx) => (
                   <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
                     <input type="checkbox" className="mt-1 rounded border-white/10 bg-slate-950 text-primary focus:ring-0 focus:ring-offset-0" />
                     <span className="text-xs text-gray-300 leading-tight">{item}</span>
-                  </div>
+                                    </div>
                 ))}
-              </div>
-            </div>
+                              </div>
+                          </div>
           )}
         </div>
       </div>
-
+      
       <ItineraryModal
         isOpen={isItineraryOpen}
         onClose={() => setIsItineraryOpen(false)}

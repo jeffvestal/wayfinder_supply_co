@@ -17,8 +17,7 @@ import { api } from './lib/api'
 import { UserPersona, ChatMessage, ThoughtTraceEvent, SuggestedProduct, ItineraryDay } from './types'
 import { 
   SearchMode as SearchModeType, 
-  ExtendedChatMessage, 
-  AgentStep 
+  ExtendedChatMessage 
 } from './components/search/types'
 
 type View = 'storefront' | 'trip-planner' | 'cart' | 'checkout' | 'order-confirmation' | 'account'
