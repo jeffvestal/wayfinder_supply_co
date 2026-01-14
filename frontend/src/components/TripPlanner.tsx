@@ -201,12 +201,12 @@ export function TripPlanner({
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return
 
-      const userMessage: ChatMessage = {
+    const userMessage: ChatMessage = {
       id: Date.now().toString(),
-        role: 'user',
+      role: 'user',
       content,
-        timestamp: new Date(),
-      }
+      timestamp: new Date(),
+    }
 
     const assistantMessageId = (Date.now() + 1).toString()
     const assistantMessage: ChatMessage = {
@@ -221,18 +221,58 @@ export function TripPlanner({
     setIsLoading(true)
 
     try {
+      // Check if the trip-planner-agent exists first
+      const agentExists = await api.checkAgentExists('trip-planner-agent')
+      
+      if (!agentExists) {
+        // Agent not built yet - show helpful message
+        setMessages(prev => prev.map(msg => 
+          msg.id === assistantMessageId ? { 
+            ...msg, 
+            content: `## 🏗️ Trip Planner Agent Not Yet Built
+
+The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
+
+### To enable this feature:
+1. Complete **Challenge 4: Build an Agent** in the workshop
+2. Create the \`trip-planner-agent\` with the required tools
+3. Return here to plan your adventure!
+
+### In the meantime:
+- Browse our **Store** for outdoor gear
+- Use the **Search** panel to ask questions about products
+- The search assistant (\`wayfinder-search-agent\`) is ready to help!
+
+*This is the feature you'll build in Challenge 4 - it orchestrates multiple tools to create personalized trip plans.*`
+          } : msg
+        ))
+        return
+      }
+
       let fullContent = ''
       
       // Use the generic streamChat with the trip-planner-agent ID
       await api.streamChat(content, userId, (event: StreamEvent) => {
-        if (event.type === 'content') {
-          fullContent += event.data
+        if (event.type === 'content' || event.type === 'message_chunk') {
+          const chunk = event.data?.text_chunk || event.data || ''
+          fullContent += chunk
           setMessages(prev => prev.map(msg => 
             msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg
           ))
+        } else if (event.type === 'message_complete') {
+          fullContent = event.data?.message_content || fullContent
+          setMessages(prev => prev.map(msg => 
+            msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg
+          ))
+        } else if (event.type === 'error') {
+          setMessages(prev => prev.map(msg => 
+            msg.id === assistantMessageId ? { 
+              ...msg, 
+              content: `⚠️ Error: ${event.data?.error || 'Unknown error occurred'}` 
+            } : msg
+          ))
         } else {
           // Store all other events (reasoning, tool_call, tool_result) in traces
-          // Map event.type to event.event for compatibility with ThoughtTraceEvent
           const traceEvent: ThoughtTraceEvent = {
             event: event.type,
             data: event.data,
