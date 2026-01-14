@@ -214,7 +214,7 @@ steps:
 
 3. A panel will appear asking for the `user_id` input
 
-4. In the `user_id` field, enter: 
+4. In the `user_id` field, enter:
   ```
   user_member
   ```

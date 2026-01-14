@@ -62,7 +62,7 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
 
 ## Step 2: Create a New Tool
 
-1. Click the **"+ Add tool"** button 
+1. Click the **"+ Add tool"** button
 
 ---
 

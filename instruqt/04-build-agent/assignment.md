@@ -54,7 +54,7 @@ You'll create an agent that:
 ## Step 1: Navigate to Agent Builder Agents
 
 1. Open the [button label="Kibana Agent Builder"](tab-0) tab
-   - You should see a list of existing agents 
+   - You should see a list of existing agents
 
 ![CleanShot 2025-12-16 at 10.28.07@2x.png](../assets/CleanShot%202025-12-16%20at%2010.28.07%402x.png)
 
