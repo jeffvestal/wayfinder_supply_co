@@ -15,6 +15,21 @@ interface TripPlannerProps {
   userId: UserId
   initialMessage?: string
   onInitialMessageSent?: () => void
+  // Persisted state from props
+  messages: ChatMessage[]
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
+  tripContext: { destination: string; dates: string; activity: string }
+  setTripContext: React.Dispatch<React.SetStateAction<{ destination: string; dates: string; activity: string }>>
+  originalContext: { destination: string; dates: string; activity: string }
+  setOriginalContext: React.Dispatch<React.SetStateAction<{ destination: string; dates: string; activity: string }>>
+  suggestedProducts: SuggestedProduct[]
+  setSuggestedProducts: React.Dispatch<React.SetStateAction<SuggestedProduct[]>>
+  otherRecommendedItems: string[]
+  setOtherRecommendedItems: React.Dispatch<React.SetStateAction<string[]>>
+  itinerary: ItineraryDay[]
+  setItinerary: React.Dispatch<React.SetStateAction<ItineraryDay[]>>
+  messageTraces: Record<string, ThoughtTraceEvent[]>
+  setMessageTraces: React.Dispatch<React.SetStateAction<Record<string, ThoughtTraceEvent[]>>>
 }
 
 interface SuggestedProduct {
@@ -160,29 +175,34 @@ function parseProductsFromResponse(content: string): { catalogProducts: string[]
   }
 }
 
-export function TripPlanner({ userId, initialMessage, onInitialMessageSent }: TripPlannerProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+export function TripPlanner({ 
+  userId, 
+  initialMessage, 
+  onInitialMessageSent,
+  messages,
+  setMessages,
+  tripContext,
+  setTripContext,
+  originalContext,
+  setOriginalContext,
+  suggestedProducts,
+  setSuggestedProducts,
+  otherRecommendedItems,
+  setOtherRecommendedItems,
+  itinerary,
+  setItinerary,
+  messageTraces,
+  setMessageTraces
+}: TripPlannerProps) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [thoughtTrace, setThoughtTrace] = useState<ThoughtTraceEvent[]>([])
   const [expandedThinking, setExpandedThinking] = useState(false)
-  // Store thought traces per message for persistence after agent responds
-  const [messageTraces, setMessageTraces] = useState<Record<string, ThoughtTraceEvent[]>>({})
   const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null)
-  const [tripContext, setTripContext] = useState({
-    destination: '',
-    dates: '',
-    activity: '',
-  })
-  const [originalContext, setOriginalContext] = useState({
-    destination: '',
-    dates: '',
-    activity: '',
-  })
+  const [addingToCart, setAddingToCart] = useState<string | null>(null)
+  const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
+  
   const [contextModified, setContextModified] = useState(false)
-  const [suggestedProducts, setSuggestedProducts] = useState<SuggestedProduct[]>([])
-  const [otherRecommendedItems, setOtherRecommendedItems] = useState<string[]>([])
-  const [itinerary, setItinerary] = useState<ItineraryDay[]>([])
   const [cartExpanded, setCartExpanded] = useState(true)
   const [otherItemsExpanded, setOtherItemsExpanded] = useState(false)
   const [itineraryExpanded, setItineraryExpanded] = useState(true)
@@ -582,11 +602,15 @@ export function TripPlanner({ userId, initialMessage, onInitialMessageSent }: Tr
   }
 
   const handleAddToCart = async (product: SuggestedProduct) => {
+    setAddingToCart(product.id)
     try {
       await api.addToCart(userId, product.id, 1)
-      // Visual feedback - could add a toast notification
+      setJustAddedToCart(product.id)
+      setTimeout(() => setJustAddedToCart(null), 1500)
     } catch (error) {
       console.error('Failed to add to cart:', error)
+    } finally {
+      setAddingToCart(null)
     }
   }
 
@@ -739,136 +763,134 @@ export function TripPlanner({ userId, initialMessage, onInitialMessageSent }: Tr
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
                     >
-                      {/* Message bubble */}
-                      <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div
-                          className={`max-w-[85%] rounded-2xl px-5 py-3 shadow-lg ${
-                            message.role === 'user'
-                              ? 'bg-primary text-white'
-                              : 'bg-white text-slate-800 shadow-sm border border-slate-200'
-                          }`}
-                        >
-                        {message.role === 'assistant' ? (
-                          <div className="prose prose-sm max-w-none prose-headings:text-slate-800 prose-p:text-slate-700 prose-strong:text-slate-800 prose-li:text-slate-700">
-                            <ReactMarkdown
-                              components={{
-                                h1: ({ children }) => (
-                                  <h1 className="text-xl font-display font-bold text-slate-800 mb-3 flex items-center gap-2">
-                                    <Compass className="w-5 h-5 text-primary" />
-                                    {children}
-                                  </h1>
-                                ),
-                                h2: ({ children }) => (
-                                  <h2 className="text-lg font-display font-semibold text-slate-800 mt-4 mb-2 flex items-center gap-2">
-                                    {String(children).toLowerCase().includes('weather') && <CloudSun className="w-4 h-4 text-amber-500" />}
-                                    {String(children).toLowerCase().includes('gear') && <Backpack className="w-4 h-4 text-primary" />}
-                                    {String(children).toLowerCase().includes('recommend') && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                                    {children}
-                                  </h2>
-                                ),
-                                h3: ({ children }) => (
-                                  <h3 className="text-base font-semibold text-slate-700 mt-3 mb-1">
-                                    {children}
-                                  </h3>
-                                ),
-                                ul: ({ children }) => (
-                                  <ul className="space-y-1 my-2">{children}</ul>
-                                ),
-                                li: ({ children }) => (
-                                  <li className="flex items-start gap-2 text-slate-700">
-                                    <span className="text-primary mt-1">•</span>
-                                    <span>{children}</span>
-                                  </li>
-                                ),
-                                strong: ({ children }) => (
-                                  <strong className="font-semibold text-slate-800">{children}</strong>
-                                ),
-                                p: ({ children }) => (
-                                  <p className="text-slate-700 mb-2 leading-relaxed">{children}</p>
-                                ),
-                              }}
+                      <div className={`flex flex-col w-full ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        {/* Thought Trace - Moved above the bubble for assistant */}
+                        {message.role === 'assistant' && (
+                          (index === messages.length - 1 && (isLoading || thoughtTrace.length > 0)) ||
+                          messageTraces[messages[index - 1]?.id]?.length > 0
+                        ) && (
+                          <div className="mb-2 ml-4">
+                            <button
+                              onClick={() => setExpandedThinking(!expandedThinking)}
+                              className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                             >
-                              {message.content}
-                            </ReactMarkdown>
+                              {expandedThinking ? (
+                                <ChevronDown className="w-3 h-3" />
+                              ) : (
+                                <ChevronRight className="w-3 h-3" />
+                              )}
+                              {isLoading && index === messages.length - 1 ? (
+                                <span className="flex items-center gap-1.5">
+                                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                                  <span className="text-primary font-medium">{currentStatus}</span>
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-3 h-3 text-green-500" />
+                                  <span>Completed {(messageTraces[messages[index - 1]?.id] || thoughtTrace).length} steps</span>
+                                </span>
+                              )}
+                            </button>
+                            
+                            <AnimatePresence>
+                              {expandedThinking && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="mt-2 ml-6 space-y-2 border-l-2 border-slate-600 pl-4 w-full max-w-[85%]"
+                                >
+                                  {(index === messages.length - 1 ? thoughtTrace : messageTraces[messages[index - 1]?.id] || []).map((trace, idx) => (
+                                    <div key={idx} className="text-xs">
+                                      {trace.event === 'reasoning' && (
+                                        <div className="flex items-start gap-2 text-slate-400">
+                                          <Clock className="w-3 h-3 mt-0.5 text-blue-400" />
+                                          <span>{typeof trace.data === 'string' ? trace.data : trace.data?.reasoning}</span>
+                                        </div>
+                                      )}
+                                      {trace.event === 'tool_call' && (
+                                        <div className="flex items-start gap-2 text-slate-400">
+                                          <Backpack className="w-3 h-3 mt-0.5 text-amber-400" />
+                                          <span>
+                                            <span className="font-medium">{getToolStatusMessage(trace.data?.tool_id)}</span>
+                                            {trace.data?.params && Object.keys(trace.data.params).length > 0 && (
+                                              <span className="text-slate-500 ml-1">
+                                                ({Object.values(trace.data.params).join(', ')})
+                                              </span>
+                                            )}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
-                        ) : (
-                          <p className="text-sm">{message.content}</p>
                         )}
-                        <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-white/70' : 'text-slate-400'}`}>
-                          {message.timestamp.toLocaleTimeString()}
-                        </p>
+
+                        {/* Message bubble */}
+                        <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div
+                            className={`max-w-[85%] rounded-2xl px-5 py-3 shadow-lg ${
+                              message.role === 'user'
+                                ? 'bg-primary text-white'
+                                : 'bg-white text-slate-800 shadow-sm border border-slate-200'
+                            }`}
+                          >
+                          {message.role === 'assistant' ? (
+                            <div className="prose prose-sm max-w-none prose-headings:text-slate-800 prose-p:text-slate-700 prose-strong:text-slate-800 prose-li:text-slate-700">
+                              <ReactMarkdown
+                                components={{
+                                  h1: ({ children }) => (
+                                    <h1 className="text-xl font-display font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                      <Compass className="w-5 h-5 text-primary" />
+                                      {children}
+                                    </h1>
+                                  ),
+                                  h2: ({ children }) => (
+                                    <h2 className="text-lg font-display font-semibold text-slate-800 mt-4 mb-2 flex items-center gap-2">
+                                      {String(children).toLowerCase().includes('weather') && <CloudSun className="w-4 h-4 text-amber-500" />}
+                                      {String(children).toLowerCase().includes('gear') && <Backpack className="w-4 h-4 text-primary" />}
+                                      {String(children).toLowerCase().includes('recommend') && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                      {children}
+                                    </h2>
+                                  ),
+                                  h3: ({ children }) => (
+                                    <h3 className="text-base font-semibold text-slate-700 mt-3 mb-1">
+                                      {children}
+                                    </h3>
+                                  ),
+                                  ul: ({ children }) => (
+                                    <ul className="space-y-1 my-2">{children}</ul>
+                                  ),
+                                  li: ({ children }) => (
+                                    <li className="flex items-start gap-2 text-slate-700">
+                                      <span className="text-primary mt-1">•</span>
+                                      <span>{children}</span>
+                                    </li>
+                                  ),
+                                  strong: ({ children }) => (
+                                    <strong className="font-semibold text-slate-800">{children}</strong>
+                                  ),
+                                  p: ({ children }) => (
+                                    <p className="text-slate-700 mb-2 leading-relaxed">{children}</p>
+                                  ),
+                                }}
+                              >
+                                {message.content}
+                              </ReactMarkdown>
+                            </div>
+                          ) : (
+                            <p className="text-sm">{message.content}</p>
+                          )}
+                          <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-white/70' : 'text-slate-400'}`}>
+                            {message.timestamp.toLocaleTimeString()}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    
-                    {/* Thinking section under user message - show for current message or stored traces */}
-                    {message.role === 'user' && (
-                      (index === messages.length - 1 && (isLoading || thoughtTrace.length > 0)) ||
-                      messageTraces[message.id]?.length > 0
-                    ) && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className="ml-4"
-                      >
-                        <button
-                          onClick={() => setExpandedThinking(!expandedThinking)}
-                          className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors py-1"
-                        >
-                          {expandedThinking ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                          {isLoading && index === messages.length - 1 ? (
-                            <span className="flex items-center gap-2">
-                              <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                              <span className="text-primary font-medium">{currentStatus}</span>
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-2">
-                              <CheckCircle2 className="w-3 h-3 text-green-400" />
-                              <span>Completed {(messageTraces[message.id] || thoughtTrace).length} steps</span>
-                            </span>
-                          )}
-                        </button>
-                        
-                        <AnimatePresence>
-                          {expandedThinking && (
-                            <motion.div
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: 'auto' }}
-                              exit={{ opacity: 0, height: 0 }}
-                              className="mt-2 ml-6 space-y-2 border-l-2 border-slate-600 pl-4"
-                            >
-                              {(index === messages.length - 1 ? thoughtTrace : messageTraces[message.id] || []).map((trace, idx) => (
-                                <div key={idx} className="text-xs">
-                                  {trace.event === 'reasoning' && (
-                                    <div className="flex items-start gap-2 text-slate-400">
-                                      <Clock className="w-3 h-3 mt-0.5 text-blue-400" />
-                                      <span>{typeof trace.data === 'string' ? trace.data : trace.data?.reasoning}</span>
-                                    </div>
-                                  )}
-                                  {trace.event === 'tool_call' && (
-                                    <div className="flex items-start gap-2 text-slate-400">
-                                      <Backpack className="w-3 h-3 mt-0.5 text-amber-400" />
-                                      <span>
-                                        <span className="font-medium">{getToolStatusMessage(trace.data?.tool_id)}</span>
-                                        {trace.data?.params && Object.keys(trace.data.params).length > 0 && (
-                                          <span className="text-slate-500 ml-1">
-                                            ({Object.values(trace.data.params).join(', ')})
-                                          </span>
-                                        )}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
-                    )}
-                    </motion.div>
+                  </motion.div>
                   ))}
                 </div>
               )}
@@ -991,10 +1013,21 @@ export function TripPlanner({ userId, initialMessage, onInitialMessageSent }: Tr
                                     </div>
                                     <button
                                       onClick={() => handleAddToCart(product)}
-                                      className="p-2 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary transition-colors"
-                                      title="Add to cart"
+                                      disabled={addingToCart === product.id || justAddedToCart === product.id}
+                                      className={`p-2 rounded-lg transition-all duration-300 ${
+                                        justAddedToCart === product.id 
+                                          ? 'bg-green-500 scale-110 animate-pulse text-white' 
+                                          : 'bg-primary/20 hover:bg-primary/30 text-primary'
+                                      } disabled:opacity-50`}
+                                      title={justAddedToCart === product.id ? 'Added!' : 'Add to cart'}
                                     >
-                                      <Plus className="w-4 h-4" />
+                                      {addingToCart === product.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : justAddedToCart === product.id ? (
+                                        <CheckCircle2 className="w-4 h-4" />
+                                      ) : (
+                                        <Plus className="w-4 h-4" />
+                                      )}
                                     </button>
                                   </div>
                                 ))}

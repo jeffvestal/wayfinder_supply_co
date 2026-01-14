@@ -183,7 +183,7 @@ GOOGLE_API_KEY=your-api-key  # For Gemini
 ### Services Won't Start
 
 - Check Docker is running: `docker ps`
-- Verify ports are not in use: `lsof -i :8000,8001,3000`
+- Verify ports are not in use: `lsof -i :8000,8001,8002`
 - Check logs: `docker-compose logs`
 
 ### Elasticsearch Connection Issues
@@ -203,7 +203,7 @@ GOOGLE_API_KEY=your-api-key  # For Gemini
 
 - Check MCP server logs
 - Verify CRM data file exists
-- Test MCP endpoints directly: `curl http://host-1:8001/health`
+- Test MCP endpoints directly: `curl http://host-1:8002/health`
 
 ## Support
 

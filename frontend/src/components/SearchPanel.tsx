@@ -27,21 +27,45 @@ interface SearchPanelProps {
   startInDemoMode?: boolean
   onDemoModeStarted?: () => void
   narrationMode?: boolean
+  // Persisted state from props
+  messages: ExtendedChatMessage[]
+  setMessages: React.Dispatch<React.SetStateAction<ExtendedChatMessage[]>>
+  mode: SearchModeType
+  setMode: React.Dispatch<React.SetStateAction<SearchModeType>>
+  stepsExpanded: Record<string, boolean>
+  setStepsExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  expandedSteps: Set<string>
+  setExpandedSteps: React.Dispatch<React.SetStateAction<Set<string>>>
+  personalizationEnabled: boolean
+  setPersonalizationEnabled: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-export function SearchPanel({ isOpen, onClose, userId, initialMessage, onInitialMessageSent, onOpenTripPlanner: _onOpenTripPlanner, startInDemoMode, onDemoModeStarted, narrationMode = false }: SearchPanelProps) {
+export function SearchPanel({ 
+  isOpen, 
+  onClose, 
+  userId, 
+  initialMessage, 
+  onInitialMessageSent, 
+  onOpenTripPlanner: _onOpenTripPlanner, 
+  startInDemoMode, 
+  onDemoModeStarted, 
+  narrationMode = false,
+  messages,
+  setMessages,
+  mode,
+  setMode,
+  stepsExpanded,
+  setStepsExpanded,
+  expandedSteps,
+  setExpandedSteps,
+  personalizationEnabled,
+  setPersonalizationEnabled
+}: SearchPanelProps) {
   // UI State
-  const [mode, setMode] = useState<SearchModeType>('chat')
   const [panelWidth, setPanelWidth] = useState(50)
   const [isDragging, setIsDragging] = useState(false)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [personalizationEnabled, setPersonalizationEnabled] = useState(false)
-  
-  // Chat state
-  const [messages, setMessages] = useState<ExtendedChatMessage[]>([])
-  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
-  const [stepsExpanded, setStepsExpanded] = useState<Record<string, boolean>>({})
   
   // Search state
   const [searchResults, setSearchResults] = useState<Product[]>([])

@@ -14,7 +14,12 @@ import { SearchComparisonDemo } from './components/SearchComparisonDemo'
 import { ShoppingCart, MapPin, Home, Menu, X, Search, Play, Eye, Sparkles, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
-import { UserPersona } from './types'
+import { UserPersona, ChatMessage, ThoughtTraceEvent } from './types'
+import { 
+  SearchMode as SearchModeType, 
+  ExtendedChatMessage, 
+  AgentStep 
+} from './components/search/types'
 
 // Legacy user loyalty tiers (for backward compatibility)
 const LEGACY_LOYALTY_TIERS: Record<string, string> = {
@@ -31,6 +36,31 @@ function App() {
   const [personas, setPersonas] = useState<UserPersona[]>([])
   const [currentView, setCurrentView] = useState<View>('storefront')
   const [searchPanelOpen, setSearchPanelOpen] = useState(false)
+  
+  // Persisted SearchPanel state
+  const [searchMessages, setSearchMessages] = useState<ExtendedChatMessage[]>([])
+  const [searchMode, setSearchMode] = useState<SearchModeType>('chat')
+  const [searchStepsExpanded, setSearchStepsExpanded] = useState<Record<string, boolean>>({})
+  const [searchExpandedSteps, setSearchExpandedSteps] = useState<Set<string>>(new Set())
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(false)
+
+  // Persisted TripPlanner state
+  const [plannerMessages, setPlannerMessages] = useState<ChatMessage[]>([])
+  const [plannerContext, setPlannerContext] = useState({
+    destination: '',
+    dates: '',
+    activity: '',
+  })
+  const [plannerOriginalContext, setPlannerOriginalContext] = useState({
+    destination: '',
+    dates: '',
+    activity: '',
+  })
+  const [plannerSuggestedProducts, setPlannerSuggestedProducts] = useState<any[]>([])
+  const [plannerOtherRecommendedItems, setPlannerOtherRecommendedItems] = useState<string[]>([])
+  const [plannerItinerary, setPlannerItinerary] = useState<any[]>([])
+  const [plannerMessageTraces, setPlannerMessageTraces] = useState<Record<string, ThoughtTraceEvent[]>>({})
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [chatInitialMessage, setChatInitialMessage] = useState<string | undefined>()
   const [tripPlannerInitialMessage, setTripPlannerInitialMessage] = useState<string | undefined>()
@@ -467,6 +497,20 @@ function App() {
                     userId={currentUser} 
                     initialMessage={tripPlannerInitialMessage}
                     onInitialMessageSent={() => setTripPlannerInitialMessage(undefined)}
+                    messages={plannerMessages}
+                    setMessages={setPlannerMessages}
+                    tripContext={plannerContext}
+                    setTripContext={setPlannerContext}
+                    originalContext={plannerOriginalContext}
+                    setOriginalContext={setPlannerOriginalContext}
+                    suggestedProducts={plannerSuggestedProducts}
+                    setSuggestedProducts={setPlannerSuggestedProducts}
+                    otherRecommendedItems={plannerOtherRecommendedItems}
+                    setOtherRecommendedItems={setPlannerOtherRecommendedItems}
+                    itinerary={plannerItinerary}
+                    setItinerary={setPlannerItinerary}
+                    messageTraces={plannerMessageTraces}
+                    setMessageTraces={setPlannerMessageTraces}
                   />
                 </ErrorBoundary>
               </motion.div>
@@ -572,6 +616,16 @@ function App() {
           startInDemoMode={demoModeRequested}
           onDemoModeStarted={() => setDemoModeRequested(false)}
           narrationMode={narrationMode}
+          messages={searchMessages}
+          setMessages={setSearchMessages}
+          mode={searchMode}
+          setMode={setSearchMode}
+          stepsExpanded={searchStepsExpanded}
+          setStepsExpanded={setSearchStepsExpanded}
+          expandedSteps={searchExpandedSteps}
+          setExpandedSteps={setSearchExpandedSteps}
+          personalizationEnabled={personalizationEnabled}
+          setPersonalizationEnabled={setPersonalizationEnabled}
         />
       </ErrorBoundary>
 

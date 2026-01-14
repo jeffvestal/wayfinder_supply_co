@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { Product, UserId } from '../../types'
 import { 
   Search, Loader2, ChevronRight, ChevronDown, MessageSquare, 
-  Zap, BookOpen, Database, Target, FileText, Plus, ShoppingCart, Check, Sparkles 
+  Zap, BookOpen, Database, Target, FileText, Plus, ShoppingCart, Check, Sparkles, CheckCircle2 
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { 
@@ -415,10 +415,20 @@ export function DemoMode({
                 <div className="space-y-1">
                   <button
                     onClick={() => onToggleStepsExpanded('demo')}
-                    className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300"
+                    className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                   >
                     {stepsExpanded['demo'] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    <span>Thought Trace ({demoAgenticMessage.steps.filter(s => s.reasoning || s.tool_id).length} steps)</span>
+                    {demoAgenticMessage.status === 'complete' ? (
+                      <span className="flex items-center gap-1.5 text-green-400">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Completed {demoAgenticMessage.steps.filter(s => s.reasoning || s.tool_id).length} steps</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-primary">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>{getCurrentStatus(demoAgenticMessage.steps || [], true)}</span>
+                      </span>
+                    )}
                   </button>
                   {stepsExpanded['demo'] && (
                     <div className="space-y-1 mt-2">

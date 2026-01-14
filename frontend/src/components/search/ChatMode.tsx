@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { MessageSquare, Loader2, ChevronRight, ChevronDown } from 'lucide-react'
+import { MessageSquare, Loader2, ChevronRight, ChevronDown, CheckCircle2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ExtendedChatMessage, AgentStep } from './types'
 import { StepRenderer } from './StepRenderer'
@@ -62,35 +62,33 @@ export function ChatMode({
           animate={{ opacity: 1, y: 0 }}
           className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
         >
-          <div
-            className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-              message.role === 'user'
-                ? 'bg-primary text-white'
-                : 'bg-slate-800 text-gray-100'
-            }`}
-          >
-            {/* Status indicator */}
-            {message.role === 'assistant' && message.status && message.status !== 'complete' && (
-              <div className="flex items-center gap-2 mb-2">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-xs text-primary font-medium">
-                  {getCurrentStatus(message.steps || [], true)}
-                </span>
-              </div>
-            )}
-
-            {/* Agent Steps */}
-            {message.steps && message.steps.length > 0 && (
-              <div className="mb-3">
+          <div className={`flex flex-col w-full ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+            {/* Thought Trace - Moved above the bubble for assistant */}
+            {message.role === 'assistant' && message.steps && message.steps.length > 0 && (
+              <div className="mb-2 ml-4">
                 <button
                   onClick={() => onToggleStepsExpanded(message.id)}
-                  className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300"
+                  className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                 >
-                  {stepsExpanded[message.id] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                  <span>Thought Trace ({message.steps.filter(s => s.reasoning || s.tool_id).length})</span>
+                  {stepsExpanded[message.id] ? (
+                    <ChevronDown className="w-3 h-3" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3" />
+                  )}
+                  {message.status === 'complete' || !message.status ? (
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3 h-3 text-green-500" />
+                      <span>Completed {message.steps.filter(s => s.reasoning || s.tool_id).length} steps</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                      <span>{getCurrentStatus(message.steps || [], true)}</span>
+                    </span>
+                  )}
                 </button>
                 {stepsExpanded[message.id] && (
-                  <div className="space-y-1 mt-2">
+                  <div className="space-y-1 mt-2 w-full max-w-[85%]">
                     {message.steps
                       .filter(step => step.reasoning || (step.tool_id && step.params))
                       .map((step, idx) => (
@@ -108,7 +106,24 @@ export function ChatMode({
               </div>
             )}
 
-            {/* Message content */}
+            <div
+              className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                message.role === 'user'
+                  ? 'bg-primary text-white'
+                  : 'bg-slate-800 text-gray-100 shadow-lg'
+              }`}
+            >
+              {/* Status indicator - simplified since trace is above */}
+              {message.role === 'assistant' && message.status && message.status !== 'complete' && message.steps?.length === 0 && (
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span className="text-xs text-primary font-medium">
+                    Thinking...
+                  </span>
+                </div>
+              )}
+
+              {/* Message content */}
             {message.role === 'assistant' ? (
               <div className="prose prose-invert prose-sm max-w-none">
                 <ReactMarkdown>{message.content}</ReactMarkdown>
@@ -121,7 +136,8 @@ export function ChatMode({
               {message.timestamp.toLocaleTimeString()}
             </p>
           </div>
-        </motion.div>
+        </div>
+      </motion.div>
       ))}
       <div ref={messagesEndRef} />
     </div>
