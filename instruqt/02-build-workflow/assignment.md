@@ -213,9 +213,12 @@ steps:
 2. Click the ▶️ (run) button next to Save
 
 3. A panel will appear asking for the `user_id` input
-   - **Note**: The `user_id` field will be empty by default - you need to enter a value
 
-4. In the `user_id` field, enter: **`user_member`** and click **"Run"**
+4. In the `user_id` field, enter: 
+  ```
+  user_member
+  ```
+  - click **"Run"**
    - This is the user identifier (not a name)
    - The workflow will return customer data including the name "Sarah Martinez" - that's the result, not what you enter
 
@@ -230,10 +233,10 @@ You will see the workflow run in real-time.
 
 ```
 Customer Profile for user_member:
-Name: Sarah Martinez
-Loyalty Tier: Platinum
-Lifetime Value: $2847.50
-Purchase History: 12 items
+Name: Alex Hiker
+Loyalty Tier: platinum
+Lifetime Value: $4500
+Purchase History: 3 items
 ```
 
 ![CleanShot 2025-12-15 at 20.33.05@2x.png](../assets/CleanShot%202025-12-15%20at%2020.33.05%402x.png)

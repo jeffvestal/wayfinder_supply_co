@@ -51,9 +51,9 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
 
 1. Open the [button label="Kibana Agent Builder"](tab-0) tab
 
-2. Navigate to the Tools section:
+2. You should be in the Tools section, if not:
    - Click the **hamburger menu** (☰) in the top-left corner
-   - Go to **Elasticsearch** → **Agent Builder** → **Tools**
+   - Go to **Elasticsearch** → **Agents** → **More** → **View All Tools**
    - You should see a list of existing tools (like `product_search`, `get_user_affinity`, etc.)
 
 ![CleanShot 2025-12-15 at 20.39.51@2x.png](../assets/CleanShot%202025-12-15%20at%2020.39.51%402x.png)
@@ -62,18 +62,26 @@ When an agent needs to retrieve customer data, it calls your workflow tool, whic
 
 ## Step 2: Create a New Tool
 
-1. Click the **"Create tool"** or **"Add tool"** button (usually in the top-right corner)
+1. Click the **"+ Add tool"** button 
 
 ---
 
 ## Step 3: Configure the Tool
 
 Fill in the tool configuration form:
-### Statem References
+### Type
 1. Select the tool type:
    - Choose **"Workflow"** from the tool type options
    - This tells Agent Builder that this tool wraps an Elastic Workflow
+2. **Workflow **:
+   - In the workflow dropdown/selector, find and select `get_customer_profile`
+   - This is the workflow you created in Challenge 2
+   - The UI will automatically link this tool to your workflow
+3. **Workflow execution**
+   - Leave this checked.
+   - This tells the tool to wait for the workflow to complete and return its output.
 
+### Details
 2. **Tool ID**: Enter
 	 ```
 	tool-workflow-get-customer-profile
@@ -92,13 +100,6 @@ Fill in the tool configuration form:
    - Enter `wayfinder`
 
 ### Configuration
-5. **Workflow Selection**:
-   - In the workflow dropdown/selector, find and select `get_customer_profile`
-   - This is the workflow you created in Challenge 2
-   - The UI will automatically link this tool to your workflow
-6. **Workflow execution**
-   - Leave this checked.
-   - This tells the tool to wait for the workflow to complete and return its output.
 ![CleanShot 2025-12-16 at 10.14.34@2x.png](../assets/CleanShot%202025-12-16%20at%2010.14.34%402x.png)
 
 7. Click **"Save"** to create the tool

@@ -54,7 +54,7 @@ You'll create an agent that:
 ## Step 1: Navigate to Agent Builder Agents
 
 1. Open the [button label="Kibana Agent Builder"](tab-0) tab
-   - You should see a list of existing agents (if any)
+   - You should see a list of existing agents 
 
 ![CleanShot 2025-12-16 at 10.28.07@2x.png](../assets/CleanShot%202025-12-16%20at%2010.28.07%402x.png)
 
@@ -62,7 +62,7 @@ You'll create an agent that:
 
 ## Step 2: Create a New Agent
 
-1. Click the **"New agent"** button (upper right)
+1. Click the **"+ New agent"** button (upper right)
 
 ---
 
@@ -75,7 +75,7 @@ You'll create an agent that:
 	```
 - This is the unique identifier for your agent
 
-2. The instructions define the agent's behavior and decision-making process.
+2. The **Custom Instructions** define the agent's behavior and decision-making process.
 	- Copy and paste the following instructions:
 
 ```
@@ -178,10 +178,10 @@ Now you need to assign tools to your agent. Tools are the capabilities the agent
 	![CleanShot 2025-12-16 at 10.51.08@2x.png](../assets/CleanShot%202025-12-16%20at%2010.51.08%402x.png)
 
 2. Select the following tools (You can either search for them in the search box or you may need to go to page 2 of the list):
-   - `tool-search-product-search` - Search the product catalog
-   - `tool-workflow-check-trip-safety` - Check trip safety and weather
-   - `tool-workflow-get-customer-profile` - Get customer profile (the tool you created in Challenge 3)
    - `tool-esql-get-user-affinity` - Get user preferences from clickstream
+   - `tool-workflow-check-trip-safety` - Check trip safety and weather
+   - `tool-search-product-search` - Search the product catalog
+   - `tool-workflow-get-customer-profile` - Get customer profile (the tool you created in Challenge 3)
 
 	![CleanShot 2025-12-16 at 10.57.07@2x.png](../assets/CleanShot%202025-12-16%20at%2010.57.07%402x.png)
 
@@ -214,6 +214,7 @@ Now you need to assign tools to your agent. Tools are the capabilities the agent
 		- These are products we can sell to our customers!
 	- Day-by-Dat Itinerary
 ![CleanShot 2025-12-16 at 11.07.39@2x.png](../assets/CleanShot%202025-12-16%20at%2011.07.39%402x.png)
+   _note:_ your specific output may be different than the screenshot
 
 4. Review the agent's thought process:
    - Click on `Completed Reasoning
