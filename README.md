@@ -1,8 +1,31 @@
 # Wayfinder Supply Co. Workshop
 
+> **Status**: 🎉 **Stable v1.0** - Production-ready demo and workshop platform
+
 A hands-on workshop demonstrating **Elastic Agentic Search** capabilities through "Wayfinder Supply Co." — a fictional outdoor retailer with an AI-powered trip planning assistant.
 
 ![header photo](wayfinder_store_headshot.png)
+
+## Current Release (v1.0)
+
+**What's Working:**
+- ✅ Complete E-commerce UI with 150+ products across 10 categories
+- ✅ AI Trip Planner with streaming responses and thought traces
+- ✅ Personalization engine with real-time clickstream tracking
+- ✅ Search modes: Lexical, Hybrid (ELSER), and Agentic
+- ✅ Unified frontend/backend serving on port 8000
+- ✅ Complete checkout flow with AI-generated reviews
+- ✅ 5 pre-built user personas with rich clickstream data
+- ✅ Interactive Guest User mode for live demos
+- ✅30 global adventure destinations with seasonal data
+- ✅ MCP server with Weather and CRM simulations
+- ✅ Instruqt workshop with 5 challenges
+- ✅ Standalone Docker deployment mode
+
+**Known Stable Commits:**
+- Current: `c4b0396` - Restored streaming logic, all features working
+- Previous stable: `c40fde4` - Original working implementation
+
 ## Overview
 
 This workshop showcases how to build an intelligent, conversational shopping experience that goes beyond keyword matching:
@@ -151,13 +174,16 @@ Full catalog covers 10 categories with ~150 products:
 
 ### AI Trip Planning
 
-- **Trip Planner** — Conversational AI assistant for trip planning
-- **Context Extraction** — Automatic parsing of destination, dates, and activities
-- **Suggested Gear** — Real-time product recommendations from the catalog
-- **Day-by-Day Itinerary** — Structured trip plans with export/download options
+- **Trip Planner** — Conversational AI assistant with streaming responses
+- **Context Extraction** — Automatic parsing of destination, dates, and activities from natural language
+- **Suggested Gear** — Real-time product recommendations extracted from agent tool results
+- **Product Extraction** — Dual extraction (tool_result events + fallback regex parsing)
+- **Day-by-Day Itinerary** — Structured trip plans extracted via dedicated agent
 - **PDF Trip Reports** — Download professional PDF itineraries with suggested gear lists
-- **Thought Trace** — Expandable panel showing agent reasoning and tool calls
-- **Quick Chat** — Floating chat button for quick questions anywhere in the app
+- **Thought Trace** — Expandable panel showing agent reasoning, tool calls, and results
+- **Editable Context** — Modify trip parameters and update recommendations
+- **State Persistence** — Trip context and chat history persist across navigation
+- **Error Handling** — Graceful fallback when agents not yet configured
 
 ### Product Reviews
 
