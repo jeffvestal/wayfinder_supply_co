@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChatMessage, UserId, ThoughtTraceEvent, SuggestedProduct, ItineraryDay } from '../types'
-import { api, StreamEvent } from '../lib/api'
+import { api } from '../lib/api'
 import { getToolStatusMessage } from '../lib/constants'
 import { ItineraryModal } from './ItineraryModal'
 import { 
@@ -77,7 +77,6 @@ function parseProductsFromResponse(content: string): { catalogProducts: string[]
   let match
   while ((match = pricePattern.exec(cleanText)) !== null) {
     const productName = match[1].trim()
-    // Check if it contains a known brand
     const hasBrand = KNOWN_BRANDS.some(brand => 
       productName.toLowerCase().includes(brand.toLowerCase())
     )
@@ -112,7 +111,6 @@ function parseProductsFromResponse(content: string): { catalogProducts: string[]
   }
   
   // Pattern 4: Generic gear recommendations (for "Other Items")
-  // Match bullet points that look like gear but don't have our brands
   const bulletPattern = /[•\-]\s*([A-Z][A-Za-z0-9\s&\-]+(?:Sleeping Bag|Tent|Backpack|Stove|Pad|Mat|Jacket|Boot|Shoe|Pack|Mitts?|Gloves?|Socks?|Layer|Insulation)?(?:\s+\d+)?)/g
   
   while ((match = bulletPattern.exec(cleanText)) !== null) {
@@ -121,21 +119,37 @@ function parseProductsFromResponse(content: string): { catalogProducts: string[]
       item.toLowerCase().includes(brand.toLowerCase())
     )
     
-    // Filter out false positives
     if (item.length > 10 && 
         !item.match(/^(Essential|Recommended|Consider|Add|Include|Use|Bring|Pack|Take|Check|Important|Day\s*\d)/i) &&
         !item.match(/^(Weather|Conditions|Temperatures|Snow|Rain|Wind|Road|Mountain|Start|Explore|Hike|Reserve)/i) &&
         !item.match(/^(Note|What|Why|How|When|Where)/i)) {
       
-      if (hasBrand) {
-        if (!catalogProducts.includes(item)) catalogProducts.push(item)
-      } else {
-        if (!otherItems.includes(item)) otherItems.push(item)
+      if (hasBrand && !catalogProducts.includes(item)) {
+        catalogProducts.push(item)
+      } else if (!hasBrand && !otherItems.includes(item)) {
+        const isGearItem = GEAR_CATEGORIES.some(cat => item.toLowerCase().includes(cat))
+        if (isGearItem) {
+          otherItems.push(item)
+        }
       }
     }
   }
   
-  return { catalogProducts, otherItems, gearSearchTerms }
+  // Filter and dedupe
+  const filteredOtherItems = [...new Set(otherItems)].filter(item => {
+    if (item.length > 100) return false
+    if (item.match(/^[A-Z][a-z]+ [a-z]+ [a-z]+/)) {
+      const hasGearKeyword = GEAR_CATEGORIES.some(cat => item.toLowerCase().includes(cat))
+      if (!hasGearKeyword && item.split(' ').length > 5) return false
+    }
+    return true
+  }).slice(0, 10)
+  
+  return {
+    catalogProducts: [...new Set(catalogProducts)].slice(0, 6),
+    otherItems: filteredOtherItems,
+    gearSearchTerms: [...new Set(gearSearchTerms)].slice(0, 8)
+  }
 }
 
 // Custom ReactMarkdown components for rich formatting
@@ -161,9 +175,7 @@ const markdownComponents = {
     )
   },
   h3: ({ children }: { children?: React.ReactNode }) => (
-    <h3 className="text-base font-semibold text-gray-200 mt-3 mb-1">
-      {children}
-    </h3>
+    <h3 className="text-base font-semibold text-gray-200 mt-3 mb-1">{children}</h3>
   ),
   ul: ({ children }: { children?: React.ReactNode }) => (
     <ul className="space-y-1 my-2">{children}</ul>
@@ -203,11 +215,11 @@ export function TripPlanner({
 }: TripPlannerProps) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [thoughtTrace, setThoughtTrace] = useState<ThoughtTraceEvent[]>([])
   const [expandedThinking, setExpandedThinking] = useState(false)
   const [isItineraryOpen, setIsItineraryOpen] = useState(false)
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
   const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
-  const [searchingGear, setSearchingGear] = useState(false)
   const [contextModified, setContextModified] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialMessageSentRef = useRef(false)
@@ -224,7 +236,7 @@ export function TripPlanner({
   useEffect(() => {
     if (initialMessage && !initialMessageSentRef.current) {
       initialMessageSentRef.current = true
-      sendMessage(initialMessage)
+      handleSubmit(null, initialMessage)
       if (onInitialMessageSent) onInitialMessageSent()
     }
   }, [initialMessage])
@@ -242,14 +254,59 @@ export function TripPlanner({
     try {
       setAddingToCart(product.id)
       await api.addToCart(userId, product.id)
-      
-      // Visual feedback
       setJustAddedToCart(product.id)
       setTimeout(() => setJustAddedToCart(null), 2000)
     } catch (error) {
       console.error('Failed to add to cart:', error)
     } finally {
       setAddingToCart(null)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent | null, overrideMessage?: string) => {
+    if (e) e.preventDefault()
+    const messageText = overrideMessage || input.trim()
+    if (!messageText || isLoading) return
+
+    const isFirstMessage = !tripContext.destination && !tripContext.dates && !tripContext.activity
+
+    // Only parse context on FIRST message when boxes are empty
+    if (isFirstMessage) {
+      // Show user message immediately
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: messageText,
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, userMessage])
+      setInput('')
+      setIsLoading(true)
+      setThoughtTrace([])
+      setExpandedThinking(false)
+
+      // Parse context in parallel (don't block on it)
+      api.parseTripContext(messageText)
+        .then((parsed) => {
+          if (parsed.destination || parsed.dates || parsed.activity) {
+            const newContext = {
+              destination: parsed.destination || tripContext.destination,
+              dates: parsed.dates || tripContext.dates,
+              activity: parsed.activity || tripContext.activity,
+            }
+            setTripContext(newContext)
+            setOriginalContext(newContext)
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to parse trip context:', error)
+        })
+
+      // Start chat stream immediately (don't wait for context parsing)
+      await sendMessage(messageText, false) // false = don't add user message again
+    } else {
+      // Follow-up message - send immediately without parsing
+      await sendMessage(messageText)
     }
   }
 
@@ -261,49 +318,30 @@ export function TripPlanner({
     await sendMessage(updateMessage)
   }
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim() || isLoading) return
-
-    const isFirstMessage = !tripContext.destination && !tripContext.dates && !tripContext.activity
-
+  const sendMessage = async (messageText: string, addUserMessage: boolean = true) => {
+    // Generate a unique ID for this message's trace
+    const currentMessageId = Date.now().toString()
+    
+    if (addUserMessage) {
       const userMessage: ChatMessage = {
-        id: Date.now().toString(),
+        id: currentMessageId,
         role: 'user',
-      content,
+        content: messageText,
         timestamp: new Date(),
       }
-
-    const assistantMessageId = (Date.now() + 1).toString()
-    const assistantMessage: ChatMessage = {
-      id: assistantMessageId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
+      setMessages((prev) => [...prev, userMessage])
     }
-
-    setMessages(prev => [...prev, userMessage, assistantMessage])
-      setInput('')
-      setIsLoading(true)
-      setExpandedThinking(false)
-
-    // Parse context on first message (non-blocking)
-    if (isFirstMessage) {
-      api.parseTripContext(content)
-        .then((parsed) => {
-          if (parsed.destination || parsed.dates || parsed.activity) {
-            const newContext = {
-              destination: parsed.destination || '',
-              dates: parsed.dates || '',
-              activity: parsed.activity || '',
-            }
-            setTripContext(newContext)
-            setOriginalContext(newContext)
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to parse trip context:', error)
-        })
-    }
+    
+    setInput('')
+    setIsLoading(true)
+    setThoughtTrace([])
+    setExpandedThinking(false)
+    
+    // Track the current user message ID for storing the trace
+    const userMessageId = addUserMessage ? currentMessageId : messages[messages.length - 1]?.id || currentMessageId
+    
+    // Collect trace events locally so we can save them at the end
+    const localTraceEvents: ThoughtTraceEvent[] = []
 
     try {
       // Check if the trip-planner-agent exists first
@@ -311,10 +349,10 @@ export function TripPlanner({
       
       if (!agentExists) {
         // Agent not built yet - show helpful message
-        setMessages(prev => prev.map(msg => 
-          msg.id === assistantMessageId ? { 
-            ...msg, 
-            content: `## 🏗️ Trip Planner Agent Not Yet Built
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `## 🏗️ Trip Planner Agent Not Yet Built
 
 The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
 
@@ -328,63 +366,163 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
 - Use the **Search** panel to ask questions about products
 - The search assistant (\`wayfinder-search-agent\`) is ready to help!
 
-*This is the feature you'll build in Challenge 4 - it orchestrates multiple tools to create personalized trip plans.*`
-          } : msg
-        ))
+*This is the feature you'll build in Challenge 4 - it orchestrates multiple tools to create personalized trip plans.*`,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, errorMessage])
         return
       }
 
-      let fullContent = ''
-      
-      // Use the generic streamChat with the trip-planner-agent ID
-      await api.streamChat(content, userId, (event: StreamEvent) => {
-        if (event.type === 'content' || event.type === 'message_chunk') {
-          const chunk = event.data?.text_chunk || event.data || ''
-          fullContent += chunk
-          setMessages(prev => prev.map(msg => 
-            msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg
-          ))
-        } else if (event.type === 'message_complete') {
-          fullContent = event.data?.message_content || fullContent
-          setMessages(prev => prev.map(msg => 
-            msg.id === assistantMessageId ? { ...msg, content: fullContent } : msg
-          ))
-        } else if (event.type === 'error') {
-          setMessages(prev => prev.map(msg => 
-            msg.id === assistantMessageId ? { 
-              ...msg, 
-              content: `⚠️ Error: ${event.data?.error || 'Unknown error occurred'}` 
-            } : msg
-          ))
-        } else {
-          // Store all other events (reasoning, tool_call, tool_result) in traces
+      let currentAssistantMessage: ChatMessage | null = null
+      let messageContent = ''
+
+      await api.streamChat(messageText, userId, (event) => {
+        const data = event.data
+
+        if (event.type === 'reasoning') {
           const traceEvent: ThoughtTraceEvent = {
-            event: event.type,
-            data: event.data,
-            timestamp: new Date()
+            event: 'reasoning',
+            data: data.reasoning || data,
+            timestamp: new Date(),
           }
-          setMessageTraces(prev => {
-            const currentTraces = prev[assistantMessageId] || []
-            return {
-              ...prev,
-              [assistantMessageId]: [...currentTraces, traceEvent]
+          localTraceEvents.push(traceEvent)
+          setThoughtTrace((prev) => [...prev, traceEvent])
+        } else if (event.type === 'tool_call') {
+          if (!data.tool_id || !data.params || Object.keys(data.params).length === 0) return
+          const traceEvent: ThoughtTraceEvent = {
+            event: 'tool_call',
+            data: {
+              tool_id: data.tool_id,
+              params: data.params,
+              tool_call_id: data.tool_call_id,
+            },
+            timestamp: new Date(),
+          }
+          localTraceEvents.push(traceEvent)
+          setThoughtTrace((prev) => [...prev, traceEvent])
+        } else if (event.type === 'tool_result') {
+          const traceEvent: ThoughtTraceEvent = {
+            event: 'tool_result',
+            data: {
+              tool_call_id: data.tool_call_id,
+              results: data.results,
+            },
+            timestamp: new Date(),
+          }
+          localTraceEvents.push(traceEvent)
+          setThoughtTrace((prev) => [...prev, traceEvent])
+          
+          // Extract products from search results (product_search tool)
+          let productsArray: any[] = []
+          if (Array.isArray(data.results)) {
+            productsArray = data.results
+          } else if (data.results && typeof data.results === 'object') {
+            if (Array.isArray(data.results.products)) {
+              productsArray = data.results.products
+            } else if (data.results.hits && Array.isArray(data.results.hits)) {
+              productsArray = data.results.hits.map((hit: any) => ({
+                ...hit._source,
+                id: hit._id,
+              }))
+            } else {
+              const keys = Object.keys(data.results)
+              for (const key of keys) {
+                if (Array.isArray(data.results[key]) && data.results[key].length > 0) {
+                  productsArray = data.results[key]
+                  break
+                }
+              }
             }
-          })
+          }
+          
+          if (productsArray.length > 0) {
+            const products = productsArray
+              .filter((r: any) => r && (r.title || r.name) && r.price)
+              .map((r: any) => ({
+                id: r.id || r._id || r.sku || `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: r.title || r.name,
+                price: typeof r.price === 'number' ? r.price : parseFloat(r.price) || 0,
+                image_url: r.image_url || r.image,
+                reason: (r.description || r.reason || '').slice(0, 100),
+              }))
+              .filter((p: SuggestedProduct) => p.price > 0)
+            
+            if (products.length > 0) {
+              setSuggestedProducts((prev) => {
+                const existingIds = new Set(prev.map(p => p.id))
+                const newProducts = products.filter((p: SuggestedProduct) => !existingIds.has(p.id))
+                const combined = [...prev, ...newProducts]
+                const unique = combined.filter((p, idx, arr) => 
+                  arr.findIndex(pp => pp.id === p.id) === idx
+                )
+                return unique.slice(0, 6)
+              })
+            }
+          }
+        } else if (event.type === 'message_chunk') {
+          messageContent += data.text_chunk || ''
+          if (!currentAssistantMessage) {
+            currentAssistantMessage = {
+              id: data.message_id || Date.now().toString(),
+              role: 'assistant',
+              content: messageContent,
+              timestamp: new Date(),
+            }
+            setMessages((prev) => [...prev, currentAssistantMessage!])
+          } else {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === currentAssistantMessage!.id
+                  ? { ...msg, content: messageContent }
+                  : msg
+              )
+            )
+          }
+        } else if (event.type === 'message_complete') {
+          messageContent = data.message_content || messageContent
+          if (currentAssistantMessage) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === currentAssistantMessage!.id
+                  ? { ...msg, content: messageContent }
+                  : msg
+              )
+            )
+          }
+          
+          // Extract itinerary using agent
+          extractItineraryFromResponse(messageContent)
+          
+          // Use fallback regex extraction as backup
+          extractProductsFromResponseFallback(messageContent)
         }
       }, 'trip-planner-agent')
-
-      // Once complete, parse for context, itinerary, and products
-      const { catalogProducts, otherItems, gearSearchTerms } = parseProductsFromResponse(fullContent)
-      
-      if (otherItems.length > 0) {
-        setOtherRecommendedItems(otherItems)
+    } catch (error) {
+      console.error('Chat error:', error)
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+        timestamp: new Date(),
       }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
+      // Store the thought trace for this message so it persists after assistant responds
+      if (localTraceEvents.length > 0) {
+        setMessageTraces(prev => ({
+          ...prev,
+          [userMessageId]: localTraceEvents
+        }))
+      }
+    }
+  }
 
-      // Extract itinerary from response
-      try {
-        const result = await api.extractItinerary(fullContent)
+  const extractItineraryFromResponse = async (content: string) => {
+    try {
+      const result = await api.extractItinerary(content)
       if (result.days && result.days.length > 0) {
-          const days: ItineraryDay[] = result.days.map((d: { day: number; title?: string; activities?: string[] }) => ({
+        const days: ItineraryDay[] = result.days.map(d => ({
           day: d.day,
           title: d.title || `Day ${d.day}`,
           activities: d.activities || [],
@@ -393,75 +531,124 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
       }
     } catch (error) {
       console.error('Failed to extract itinerary:', error)
-      }
-
-      // If we found catalog products or gear search terms, fetch them
-      if (catalogProducts.length > 0 || gearSearchTerms.length > 0) {
-        setSearchingGear(true)
-        try {
-          // 1. First search for specific brand products mentioned
-          const foundProducts: SuggestedProduct[] = []
-          
-          for (const productName of catalogProducts) {
-            const results = await api.searchProducts(productName, 1)
-            if (results.products && results.products.length > 0) {
-              const p = results.products[0]
-              if (!foundProducts.find(fp => fp.id === p.id)) {
-                foundProducts.push({
-                  id: p.id,
-                  title: p.title,
-                  price: p.price,
-                  image_url: p.image_url,
-                  reason: 'Highly recommended for your trip'
-                })
-              }
-            }
-          }
-
-          // 2. Then search for gear categories if we don't have enough products
-          if (foundProducts.length < 4 && gearSearchTerms.length > 0) {
-            for (const term of gearSearchTerms.slice(0, 3)) {
-              const results = await api.searchProducts(term, 2)
-              if (results.products) {
-                for (const p of results.products) {
-                  if (!foundProducts.find(fp => fp.id === p.id)) {
-                    foundProducts.push({
-                      id: p.id,
-                      title: p.title,
-                      price: p.price,
-                      image_url: p.image_url,
-                      reason: `Perfect ${term} for your activity`
-                    })
-                  }
-                }
-              }
-            }
-          }
-    
-    if (foundProducts.length > 0) {
-            setSuggestedProducts(foundProducts)
-          }
-        } catch (err) {
-          console.error('Failed to search products:', err)
-        } finally {
-          setSearchingGear(false)
+      // Fallback: create simple overview if extraction fails
+      if (content.length > 100) {
+        const bulletPoints = content
+          .split(/[•\-\n]/)
+          .map(a => a.trim())
+          .filter(a => a.length > 20 && a.length < 200)
+          .slice(0, 6)
+        
+        if (bulletPoints.length >= 2) {
+          setItinerary([{
+            day: 1,
+            title: 'Trip Overview',
+            activities: bulletPoints,
+          }])
         }
       }
-
-    } catch (error) {
-      console.error('Failed to send message:', error)
-      setMessages(prev => prev.map(msg => 
-        msg.id === assistantMessageId ? { ...msg, content: 'I apologize, but I encountered an error. Please try again.' } : msg
-      ))
-    } finally {
-      setIsLoading(false)
     }
   }
 
-  // Get current status for thought trace display
-  const currentStatus = messages.length > 0 
-    ? getCurrentStatus(messageTraces[messages[messages.length - 1]?.id] || [], isLoading)
-    : ''
+  // Regex-based extraction (fallback if tool_result doesn't capture products)
+  const extractProductsFromResponseFallback = async (content: string) => {
+    const { catalogProducts, otherItems, gearSearchTerms } = parseProductsFromResponse(content)
+    
+    const existingIds = new Set<string>()
+    
+    // Search all catalog products in parallel
+    const catalogSearchPromises = catalogProducts.map(async (productName) => {
+      try {
+        const searchResult = await api.searchProducts(productName, 1)
+        if (searchResult.products && searchResult.products.length > 0) {
+          const product = searchResult.products[0]
+          if (product.price > 0) {
+            return {
+              id: product.id || product._id,
+              title: product.title || productName,
+              price: product.price,
+              image_url: product.image_url,
+              reason: product.description?.slice(0, 100),
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to search for product "${productName}":`, error)
+      }
+      return null
+    })
+    
+    // Also search gear terms in parallel
+    const gearSearchPromises = gearSearchTerms.slice(0, 4).map(async (term) => {
+      try {
+        const searchResult = await api.searchProducts(term, 1)
+        if (searchResult.products && searchResult.products.length > 0) {
+          const product = searchResult.products[0]
+          if (product.price > 0) {
+            return {
+              id: product.id || product._id,
+              title: product.title,
+              price: product.price,
+              image_url: product.image_url,
+              reason: `Great for ${term}`,
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Failed semantic search for "${term}":`, error)
+      }
+      return null
+    })
+    
+    // Wait for all searches
+    const [catalogResults, gearResults] = await Promise.all([
+      Promise.all(catalogSearchPromises),
+      Promise.all(gearSearchPromises)
+    ])
+    
+    // Combine and dedupe
+    const allResults = [...catalogResults, ...gearResults]
+    const foundProducts: SuggestedProduct[] = allResults
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .filter(p => {
+        if (existingIds.has(p.id)) return false
+        existingIds.add(p.id)
+        return true
+      })
+      .slice(0, 6)
+    
+    if (foundProducts.length > 0) {
+      setSuggestedProducts((prev) => {
+        const combined = [...prev, ...foundProducts]
+        const unique = combined.filter((p, idx, arr) => 
+          arr.findIndex(pp => pp.id === p.id) === idx
+        )
+        return unique.slice(0, 6)
+      })
+    }
+    
+    if (otherItems.length > 0) {
+      setOtherRecommendedItems((prev) => {
+        const combined = [...prev, ...otherItems]
+        const unique = combined.filter((item, idx, arr) => 
+          arr.findIndex(ii => ii.toLowerCase() === item.toLowerCase()) === idx
+        )
+        const filtered = unique.filter(item => 
+          !foundProducts.some(fp => item.toLowerCase().includes(fp.title.toLowerCase().split(' ')[0]))
+        )
+        const final = filtered.filter(item => {
+          if (item.length > 100) return false
+          if (item.split(' ').length > 8 && !GEAR_CATEGORIES.some(cat => item.toLowerCase().includes(cat))) {
+            return false
+          }
+          return true
+        }).slice(0, 10)
+        return final
+      })
+    }
+  }
+
+  const currentStatus = getCurrentStatus(thoughtTrace, isLoading)
 
   return (
     <div className="h-[calc(100vh-5rem)] bg-slate-950 flex flex-col overflow-hidden">
@@ -531,12 +718,12 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
             <div className="flex items-end">
               {contextModified ? (
                 <button
-                    onClick={handleUpdatePlan}
-                    disabled={isLoading}
+                  onClick={handleUpdatePlan}
+                  disabled={isLoading}
                   className="w-full px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Update Plan
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Update Plan
                 </button>
               ) : itinerary.length > 0 ? (
                 <button
@@ -564,13 +751,13 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                 <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6">
                   <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
                     <Compass className="w-8 h-8 text-primary animate-pulse" />
-                    </div>
+                  </div>
                   <div>
                     <h3 className="text-lg font-display font-bold text-white mb-2">Adventure Trip Planner</h3>
                     <p className="text-gray-400 text-sm">
                       Tell me where you want to go and what you want to do. I'll help plan the perfect trip and find the right gear.
-                      </p>
-                    </div>
+                    </p>
+                  </div>
                   <div className="grid grid-cols-1 gap-2 w-full">
                     <button
                       onClick={() => setInput("Plan a 3-day backpacking trip in the Enchantments, Washington for this July")}
@@ -589,9 +776,9 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
               ) : (
                 messages.map((message, index) => (
                   <div key={message.id}>
-                      <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[85%] rounded-2xl p-4 ${
-                            message.role === 'user'
+                        message.role === 'user' 
                           ? 'bg-primary text-white rounded-tr-none' 
                           : 'bg-slate-800/80 text-gray-200 border border-white/10 rounded-tl-none'
                       }`}>
@@ -615,7 +802,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                     
                     {/* Thinking section under user message */}
                     {message.role === 'user' && (
-                      (index === messages.length - 2 && (isLoading || (messageTraces[messages[messages.length - 1]?.id]?.length || 0) > 0)) ||
+                      (index === messages.length - 1 && (isLoading || thoughtTrace.length > 0)) ||
                       messageTraces[messages[index + 1]?.id]?.length > 0
                     ) && (
                       <motion.div
@@ -632,7 +819,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                           ) : (
                             <ChevronRight className="w-3 h-3" />
                           )}
-                          {isLoading && index === messages.length - 2 ? (
+                          {isLoading && index === messages.length - 1 ? (
                             <span className="flex items-center gap-2">
                               <Loader2 className="w-3 h-3 animate-spin text-primary" />
                               <span className="text-primary font-medium">{currentStatus}</span>
@@ -640,7 +827,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                           ) : (
                             <span className="flex items-center gap-2">
                               <CheckCircle2 className="w-3 h-3 text-green-400" />
-                              <span>Completed {(messageTraces[messages[index + 1]?.id] || []).length} steps</span>
+                              <span>Completed {(messageTraces[messages[index + 1]?.id] || thoughtTrace).length} steps</span>
                             </span>
                           )}
                         </button>
@@ -653,10 +840,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                               exit={{ opacity: 0, height: 0 }}
                               className="mt-2 ml-4 space-y-2 border-l-2 border-slate-600 pl-3"
                             >
-                              {(index === messages.length - 2 
-                                ? (messageTraces[messages[messages.length - 1]?.id] || [])
-                                : (messageTraces[messages[index + 1]?.id] || [])
-                              ).map((trace, idx) => (
+                              {(index === messages.length - 1 ? thoughtTrace : messageTraces[messages[index + 1]?.id] || []).map((trace, idx) => (
                                 <div key={idx} className="text-xs">
                                   {trace.event === 'reasoning' && (
                                     <div className="flex items-start gap-2 text-gray-400">
@@ -683,7 +867,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                         </AnimatePresence>
                       </motion.div>
                     )}
-                </div>
+                  </div>
                 ))
               )}
               <div ref={messagesEndRef} />
@@ -691,13 +875,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
 
             {/* Input Area */}
             <div className="p-4 bg-slate-900/50 border-t border-white/10">
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  sendMessage(input)
-                }}
-                className="relative"
-              >
+              <form onSubmit={handleSubmit} className="relative">
                 <input
                   type="text"
                   value={input}
@@ -713,20 +891,19 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                 >
                   {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>
-            </form>
+              </form>
+            </div>
           </div>
-                  </div>
 
           {/* Recommendations Sidebar */}
           <div className="w-80 flex-shrink-0 glass rounded-xl overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {/* Suggested Gear */}
-                            <div>
+            <div>
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Backpack className="w-3.5 h-3.5 text-primary" />
                   Recommended Gear
-                              </h4>
-                {searchingGear && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                </h4>
               </div>
               
               {suggestedProducts.length > 0 ? (
@@ -734,15 +911,15 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                   {suggestedProducts.map(product => (
                     <div key={product.id} className="bg-slate-800/50 border border-white/10 rounded-lg p-2.5 flex gap-2.5 hover:border-primary/30 transition-all group">
                       <div className="w-14 h-14 bg-white/5 rounded-lg overflow-hidden flex-shrink-0">
-                                    {product.image_url ? (
+                        {product.image_url ? (
                           <img src={product.image_url} alt={product.title} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <Mountain className="w-5 h-5 text-gray-700" />
-                                      </div>
-                                    )}
+                          </div>
+                        )}
                       </div>
-                                    <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0">
                         <h5 className="text-xs font-bold text-white truncate mb-0.5">{product.title}</h5>
                         <div className="text-xs text-primary font-bold">${product.price}</div>
                         {product.reason && (
@@ -750,9 +927,9 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                             {product.reason}
                           </div>
                         )}
-                                    </div>
-                                    <button
-                                      onClick={() => handleAddToCart(product)}
+                      </div>
+                      <button
+                        onClick={() => handleAddToCart(product)}
                         disabled={addingToCart === product.id || justAddedToCart === product.id}
                         className={`p-1.5 rounded-lg transition-all duration-300 ${
                           justAddedToCart === product.id 
@@ -768,35 +945,35 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                         ) : (
                           <Plus className="w-3.5 h-3.5" />
                         )}
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="bg-slate-800/30 border border-dashed border-white/10 rounded-lg p-6 text-center">
                   <Tent className="w-6 h-6 text-gray-700 mx-auto mb-2" />
                   <p className="text-[10px] text-gray-500">I'll suggest relevant gear as we plan your adventure.</p>
-                            </div>
-                          )}
+                </div>
+              )}
             </div>
                           
             {/* Other Items Checklist */}
-                          {otherRecommendedItems.length > 0 && (
+            {otherRecommendedItems.length > 0 && (
               <div className="pt-3 border-t border-white/10">
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-3">
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
                   Essential Checklist
-                                </h4>
+                </h4>
                 <div className="space-y-1.5">
-                                        {otherRecommendedItems.map((item, idx) => (
+                  {otherRecommendedItems.map((item, idx) => (
                     <div key={idx} className="flex items-start gap-2 p-1.5 rounded-lg hover:bg-white/5 transition-colors">
                       <input type="checkbox" className="mt-0.5 rounded border-white/10 bg-slate-950 text-primary focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5" />
                       <span className="text-[11px] text-gray-300 leading-tight">{item}</span>
-                                    </div>
+                    </div>
                   ))}
-                              </div>
-                          </div>
-                      )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
