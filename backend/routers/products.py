@@ -220,9 +220,6 @@ async def lexical_search(
             size=limit
         )
         
-        # #region agent log
-        # #endregion
-        
         user_prefs = None
         if user_id:
             user_prefs = get_user_preferences(user_id, es)
@@ -373,9 +370,6 @@ async def hybrid_search(
             },
             size=limit
         )
-        
-        # #region agent log
-        # #endregion
         
         products = []
         raw_hits = []

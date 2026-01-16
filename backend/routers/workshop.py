@@ -79,7 +79,8 @@ async def check_agent_exists(agent_id: str) -> bool:
             
             if response.status_code == 200:
                 data = response.json()
-                agents = data.get("data", [])
+                # Check both 'data' and 'results' keys for compatibility
+                agents = data.get("data", []) or data.get("results", [])
                 for agent in agents:
                     if agent.get("name") == agent_id or agent.get("id") == agent_id:
                         return True

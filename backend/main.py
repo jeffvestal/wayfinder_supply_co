@@ -70,50 +70,11 @@ app.include_router(workshop.router, prefix="/api", tags=["workshop"])
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_HTML = STATIC_DIR / "index.html"
 
-# #region agent log
-try:
-    with open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log', 'a') as f:
-        import json, time
-        f.write(json.dumps({
-            "sessionId": "debug-session",
-            "timestamp": int(time.time() * 1000),
-            "location": "backend/main.py:75",
-            "message": "Checking static files",
-            "data": {
-                "STATIC_DIR": str(STATIC_DIR),
-                "STATIC_DIR_exists": STATIC_DIR.exists(),
-                "INDEX_HTML": str(INDEX_HTML),
-                "INDEX_HTML_exists": INDEX_HTML.exists(),
-                "cwd": os.getcwd()
-            }
-        }) + "\n")
-except:
-    pass
-# #endregion
-
 logger.info(f"Checking for static files in: {STATIC_DIR}")
 logger.info(f"index.html exists: {INDEX_HTML.exists()}")
 
 @app.get("/")
 async def root():
-    # #region agent log
-    try:
-        with open('/Users/jeffvestal/repos/wayfinder_supply_co/.cursor/debug.log', 'a') as f:
-            import json, time
-            f.write(json.dumps({
-                "sessionId": "debug-session",
-                "timestamp": int(time.time() * 1000),
-                "location": "backend/main.py:100",
-                "message": "Root route hit",
-                "data": {
-                    "INDEX_HTML_exists": INDEX_HTML.exists(),
-                    "STATIC_DIR_exists": STATIC_DIR.exists()
-                }
-            }) + "\n")
-    except:
-        pass
-    # #endregion
-
     # Prefer serving the built frontend when present (workshop/unified serving).
     if INDEX_HTML.exists():
         logger.info(f"Serving UI index.html from {INDEX_HTML}")

@@ -495,6 +495,16 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
           
           // Use fallback regex extraction as backup
           extractProductsFromResponseFallback(messageContent)
+        } else if (event.type === 'error') {
+          // Handle errors from the backend (e.g., expired API keys)
+          const errorMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: `❌ Error: ${data.error || 'An error occurred'}`,
+            timestamp: new Date(),
+          }
+          setMessages((prev) => [...prev, errorMessage])
+          setIsLoading(false)
         }
       }, 'trip-planner-agent')
     } catch (error) {
@@ -659,12 +669,38 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
           animate={{ opacity: 1, y: 0 }}
           className="mb-4"
         >
-          <h1 className="text-3xl font-display font-bold text-white mb-1">
-            Trip Planner
-          </h1>
-          <p className="text-gray-400 text-sm">
-            Plan your perfect adventure with AI-powered recommendations
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-display font-bold text-white mb-1">
+                Trip Planner
+              </h1>
+              <p className="text-gray-400 text-sm">
+                Plan your perfect adventure with AI-powered recommendations
+              </p>
+            </div>
+            {messages.length > 0 && (
+              <button
+                onClick={() => {
+                  setMessages([])
+                  setThoughtTrace([])
+                  setMessageTraces({})
+                  setSuggestedProducts([])
+                  setOtherRecommendedItems([])
+                  setItinerary([])
+                  setInput('')
+                  setTripContext({
+                    destination: '',
+                    dates: '',
+                    activity: ''
+                  })
+                }}
+                className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all text-sm font-medium flex items-center gap-2 border border-primary/30"
+              >
+                <Plus className="w-4 h-4" />
+                New Trip
+              </button>
+            )}
+          </div>
         </motion.div>
 
         {/* Trip Context Inputs - Editable */}
@@ -760,16 +796,16 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                   </div>
                   <div className="grid grid-cols-1 gap-2 w-full">
                     <button
-                      onClick={() => setInput("Plan a 3-day backpacking trip in the Enchantments, Washington for this July")}
+                      onClick={() => setInput("Plan a 3-day backpacking trip to Yosemite next weekend")}
                       className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
                     >
-                      "Plan a 3-day backpacking trip in the Enchantments, Washington..."
+                      "Plan a 3-day backpacking trip to Yosemite next weekend"
                     </button>
                     <button
-                      onClick={() => setInput("I want to go car camping in Zion National Park next week with my family")}
+                      onClick={() => setInput("I want to go car camping in Banff with my family")}
                       className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-sm text-gray-300"
                     >
-                      "I want to go car camping in Zion National Park..."
+                      "I want to go car camping in Banff with my family"
                     </button>
                   </div>
                 </div>

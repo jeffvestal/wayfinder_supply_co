@@ -174,6 +174,16 @@ async def stream_agent_response(message: str, agent_id: str = "wayfinder-search-
                                 # Agent Builder wraps data in {"data": {...}}
                                 data = raw_data.get("data", raw_data)
                                 
+                                # Handle errors from Kibana (e.g., expired API keys, rate limits)
+                                if "error" in raw_data:
+                                    error_info = raw_data["error"]
+                                    error_message = error_info.get("message", "Unknown error") if isinstance(error_info, dict) else str(error_info)
+                                    yield format_sse_event("error", {
+                                        "error": error_message,
+                                        "code": error_info.get("code") if isinstance(error_info, dict) else None
+                                    })
+                                    continue
+                                
                                 # Handle conversation_id
                                 if "conversation_id" in data:
                                     conversation_id = data["conversation_id"]
