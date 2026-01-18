@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown'
 import { ExtendedChatMessage, AgentStep } from './types'
 import { StepRenderer } from './StepRenderer'
 import { getToolStatusMessage } from '../../lib/constants'
+import { ProductCard } from '../ProductCard'
+import { Product, UserId } from '../../types'
 
 interface ChatModeProps {
   messages: ExtendedChatMessage[]
@@ -13,6 +15,8 @@ interface ChatModeProps {
   onToggleStepsExpanded: (messageId: string) => void
   onToggleStep: (stepId: string) => void
   messagesEndRef: React.RefObject<HTMLDivElement>
+  userId: UserId
+  onProductClick: (product: Product) => void
 }
 
 // Get current thinking status from trace events
@@ -29,6 +33,32 @@ function getCurrentStatus(steps: AgentStep[], isLoading: boolean): string {
   return 'Working...'
 }
 
+// Extract intro text before product list (when products are displayed as cards)
+function extractIntroText(content: string): string {
+  if (!content) return content
+  
+  // Split by lines
+  const lines = content.split('\n')
+  const introLines: string[] = []
+  
+  for (const line of lines) {
+    const trimmed = line.trim()
+    
+    // Stop if we hit a product list pattern
+    if (
+      /^\d+\.\s+\*?\*?/.test(trimmed) ||  // Numbered list: "1. **Product"
+      /^[-•*]\s+\*?\*?/.test(trimmed) ||   // Bullet list: "- **Product"
+      /\$\d+\.?\d*/.test(trimmed)          // Price: "$123.45"
+    ) {
+      break
+    }
+    
+    introLines.push(line)
+  }
+  
+  return introLines.join('\n').trim()
+}
+
 export function ChatMode({
   messages,
   isLoading: _isLoading,
@@ -36,7 +66,9 @@ export function ChatMode({
   expandedSteps,
   onToggleStepsExpanded,
   onToggleStep,
-  messagesEndRef
+  messagesEndRef,
+  userId,
+  onProductClick
 }: ChatModeProps) {
   // Empty state
   if (messages.length === 0) {
@@ -126,7 +158,12 @@ export function ChatMode({
               {/* Message content */}
             {message.role === 'assistant' ? (
               <div className="prose prose-invert prose-sm max-w-none">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
+                <ReactMarkdown>
+                  {message.products && message.products.length > 0 
+                    ? extractIntroText(message.content)
+                    : message.content
+                  }
+                </ReactMarkdown>
               </div>
             ) : (
               <p className="text-sm">{message.content}</p>
@@ -136,6 +173,23 @@ export function ChatMode({
               {message.timestamp.toLocaleTimeString()}
             </p>
           </div>
+          
+          {/* Product Cards - display below assistant messages */}
+          {message.role === 'assistant' && message.products && message.products.length > 0 && (
+            <div className="mt-3 ml-4 space-y-2 w-full max-w-[85%]">
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Recommended Gear</p>
+              <div className="grid grid-cols-1 gap-2">
+                {message.products.map((product) => (
+                  <ProductCard 
+                    key={product.id} 
+                    product={product} 
+                    userId={userId}
+                    onClick={() => onProductClick(product)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
       ))}

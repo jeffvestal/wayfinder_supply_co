@@ -169,7 +169,7 @@ if [ $FAILURES -eq 0 ]; then
         echo ""
         echo -e "${BOLD}Next steps:${NC}"
         echo -e "  1. Start the services: ${YELLOW}docker-compose up -d${NC}"
-        echo -e "  2. Open ${CYAN}http://localhost:3000${NC} in your browser"
+        echo -e "  2. Open ${CYAN}http://localhost:8000${NC} in your browser"
         echo -e "  3. Try the Trip Planner to test the agents"
     fi
 else

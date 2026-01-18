@@ -1,4 +1,4 @@
-import { ChatMessage, UserId } from '../../types'
+import { ChatMessage, UserId, Product } from '../../types'
 
 // Agent step for thought trace display
 export interface AgentStep {
@@ -14,6 +14,7 @@ export interface AgentStep {
 export interface ExtendedChatMessage extends ChatMessage {
   steps?: AgentStep[];
   status?: 'thinking' | 'working' | 'typing' | 'complete';
+  products?: Product[];
 }
 
 // Search mode type

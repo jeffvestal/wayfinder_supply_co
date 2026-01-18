@@ -36,72 +36,66 @@ This workshop showcases how to build an intelligent, conversational shopping exp
 - **Location Intelligence**: Covers 30 global adventure destinations with seasonal activity and weather data
 - **Real-time Synthesis**: Creates personalized itineraries with gear checklists based on conditions
 
-## Quick Start
+## Getting Started
 
-### Prerequisites
+### Path A: Standalone Local Run (Outside Instruqt)
 
-- Python 3.11+
-- Node.js 18+
-- Docker & Docker Compose (for local dev)
-- Google Cloud account (for product image generation)
+Minimal setup guide to run the complete demo from scratch using Docker and your own Elasticsearch cluster.
 
-### Local Development
-
-1. **Clone and setup environment**:
-   ```bash
-   git clone https://github.com/jeffvestal/wayfinder_supply_co.git
-   cd wayfinder_supply_co
-   cp .env.example .env
-   # Edit .env with your credentials
-   ```
-
-2. **Generate product data** (requires Google Cloud credentials):
-   ```bash
-   pip install -r requirements.txt
-   python scripts/generate_products.py --mode full
-   ```
-
-3. **Start all services**:
-   ```bash
-   docker-compose up --build
-   ```
-
-4. **Access the application**:
-   - Unified Frontend & Backend API: http://localhost:8000
-   - MCP Server: http://localhost:8001
-
-### Instruqt Environment
-
-The workshop runs on Instruqt with two VMs:
-
-| VM | Services | Purpose |
-|----|----------|---------|
-| `kubernetes-vm` | Elasticsearch, Kibana, Agent Builder | Elastic Stack |
-| `host-1` | Unified UI/Backend (Port 8000), MCP Server (Port 8002) | Application layer |
-
-Setup scripts in `instruqt/track_scripts/` handle all configuration.
-
-### Standalone Demo Setup
-
-Run the complete demo outside of Instruqt using Docker containers connected to your own Elasticsearch cluster.
-
-**Quick setup:**
+#### 1. Setup Environment
 ```bash
-# Configure Agent Builder (one-time setup)
-./scripts/standalone_setup.sh
+# Clone repo
+git clone https://github.com/jeffvestal/wayfinder_supply_co.git
+cd wayfinder_supply_co
 
-# Start all services
-docker-compose up -d
-
-# Verify setup
-python scripts/validate_setup.py --mode standalone
+# Create .env file from template
+cp .env.example .env
+# Edit .env and set your cluster credentials:
+# STANDALONE_ELASTICSEARCH_URL=https://your-cluster.es.cloud:443
+# STANDALONE_ELASTICSEARCH_APIKEY=your-api-key
+# STANDALONE_KIBANA_URL=https://your-cluster.kb.cloud:443
 ```
 
-**Access the application:**
-- Unified Frontend & Backend API: http://localhost:8000
-- MCP Server: http://localhost:8001
+#### 2. Load Data & Configure Elastic Stack
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
 
-For detailed setup instructions, see [Standalone Demo Setup](#standalone-demo-setup) below.
+# Option 1: If you have a snapshot restored (Standard)
+./scripts/standalone_setup.sh
+
+# Option 2: If starting from an empty cluster (Serverless/New)
+./scripts/standalone_setup.sh --load-data
+```
+*This script creates indices, loads products/clickstream, deploys workflows, and creates agents.*
+
+#### 3. Start Services
+```bash
+# Build and start all containers
+docker-compose up -d
+```
+
+#### 4. Verify & Access
+```bash
+# Check setup health
+python scripts/validate_setup.py --mode standalone
+
+# Access the UI
+open http://localhost:8000
+```
+
+---
+
+### Path B: Instruqt Workshop Environment
+
+The preferred way to experience the full workshop with guided challenges.
+
+- **Environment**: Two pre-configured VMs (`kubernetes-vm` for Elastic, `host-1` for App).
+- **Setup**: All configurations are handled automatically by `instruqt/track_scripts/`.
+- **Guide**: Follow the [Workshop Guide](docs/WORKSHOP_GUIDE.md) for step-by-step instructions.
+- **Access**: UI is available on port 8000 of the workshop host.
+
+---
 
 ## Architecture
 
@@ -204,116 +198,7 @@ Full catalog covers 10 categories with ~150 products:
 
 Run the complete demo outside of Instruqt using Docker containers connected to your own Elasticsearch cluster.
 
-### Prerequisites
-
-1. **Elasticsearch Cluster**
-   - **Standard clusters**: Cluster with snapshot restored (contains `product-catalog` and `user-clickstream` indices)
-   - **Serverless clusters**: Empty cluster (use `--load-data` flag to load data directly)
-   - API key with permissions for:
-     - Reading from indices
-     - Creating/updating indices (if using `--load-data`)
-     - Creating/updating workflows
-     - Creating/updating agents and tools
-   - LLM connector configured in Agent Builder (Azure OpenAI GPT-4.1 or compatible)
-
-2. **GCP Bucket Setup** (for product images)
-   
-   If you're using generated product images, set up a GCS bucket:
-   
-   ```bash
-   # Create bucket with uniform bucket-level access
-   gsutil mb -p YOUR_PROJECT_ID gs://wayfinder_supply_co
-   gsutil uniformbucketlevelaccess set on gs://wayfinder_supply_co
-   
-   # Create service account
-   gcloud iam service-accounts create wayfinder-supply-co-bucket \
-     --display-name="Wayfinder Supply Co Bucket Access"
-   
-   # Grant Storage Object Admin role (with bucket restriction)
-   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-     --member="serviceAccount:wayfinder-supply-co-bucket@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-     --role="roles/storage.objectAdmin" \
-     --condition="expression=resource.name.startsWith('projects/_/buckets/wayfinder_supply_co'),title=wayfinder_supply_co bucket only"
-   
-   # Create and download key
-   gcloud iam service-accounts keys create ~/wayfinder_supply_co_bucket_key.json \
-     --iam-account=wayfinder-supply-co-bucket@YOUR_PROJECT_ID.iam.gserviceaccount.com
-   
-   # Make bucket publicly readable
-   gsutil iam ch allUsers:objectViewer gs://wayfinder_supply_co
-   ```
-
-3. **Environment Configuration**
-   
-   Create a `.env` file with your credentials:
-   
-   ```bash
-   # Snapshot Cluster (for data loading - optional if already done)
-   SNAPSHOT_ELASTICSEARCH_URL=https://source-cluster.es.cloud:443
-   SNAPSHOT_ELASTICSEARCH_APIKEY=your-snapshot-api-key
-   
-   # Standalone Demo Cluster
-   STANDALONE_ELASTICSEARCH_URL=https://demo-cluster.es.cloud:443
-   STANDALONE_ELASTICSEARCH_APIKEY=your-demo-api-key
-   STANDALONE_KIBANA_URL=https://demo-cluster.kb.cloud:443
-   
-   # GCS Configuration (if using images)
-   GCS_BUCKET_NAME=wayfinder_supply_co
-   GCS_SERVICE_ACCOUNT_KEY=~/wayfinder_supply_co_bucket_key.json
-   ```
-
-#### Running the Demo
-
-1. **Configure Agent Builder** (one-time setup):
-   
-   **For clusters with snapshot restored** (standard deployment):
-   ```bash
-   # Make sure STANDALONE_* env vars are set (from .env or exported)
-   ./scripts/standalone_setup.sh
-   ```
-   
-   **For serverless clusters** (cannot restore snapshots):
-   ```bash
-   # Make sure STANDALONE_* env vars are set and products.json exists
-   ./scripts/standalone_setup.sh --load-data
-   ```
-   
-   The `--load-data` flag will:
-   - Create indices and mappings
-   - Load product data from `generated_products/products.json`
-   - Load clickstream data
-   - Then deploy workflows and create agents/tools
-   
-   **To update data only** (without reconfiguring workflows/agents):
-   ```bash
-   ./scripts/standalone_setup.sh --data-only
-   ```
-   
-   **Note:** Ensure `generated_products/products.json` exists before using `--load-data` or `--data-only`.
-
-2. **Start all services**:
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Verify setup**:
-   ```bash
-   python scripts/validate_setup.py --mode standalone
-   ```
-
-4. **Access the application**:
-   - Unified Frontend & Backend API: http://localhost:8000
-   - MCP Server: http://localhost:8001
-
-#### Understanding Credential Prefixes
-
-- **SNAPSHOT_*** - Used by data loading scripts (`setup_elastic.py`, `seed_products.py`, `seed_clickstream.py`). Connect to your source cluster where you load data and create snapshots.
-- **STANDALONE_*** - Used by runtime services (`deploy_workflows.py`, `create_agents.py`, backend services). Connect to your demo cluster where the snapshot is restored.
-
-These may be the same cluster, but separating them allows you to:
-- Load data on a development cluster
-- Run demos on a production-ready cluster
-- Test snapshot restore workflows
+> **Note:** For a quick command reference, see [Quick Start - Run from Scratch](#quick-start---run-from-scratch-outside-instruqt).
 
 ## Project Structure
 
@@ -1007,6 +892,13 @@ brands:
 | "Service account key not found" | Check `GCS_SERVICE_ACCOUNT_KEY` path |
 | "No products found in index" | Run `seed_products.py` before `seed_clickstream.py` |
 | Image generation fails | Verify Vertex AI Imagen API is enabled in GCP |
+
+### Understanding Credential Prefixes
+
+- **SNAPSHOT_*** — Used by data loading scripts (`setup_elastic.py`, `seed_products.py`, `seed_clickstream.py`). Connect to your source cluster where you load data and create snapshots.
+- **STANDALONE_*** — Used by runtime services (`deploy_workflows.py`, `create_agents.py`, backend services). Connect to your demo cluster where the snapshot is restored.
+
+Separating these allows you to load data on a dev cluster and run demos on a production cluster.
 
 </details>
 

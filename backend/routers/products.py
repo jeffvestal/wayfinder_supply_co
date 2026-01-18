@@ -175,13 +175,13 @@ async def lexical_search(
     es = get_elastic_client()
     
     try:
-        # Base lexical query
+        # Base lexical query - search across multiple fields
         base_query = {
-            "match": {
-                "title": {
-                    "query": q,
-                    "fuzziness": "AUTO"
-                }
+            "multi_match": {
+                "query": q,
+                "fields": ["title^3", "description^2", "tags", "category", "brand"],
+                "fuzziness": "AUTO",
+                "type": "best_fields"
             }
         }
         

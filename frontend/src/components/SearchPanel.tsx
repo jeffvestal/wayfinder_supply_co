@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Product, UserId } from '../types'
 import { api, StreamEvent } from '../lib/api'
-import { X, Search, Send, Loader2, MessageSquare, Zap, BookOpen, Target } from 'lucide-react'
+import { X, Search, Send, Loader2, MessageSquare, Zap, BookOpen, Target, Plus } from 'lucide-react'
 import { ProductDetailModal } from './ProductDetailModal'
 import { ChatMode } from './search/ChatMode'
 import { SearchMode } from './search/SearchMode'
@@ -66,6 +66,7 @@ export function SearchPanel({
   const [isDragging, setIsDragging] = useState(false)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [lastQuery, setLastQuery] = useState('')
   
   // Search state
   const [searchResults, setSearchResults] = useState<Product[]>([])
@@ -291,6 +292,8 @@ export function SearchPanel({
   const sendMessage = async (messageText: string) => {
     if (!messageText.trim() || isLoading) return
 
+    setLastQuery(messageText.trim())
+    
     const userMessage: ExtendedChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -380,6 +383,19 @@ export function SearchPanel({
                 ? { ...msg, content: currentContent, steps: currentSteps, status: 'complete' }
                 : msg
             ))
+            // Extract and fetch products from tool results
+            const productIds = extractProductIdsFromSteps(currentSteps)
+            if (productIds.length > 0) {
+              fetchProductsFromIds(productIds).then(products => {
+                if (products.length > 0) {
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === assistantMessageId 
+                      ? { ...msg, products }
+                      : msg
+                  ))
+                }
+              })
+            }
             break
 
           case 'error':
@@ -414,22 +430,25 @@ export function SearchPanel({
     }
   }
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = async (query: string, targetMode?: 'hybrid' | 'lexical') => {
     if (!query.trim() || isLoading) return
 
+    const searchMode = targetMode || mode
+    
+    setLastQuery(query.trim())
     setIsLoading(true)
     setInput('')
     const personalizedUserId = personalizationEnabled ? userId : undefined
 
     // Show narration banner
     if (narrationMode) {
-      const narrationKey = mode === 'hybrid' ? 'hybrid_search' : 'lexical_search'
+      const narrationKey = searchMode === 'hybrid' ? 'hybrid_search' : 'lexical_search'
       setCurrentNarration(narrationKey)
       setTimeout(() => setCurrentNarration(null), 3000)
     }
 
     try {
-      const results = mode === 'hybrid' 
+      const results = searchMode === 'hybrid' 
         ? await api.hybridSearch(query, 10, personalizedUserId)
         : await api.lexicalSearch(query, 10, personalizedUserId)
       setSearchResults(results.products)
@@ -655,6 +674,22 @@ export function SearchPanel({
               <div className="flex items-center justify-between p-4 border-b border-slate-700">
                 <h2 className="text-xl font-display font-bold text-white">Search & Chat</h2>
                 <div className="flex items-center gap-2">
+                  {/* New Session Button - shows when there's content */}
+                  {(messages.length > 0 || searchResults.length > 0) && !isDemoRunning && (
+                    <button
+                      onClick={() => {
+                        setMessages([])
+                        setSearchResults([])
+                        setInput('')
+                        setLastQuery('')
+                        setIsLoading(false)
+                      }}
+                      className="px-3 py-1.5 text-sm bg-pink-600/20 hover:bg-pink-600/30 text-pink-400 border border-pink-600/30 rounded-lg transition-all flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span className="hidden sm:inline">New Session</span>
+                    </button>
+                  )}
                   {/* Personalization Toggle */}
                   <button
                     onClick={() => setPersonalizationEnabled(!personalizationEnabled)}
@@ -695,7 +730,14 @@ export function SearchPanel({
                 <div className="p-4 border-b border-slate-700 space-y-2">
                   <div className="flex bg-slate-800 rounded-full p-1">
                     <button
-                      onClick={() => { setMode('chat'); setSearchResults([]) }}
+                      onClick={() => { 
+                        const prevMode = mode
+                        setMode('chat')
+                        setSearchResults([])
+                        if (lastQuery && prevMode !== 'chat') {
+                          setTimeout(() => sendMessage(lastQuery), 100)
+                        }
+                      }}
                       className={`flex-1 py-2 px-4 rounded-full text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                         mode === 'chat' ? 'bg-primary text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-slate-700'
                       }`}
@@ -703,7 +745,14 @@ export function SearchPanel({
                       <MessageSquare className="w-4 h-4" /> Chat
                     </button>
                     <button
-                      onClick={() => { setMode('hybrid'); setMessages([]) }}
+                      onClick={() => { 
+                        const prevMode = mode
+                        setMode('hybrid')
+                        setMessages([])
+                        if (lastQuery && prevMode !== 'hybrid') {
+                          setTimeout(() => handleSearch(lastQuery, 'hybrid'), 100)
+                        }
+                      }}
                       className={`flex-1 py-2 px-4 rounded-full text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                         mode === 'hybrid' ? 'bg-cyan-600 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-slate-700'
                       }`}
@@ -711,7 +760,14 @@ export function SearchPanel({
                       <Search className="w-4 h-4" /> Hybrid
                     </button>
                     <button
-                      onClick={() => { setMode('lexical'); setMessages([]) }}
+                      onClick={() => { 
+                        const prevMode = mode
+                        setMode('lexical')
+                        setMessages([])
+                        if (lastQuery && prevMode !== 'lexical') {
+                          setTimeout(() => handleSearch(lastQuery, 'lexical'), 100)
+                        }
+                      }}
                       className={`flex-1 py-2 px-4 rounded-full text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                         mode === 'lexical' ? 'bg-amber-600 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-slate-700'
                       }`}
@@ -774,6 +830,8 @@ export function SearchPanel({
                         onToggleStepsExpanded={toggleStepsExpanded}
                         onToggleStep={toggleStep}
                         messagesEndRef={messagesEndRef}
+                        userId={userId}
+                        onProductClick={handleProductClick}
                       />
                     )}
 
