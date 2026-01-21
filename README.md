@@ -194,12 +194,6 @@ Full catalog covers 10 categories with ~150 products:
 - **Clickstream Tracking** — Real-time behavior tracking for guest users
 - **Personalized Recommendations** — AI uses browsing history to tailor suggestions
 
-## Standalone Demo Setup
-
-Run the complete demo outside of Instruqt using Docker containers connected to your own Elasticsearch cluster.
-
-> **Note:** For a quick command reference, see [Quick Start - Run from Scratch](#quick-start---run-from-scratch-outside-instruqt).
-
 ## Project Structure
 
 ```
