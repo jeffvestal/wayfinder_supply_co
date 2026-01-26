@@ -59,16 +59,17 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     workflow_name = workflow_data.get("name", workflow_path.stem)
     
     url = f"{KIBANA_URL}/api/workflows"
+    search_url = f"{url}/search"
     
     # Delete existing workflow first (script is source of truth)
-    list_response = requests.get(url, headers=HEADERS)
+    list_response = requests.post(search_url, headers=HEADERS, json={"limit": 100, "page": 1, "query": ""})
     if list_response.status_code == 200:
-        workflows = list_response.json().get("data", [])
+        data = list_response.json()
+        workflows = data.get("results", []) or data.get("data", [])
         for wf in workflows:
             if wf.get("name") == workflow_name:
                 existing_id = wf.get("id")
                 delete_workflow(existing_id, workflow_name)
-                break
     
     # Create new workflow - API expects {"yaml": "<yaml_string>"}
     response = requests.post(url, headers=HEADERS, json={"yaml": yaml_content})

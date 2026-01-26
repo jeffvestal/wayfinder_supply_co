@@ -17,7 +17,7 @@ steps:
     type: ai.agent
     with:
       agent_id: response-parser-agent
-      input: "{{ inputs.trip_plan_text }}"
+      message: "{{ inputs.trip_plan_text }}"
     on-failure:
       retry:
         max-attempts: 2

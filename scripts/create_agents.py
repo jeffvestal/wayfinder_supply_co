@@ -522,17 +522,16 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
         return None
 
 
-def get_workflow_id_by_name(workflow_name: str) -> Optional[str]:
-    """Get workflow ID by name from list of workflows."""
-    url = f"{KIBANA_URL}/api/workflows"
-    list_response = request_with_retry("GET", url, headers=HEADERS)
+def delete_existing_workflows_by_name(workflow_name: str):
+    """Delete all workflows with the given name."""
+    url = f"{KIBANA_URL}/api/workflows/search"
+    list_response = request_with_retry("POST", url, headers=HEADERS, json={"limit": 100, "page": 1, "query": ""})
     if list_response.status_code == 200:
-        workflows = list_response.json().get("data", [])
+        data = list_response.json()
+        workflows = data.get("results", []) or data.get("data", [])
         for wf in workflows:
             if wf.get("name") == workflow_name:
-                return wf.get("id")
-    return None
-
+                delete_workflow(wf.get("id"))
 
 def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     """Deploy a workflow from YAML file. Deletes existing workflow first."""
@@ -547,10 +546,8 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     workflow_data = yaml.safe_load(yaml_content)
     workflow_name = workflow_data.get("name", "unknown")
     
-    # Delete existing workflow first (script is source of truth)
-    existing_id = get_workflow_id_by_name(workflow_name)
-    if existing_id:
-        delete_workflow(existing_id)
+    # Delete existing workflow(s) first (script is source of truth)
+    delete_existing_workflows_by_name(workflow_name)
     
     url = f"{KIBANA_URL}/api/workflows"
     
@@ -627,13 +624,25 @@ def main() -> int:
         print(f"Searched: {possible_paths}")
         return
     
-    # Step 1: Deploy workflows first (get workflow IDs)
-    print("\n1. Deploying Workflows...")
+    # Step 1: Create agents first (so workflows can reference them)
+    print("\n1. Creating Agents...")
+    context_extractor_id = create_context_extractor_agent()
+    time.sleep(1)
+    
+    response_parser_id = create_response_parser_agent()
+    time.sleep(1)
+    
+    itinerary_extractor_id = create_itinerary_extractor_agent()
+    time.sleep(1)
+    
+    # Step 2: Deploy workflows (now that agents exist)
+    print("\n2. Deploying Workflows...")
     
     workflows = {
         "check_trip_safety": f"{workflow_dir}/check_trip_safety.yaml",
         "get_customer_profile": f"{workflow_dir}/get_customer_profile.yaml",
-        "get_user_affinity": f"{workflow_dir}/get_user_affinity.yaml"
+        "get_user_affinity": f"{workflow_dir}/get_user_affinity.yaml",
+        "extract_trip_entities": f"{workflow_dir}/extract_trip_entities.yaml"
     }
     
     workflow_ids = {}
@@ -649,8 +658,8 @@ def main() -> int:
         else:
             print(f"⚠ Workflow file not found: {path}")
     
-    # Step 2: Create tools (get tool IDs)
-    print("\n2. Creating Tools...")
+    # Step 3: Create tools (reference workflow IDs)
+    print("\n3. Creating Tools...")
     tool_ids = []
     
     # Create ES|QL tool - query with user_id parameter
@@ -673,7 +682,8 @@ def main() -> int:
     workflow_tool_ids = {}
     for name, workflow_id in workflow_ids.items():
         # Skip creating workflow tool for get_user_affinity - we use the ES|QL tool instead
-        if name == "get_user_affinity":
+        # Also skip extract_trip_entities - it's used internally/manually, not as an agent tool
+        if name in ["get_user_affinity", "extract_trip_entities"]:
             continue
         tool_name = f"tool-workflow-{name.replace('_', '-')}"
         if tool_name in args.skip_tools:
@@ -703,17 +713,8 @@ def main() -> int:
         tool_ids.append(index_tool_id)
     time.sleep(1)
     
-    # Step 3: Create agents (reference tool IDs)
-    print("\n3. Creating Agents...")
-    context_extractor_id = create_context_extractor_agent()
-    time.sleep(1)
-    
-    response_parser_id = create_response_parser_agent()
-    time.sleep(1)
-    
-    itinerary_extractor_id = create_itinerary_extractor_agent()
-    time.sleep(1)
-    
+    # Step 4: Create main agents (reference tool IDs)
+    print("\n4. Creating Main Agents...")
     # Create wayfinder-search-agent (always created, not skipped)
     wayfinder_search_id = create_wayfinder_search_agent(tool_ids=tool_ids)
     time.sleep(1)
