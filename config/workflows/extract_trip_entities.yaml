@@ -14,7 +14,7 @@ triggers:
 
 steps:
   - name: extract_entities
-    type: kibana.post_agent_builder_converse
+    type: ai.agent
     with:
       agent_id: response-parser-agent
       input: "{{ inputs.trip_plan_text }}"
