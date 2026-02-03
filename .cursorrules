@@ -1,0 +1,51 @@
+# Cursor Rules for Wayfinder Supply Co.
+
+## Project Context
+
+Before answering questions or making changes, read `AGENTS.md` in the project root. It contains essential context about the architecture, development patterns, and key files.
+
+## Quick Reference
+
+- **Project**: Elastic Agentic Search demo — AI-powered outdoor gear retailer with Trip Planning assistant
+- **Backend**: FastAPI (`backend/`) with SSE streaming to Kibana Agent Builder
+- **Frontend**: React + TypeScript + Tailwind (`frontend/`)
+- **MCP Server**: Simulated Weather/CRM APIs (`mcp_server/`)
+- **Workflows**: Elastic Workflows in `config/workflows/`
+- **Scripts**: Setup and data loading in `scripts/`
+
+## Environment Variables
+
+- `STANDALONE_*` — Runtime services (backend, create_agents.py, deploy_workflows.py)
+- `SNAPSHOT_*` — Data loading scripts (setup_elastic.py, seed_*.py)
+
+## Deployment Modes
+
+1. **Standalone**: Docker Compose for local development
+2. **Instruqt**: Workshop environment with automated setup
+
+## Critical Constraints
+
+- Never push breaking changes to `main` — this is a live demo/workshop platform
+- Changes must work in both Standalone and Instruqt modes
+- Test Agent Builder changes before committing
+- Workflows API uses POST `/api/workflows/search` to list (not GET)
+
+## Key Files
+
+| Area | Files |
+|------|-------|
+| Backend entry | `backend/main.py` |
+| Agent streaming | `backend/routers/chat.py` |
+| Product search | `backend/routers/products.py` |
+| Frontend app | `frontend/src/App.tsx` |
+| Trip planner UI | `frontend/src/components/TripPlanner.tsx` |
+| API client | `frontend/src/lib/api.ts` |
+| Agent setup | `scripts/create_agents.py` |
+| Workflow deploy | `scripts/deploy_workflows.py` |
+
+## Documentation
+
+- Full onboarding guide: `AGENTS.md`
+- Architecture details: `docs/ARCHITECTURE.md`
+- API reference: `docs/API_REFERENCE.md`
+- Workshop guide: `docs/WORKSHOP_GUIDE.md`
