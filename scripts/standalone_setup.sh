@@ -27,6 +27,7 @@ FAILURES=0
 # Parse arguments
 LOAD_DATA=false
 DATA_ONLY=false
+MCP_URL=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --load-data)
@@ -38,15 +39,29 @@ while [[ $# -gt 0 ]]; do
             DATA_ONLY=true
             shift
             ;;
+        --mcp-url)
+            MCP_URL="$2"
+            shift 2
+            ;;
+        --mcp-url=*)
+            MCP_URL="${1#*=}"
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Usage: $0 [--load-data] [--data-only]"
-            echo "  --load-data  Load data into cluster, then deploy workflows and agents"
-            echo "  --data-only  Load data only (skip workflows and agents)"
+            echo "Usage: $0 [--load-data] [--data-only] [--mcp-url URL]"
+            echo "  --load-data      Load data into cluster, then deploy workflows and agents"
+            echo "  --data-only      Load data only (skip workflows and agents)"
+            echo "  --mcp-url URL    MCP server URL for workflows (default: http://mcp-server:8001/mcp)"
             exit 1
             ;;
     esac
 done
+
+# Set default MCP URL for standalone Docker Compose
+if [ -z "$MCP_URL" ]; then
+    MCP_URL="http://mcp-server:8001/mcp"
+fi
 
 echo -e "${BOLD}${CYAN}=============================================="
 echo -e "  Wayfinder Supply Co. - Standalone Demo Setup"
@@ -115,9 +130,24 @@ if [ "$LOAD_DATA" = true ]; then
         fi
     fi
     
+    # Load reviews
+    echo ""
+    echo -e "${BLUE}3. Loading product reviews...${NC}"
+    if [ -f "generated_products/reviews.json" ]; then
+        if python scripts/seed_products.py --reviews generated_products/reviews.json; then
+            echo -e "${GREEN}   ✓ Reviews loaded${NC}"
+        else
+            echo -e "${RED}   ✗ Failed to load reviews${NC}"
+            FAILURES=$((FAILURES + 1))
+        fi
+    else
+        echo -e "${YELLOW}   ⚠ Reviews file not found (generated_products/reviews.json)${NC}"
+        echo -e "   Product reviews will not be available."
+    fi
+    
     # Load clickstream
     echo ""
-    echo -e "${BLUE}3. Loading clickstream data...${NC}"
+    echo -e "${BLUE}4. Loading clickstream data...${NC}"
     if python scripts/seed_clickstream.py; then
         echo -e "${GREEN}   ✓ Clickstream data loaded${NC}"
     else
@@ -134,8 +164,10 @@ if [ "$DATA_ONLY" = false ]; then
     echo -e "  Configuring Agent Builder"
     echo -e "==============================================${NC}"
     echo ""
+    echo -e "${BLUE}MCP Server URL:${NC} $MCP_URL"
+    echo ""
     echo -e "${BLUE}1. Deploying Workflows...${NC}"
-    if python scripts/deploy_workflows.py --workflows-dir config/workflows; then
+    if python scripts/deploy_workflows.py --workflows-dir config/workflows --mcp-url "$MCP_URL"; then
         echo -e "${GREEN}   ✓ Workflows deployed${NC}"
     else
         echo -e "${RED}   ✗ Failed to deploy workflows${NC}"
@@ -145,7 +177,7 @@ if [ "$DATA_ONLY" = false ]; then
     # Create agents and tools
     echo ""
     echo -e "${BLUE}2. Creating Agents and Tools...${NC}"
-    if python scripts/create_agents.py; then
+    if python scripts/create_agents.py --mcp-url "$MCP_URL"; then
         echo -e "${GREEN}   ✓ Agents and tools created${NC}"
     else
         echo -e "${RED}   ✗ Failed to create agents and tools${NC}"

@@ -42,8 +42,17 @@ def delete_workflow(workflow_id: str, workflow_name: str) -> bool:
     return False
 
 
-def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
-    """Deploy a workflow from YAML file and return its ID. Deletes existing workflow first."""
+# Default MCP URL used in Instruqt environment
+INSTRUQT_MCP_URL = "http://host-1:8002/mcp"
+
+
+def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> Optional[str]:
+    """Deploy a workflow from YAML file and return its ID. Deletes existing workflow first.
+    
+    Args:
+        workflow_yaml_path: Path to the workflow YAML file
+        mcp_url: Optional MCP server URL to substitute for the default Instruqt URL
+    """
     workflow_path = Path(workflow_yaml_path)
     
     if not workflow_path.exists():
@@ -53,6 +62,11 @@ def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
     # Read the raw YAML content as a string - API expects {"yaml": "..."}
     with open(workflow_path, 'r') as f:
         yaml_content = f.read()
+    
+    # Substitute MCP URL if provided (replace Instruqt default with standalone URL)
+    if mcp_url and INSTRUQT_MCP_URL in yaml_content:
+        yaml_content = yaml_content.replace(INSTRUQT_MCP_URL, mcp_url)
+        print(f"  → Using MCP URL: {mcp_url}")
     
     # Also parse it to get the name for logging
     workflow_data = yaml.safe_load(yaml_content)
@@ -100,6 +114,11 @@ def main() -> int:
         default=[],
         help="Workflow names to exclude from deployment (e.g., get_customer_profile)"
     )
+    parser.add_argument(
+        "--mcp-url",
+        default=None,
+        help="MCP server URL to use in workflows (default: keeps Instruqt URL http://host-1:8002/mcp)"
+    )
     args = parser.parse_args()
     
     workflows_dir = Path(args.workflows_dir)
@@ -117,6 +136,9 @@ def main() -> int:
         print(f"⚠ No workflow files found in {workflows_dir}")
         return 1
     
+    if args.mcp_url:
+        print(f"MCP URL override: {args.mcp_url}")
+    
     success_count = 0
     skipped_count = 0
     workflow_ids = {}
@@ -126,7 +148,7 @@ def main() -> int:
             print(f"⊘ Skipping {workflow_name} (excluded)")
             skipped_count += 1
             continue
-        workflow_id = deploy_workflow(str(workflow_file))
+        workflow_id = deploy_workflow(str(workflow_file), mcp_url=args.mcp_url)
         if workflow_id:
             success_count += 1
             workflow_ids[workflow_file.stem] = workflow_id

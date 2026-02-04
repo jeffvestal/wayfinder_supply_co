@@ -37,6 +37,9 @@ MAX_RETRIES = 5
 INITIAL_RETRY_DELAY = 3  # seconds
 RETRYABLE_STATUS_CODES = [502, 503, 504, 429]
 
+# Default MCP URL used in Instruqt environment
+INSTRUQT_MCP_URL = "http://host-1:8002/mcp"
+
 
 def request_with_retry(method: str, url: str, **kwargs) -> requests.Response:
     """Make an HTTP request with retry logic for transient failures."""
@@ -533,14 +536,24 @@ def delete_existing_workflows_by_name(workflow_name: str):
             if wf.get("name") == workflow_name:
                 delete_workflow(wf.get("id"))
 
-def deploy_workflow(workflow_yaml_path: str) -> Optional[str]:
-    """Deploy a workflow from YAML file. Deletes existing workflow first."""
+def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> Optional[str]:
+    """Deploy a workflow from YAML file. Deletes existing workflow first.
+    
+    Args:
+        workflow_yaml_path: Path to the workflow YAML file
+        mcp_url: Optional MCP server URL to substitute for the default Instruqt URL
+    """
     global FAILURES
     import yaml
     
     # Read the raw YAML content as a string - API expects {"yaml": "..."}
     with open(workflow_yaml_path, 'r') as f:
         yaml_content = f.read()
+    
+    # Substitute MCP URL if provided (replace Instruqt default with standalone URL)
+    if mcp_url and INSTRUQT_MCP_URL in yaml_content:
+        yaml_content = yaml_content.replace(INSTRUQT_MCP_URL, mcp_url)
+        print(f"  → Using MCP URL: {mcp_url}")
     
     # Also parse it to get the name for logging
     workflow_data = yaml.safe_load(yaml_content)
@@ -587,6 +600,11 @@ def main() -> int:
         nargs="*",
         default=[],
         help="Agent names to skip (e.g., trip-planner-agent)"
+    )
+    parser.add_argument(
+        "--mcp-url",
+        default=None,
+        help="MCP server URL to use in workflows (default: keeps Instruqt URL http://host-1:8002/mcp)"
     )
     args = parser.parse_args()
     
@@ -637,6 +655,8 @@ def main() -> int:
     
     # Step 2: Deploy workflows (now that agents exist)
     print("\n2. Deploying Workflows...")
+    if args.mcp_url:
+        print(f"MCP URL override: {args.mcp_url}")
     
     workflows = {
         "check_trip_safety": f"{workflow_dir}/check_trip_safety.yaml",
@@ -651,7 +671,7 @@ def main() -> int:
             print(f"⊘ Skipping workflow: {name}")
             continue
         if os.path.exists(path):
-            workflow_id = deploy_workflow(path)
+            workflow_id = deploy_workflow(path, mcp_url=args.mcp_url)
             if workflow_id:
                 workflow_ids[name] = workflow_id
             time.sleep(1)  # Rate limiting

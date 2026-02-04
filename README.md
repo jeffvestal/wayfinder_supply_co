@@ -40,9 +40,18 @@ This workshop showcases how to build an intelligent, conversational shopping exp
 
 ### Path A: Standalone Local Run (Outside Instruqt)
 
-Minimal setup guide to run the complete demo from scratch using Docker and your own Elasticsearch cluster.
+Complete guide to run the demo from scratch using Docker and your own Elasticsearch cluster.
 
-#### 1. Setup Environment
+#### Prerequisites
+
+Before starting, ensure you have:
+- **Docker & Docker Compose** installed
+- **Python 3.11+** installed
+- **An Elasticsearch 9.x cluster** with Agent Builder enabled (Elastic Cloud recommended)
+- **An API key** with permissions to create indices, agents, tools, and workflows
+
+#### Step 1: Clone and Configure Environment
+
 ```bash
 # Clone repo
 git clone https://github.com/jeffvestal/wayfinder_supply_co.git
@@ -50,39 +59,117 @@ cd wayfinder_supply_co
 
 # Create .env file from template
 cp .env.example .env
-# Edit .env and set your cluster credentials:
-# STANDALONE_ELASTICSEARCH_URL=https://your-cluster.es.cloud:443
-# STANDALONE_ELASTICSEARCH_APIKEY=your-api-key
-# STANDALONE_KIBANA_URL=https://your-cluster.kb.cloud:443
 ```
 
-#### 2. Load Data & Configure Elastic Stack
+Edit `.env` and set your Elasticsearch cluster credentials:
+
 ```bash
-# Install Python dependencies
+# Required for standalone demo
+STANDALONE_ELASTICSEARCH_URL=https://your-cluster.es.us-west-2.aws.elastic.cloud:443
+STANDALONE_ELASTICSEARCH_APIKEY=your-base64-encoded-api-key
+STANDALONE_KIBANA_URL=https://your-cluster.kb.us-west-2.aws.elastic.cloud:443
+
+# Required for data loading (can be same as STANDALONE_* or a different cluster)
+SNAPSHOT_ELASTICSEARCH_URL=https://your-cluster.es.us-west-2.aws.elastic.cloud:443
+SNAPSHOT_ELASTICSEARCH_APIKEY=your-base64-encoded-api-key
+```
+
+> **Note:** `STANDALONE_*` variables are used by the runtime services (backend, agents, workflows). `SNAPSHOT_*` variables are used by data loading scripts. They can point to the same cluster.
+
+#### Step 2: Install Python Dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# Option 1: If you have a snapshot restored (Standard)
-./scripts/standalone_setup.sh
+#### Step 3: Load Data & Configure Elastic Stack
 
-# Option 2: If starting from an empty cluster (Serverless/New)
+The setup script creates indices, loads products/reviews/clickstream, deploys workflows, and creates agents:
+
+```bash
+# For a new/empty cluster (most common)
 ./scripts/standalone_setup.sh --load-data
 ```
-*This script creates indices, loads products/clickstream, deploys workflows, and creates agents.*
 
-#### 3. Start Services
+**What this does:**
+1. Creates Elasticsearch indices (`product-catalog`, `product-reviews`, `user-clickstream`)
+2. Loads product catalog (~150 products)
+3. Loads product reviews
+4. Loads clickstream data (user behavior for personalization)
+5. Deploys workflows to Kibana (with MCP URLs configured for Docker)
+6. Creates agents and tools in Agent Builder
+
+**Alternative options:**
+
 ```bash
-# Build and start all containers
-docker-compose up -d
+# If you already have data (e.g., restored from snapshot)
+./scripts/standalone_setup.sh
+
+# Load data only (skip agent/workflow setup)
+./scripts/standalone_setup.sh --load-data --data-only
+
+# Use custom MCP server URL (if not using Docker Compose)
+./scripts/standalone_setup.sh --load-data --mcp-url http://localhost:8001/mcp
 ```
 
-#### 4. Verify & Access
+#### Step 4: Start Docker Services
+
 ```bash
-# Check setup health
+# Build and start all containers (backend, frontend, MCP server)
+docker-compose up -d
+
+# View logs (optional)
+docker-compose logs -f
+```
+
+**Services started:**
+| Service | Port | Description |
+|---------|------|-------------|
+| `wayfinder-backend` | 8000 | FastAPI backend + serves frontend |
+| `wayfinder-frontend` | 3000 | React dev server (optional, for development) |
+| `wayfinder-mcp-server` | 8001 | Simulated Weather/CRM APIs |
+
+#### Step 5: Verify & Access
+
+```bash
+# Check all components are working
 python scripts/validate_setup.py --mode standalone
 
 # Access the UI
 open http://localhost:8000
 ```
+
+**Expected output from validate_setup.py:**
+```
+✓ Elasticsearch connection OK
+✓ product-catalog index exists (150 docs)
+✓ product-reviews index exists
+✓ user-clickstream index exists
+✓ Agents configured
+✓ Workflows deployed
+✓ MCP server reachable
+```
+
+#### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Connection refused" to Elasticsearch | Verify `STANDALONE_ELASTICSEARCH_URL` is correct and accessible |
+| "401 Unauthorized" | Check `STANDALONE_ELASTICSEARCH_APIKEY` is valid |
+| Workflows fail with "connection refused" | Ensure MCP server is running: `docker-compose ps` |
+| Only 2 tools created (missing workflow tools) | Workflows may have failed - check script output for errors |
+| Product reviews empty | Ensure `generated_products/reviews.json` exists |
+| First search is slow | ELSER model warming up - subsequent searches will be faster |
+
+#### Quick Reference: Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `STANDALONE_ELASTICSEARCH_URL` | Yes | Elasticsearch endpoint for runtime |
+| `STANDALONE_ELASTICSEARCH_APIKEY` | Yes | API key for runtime services |
+| `STANDALONE_KIBANA_URL` | Yes | Kibana endpoint (for Agent Builder APIs) |
+| `SNAPSHOT_ELASTICSEARCH_URL` | Yes* | Elasticsearch for data loading (*same as STANDALONE if loading to runtime cluster) |
+| `SNAPSHOT_ELASTICSEARCH_APIKEY` | Yes* | API key for data loading |
 
 ---
 
@@ -491,13 +578,21 @@ Agent → Workflow Tool → check_trip_safety workflow → HTTP POST to MCP Serv
 ### MCP Server
 
 Both services run on the MCP Server (FastAPI):
-- **Port:** 8001 (local) or 8002 (Instruqt)
 - **Protocol:** JSON-RPC 2.0
 - **Endpoint:** `POST /mcp`
 
-**Start locally:**
+| Environment | URL | Notes |
+|-------------|-----|-------|
+| Docker Compose (standalone) | `http://mcp-server:8001/mcp` | Internal Docker network |
+| Local dev (no Docker) | `http://localhost:8001/mcp` | Direct access |
+| Instruqt workshop | `http://host-1:8002/mcp` | Workshop VMs |
+
+> **Important:** When running `standalone_setup.sh`, the workflows are automatically configured with the correct MCP URL for Docker Compose (`http://mcp-server:8001/mcp`). If running without Docker, use `--mcp-url http://localhost:8001/mcp`.
+
+**Start locally (without Docker):**
 ```bash
 cd mcp_server
+pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
