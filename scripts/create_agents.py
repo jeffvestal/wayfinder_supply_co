@@ -422,8 +422,28 @@ Rules:
     )
 
 
+def _swap_param_types(params: Dict, to_legacy: bool = True) -> Dict:
+    """Swap param types between newer API format and legacy ES field types.
+    
+    Newer clusters accept: string, integer, float, boolean, date
+    Older clusters accept: text, keyword, long, integer, double, float, boolean, date, object, nested
+    """
+    type_map = {"string": "keyword"} if to_legacy else {"keyword": "string"}
+    swapped = {}
+    for key, value in params.items():
+        new_value = dict(value)
+        if new_value.get("type") in type_map:
+            new_value["type"] = type_map[new_value["type"]]
+        swapped[key] = new_value
+    return swapped
+
+
 def create_esql_tool(name: str, query: str, description: str, params: Optional[Dict] = None) -> Optional[str]:
-    """Create an ES|QL tool and return its ID. Deletes existing tool first."""
+    """Create an ES|QL tool and return its ID. Deletes existing tool first.
+    
+    Handles API compatibility: tries newer param types (string) first,
+    falls back to legacy ES field types (keyword) for older clusters.
+    """
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
     
@@ -450,11 +470,23 @@ def create_esql_tool(name: str, query: str, description: str, params: Optional[D
         created_id = data.get("id") or data.get("tool_id") or tool_id
         print(f"✓ Created ES|QL tool: {name} (ID: {created_id})")
         return created_id
-    else:
-        print(f"✗ Failed to create ES|QL tool (ID: {tool_id}): {response.status_code}")
-        print(f"  Response: {response.text}")
-        FAILURES += 1
-        return None
+    elif response.status_code == 400 and params and "types that failed validation" in response.text:
+        # Fallback: try legacy ES field types (keyword instead of string) for older clusters
+        print(f"  ⚠ Retrying with legacy param types (keyword)...")
+        legacy_params = _swap_param_types(params, to_legacy=True)
+        tool_config["configuration"]["params"] = legacy_params
+        
+        response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
+        if response.status_code in [200, 201]:
+            data = response.json()
+            created_id = data.get("id") or data.get("tool_id") or tool_id
+            print(f"✓ Created ES|QL tool: {name} (ID: {created_id}) [legacy param types]")
+            return created_id
+    
+    print(f"✗ Failed to create ES|QL tool (ID: {tool_id}): {response.status_code}")
+    print(f"  Response: {response.text}")
+    FAILURES += 1
+    return None
 
 
 def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optional[str]:
