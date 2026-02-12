@@ -611,10 +611,23 @@ def build_cloudrun():
 # ── Render & Save ────────────────────────────────────────────────────
 
 def svg_to_png(svg_path, png_path, scale=2):
-    """Convert SVG to PNG using cairosvg (2x scale for retina clarity)."""
+    """Convert SVG to PNG using cairosvg (2x scale for retina clarity).
+
+    Strips <mask> elements and mask= attributes before conversion because
+    cairosvg mishandles the large mask rects that kroki.io/Excalidraw emits,
+    causing the rendered image to be pushed off-canvas.
+    """
     try:
+        import re
         import cairosvg
-        cairosvg.svg2png(url=svg_path, write_to=png_path, scale=scale)
+        with open(svg_path, "r") as f:
+            svg_text = f.read()
+        # Strip mask elements and mask= attributes (cairosvg rendering bug)
+        svg_text = re.sub(r"<mask[^>]*>.*?</mask>", "", svg_text, flags=re.DOTALL)
+        svg_text = re.sub(r"<mask[^>]*/>", "", svg_text)
+        svg_text = re.sub(r' mask="url\(#[^)]+\)"', "", svg_text)
+        cairosvg.svg2png(bytestring=svg_text.encode("utf-8"),
+                         write_to=png_path, scale=scale)
         size = os.path.getsize(png_path)
         print(f"  Saved {png_path} ({size:,} bytes)")
     except ImportError:
