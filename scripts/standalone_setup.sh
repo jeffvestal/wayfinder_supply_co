@@ -28,6 +28,7 @@ FAILURES=0
 LOAD_DATA=false
 DATA_ONLY=false
 MCP_URL=""
+BACKEND_URL=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --load-data)
@@ -47,12 +48,21 @@ while [[ $# -gt 0 ]]; do
             MCP_URL="${1#*=}"
             shift
             ;;
+        --backend-url)
+            BACKEND_URL="$2"
+            shift 2
+            ;;
+        --backend-url=*)
+            BACKEND_URL="${1#*=}"
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Usage: $0 [--load-data] [--data-only] [--mcp-url URL]"
-            echo "  --load-data      Load data into cluster, then deploy workflows and agents"
-            echo "  --data-only      Load data only (skip workflows and agents)"
-            echo "  --mcp-url URL    MCP server URL for workflows (default: http://mcp-server:8001/mcp)"
+            echo "Usage: $0 [--load-data] [--data-only] [--mcp-url URL] [--backend-url URL]"
+            echo "  --load-data        Load data into cluster, then deploy workflows and agents"
+            echo "  --data-only        Load data only (skip workflows and agents)"
+            echo "  --mcp-url URL      MCP server URL for workflows (default: http://mcp-server:8001/mcp)"
+            echo "  --backend-url URL  Backend URL for workflows that call the backend (e.g., ngrok URL)"
             exit 1
             ;;
     esac
@@ -165,9 +175,25 @@ if [ "$DATA_ONLY" = false ]; then
     echo -e "==============================================${NC}"
     echo ""
     echo -e "${BLUE}MCP Server URL:${NC} $MCP_URL"
+    if [ -n "$BACKEND_URL" ]; then
+        echo -e "${BLUE}Backend URL:${NC} $BACKEND_URL"
+    fi
     echo ""
+    
+    # Build --backend-url flag if provided
+    BACKEND_URL_FLAG=""
+    if [ -n "$BACKEND_URL" ]; then
+        BACKEND_URL_FLAG="--backend-url $BACKEND_URL"
+    fi
+    
+    # Build --wayfinder-api-key flag if WAYFINDER_API_KEY is set
+    API_KEY_FLAG=""
+    if [ -n "$WAYFINDER_API_KEY" ]; then
+        API_KEY_FLAG="--wayfinder-api-key $WAYFINDER_API_KEY"
+    fi
+    
     echo -e "${BLUE}1. Deploying Workflows...${NC}"
-    if python scripts/deploy_workflows.py --workflows-dir config/workflows --mcp-url "$MCP_URL"; then
+    if python scripts/deploy_workflows.py --workflows-dir config/workflows --mcp-url "$MCP_URL" $BACKEND_URL_FLAG $API_KEY_FLAG; then
         echo -e "${GREEN}   ✓ Workflows deployed${NC}"
     else
         echo -e "${RED}   ✗ Failed to deploy workflows${NC}"
@@ -177,7 +203,7 @@ if [ "$DATA_ONLY" = false ]; then
     # Create agents and tools
     echo ""
     echo -e "${BLUE}2. Creating Agents and Tools...${NC}"
-    if python scripts/create_agents.py --mcp-url "$MCP_URL"; then
+    if python scripts/create_agents.py --mcp-url "$MCP_URL" $BACKEND_URL_FLAG $API_KEY_FLAG; then
         echo -e "${GREEN}   ✓ Agents and tools created${NC}"
     else
         echo -e "${RED}   ✗ Failed to create agents and tools${NC}"

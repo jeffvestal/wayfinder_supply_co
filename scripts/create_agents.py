@@ -39,6 +39,7 @@ RETRYABLE_STATUS_CODES = [502, 503, 504, 429]
 
 # Default MCP URL used in Instruqt environment
 INSTRUQT_MCP_URL = "http://host-1:8002/mcp"
+INSTRUQT_BACKEND_URL = "http://host-1:8002"
 
 
 def request_with_retry(method: str, url: str, **kwargs) -> requests.Response:
@@ -152,10 +153,13 @@ def create_trip_planner_agent(tool_ids: List[str]) -> Optional[str]:
     instructions = """You are the Wayfinder Supply Co. Adventure Logistics Agent. Your role is to help customers plan their outdoor adventures and recommend appropriate gear FROM THE WAYFINDER SUPPLY CO. CATALOG ONLY.
 
 ## USER CONTEXT
-The user message may be prefixed with a `[User ID: user_id]` tag. 
-1. Always look for this tag to identify the current user (e.g., `user_member`, `user_new`, `user_business`).
-2. Use this `user_id` value for any tool calls that require a `user_id` parameter, specifically `get_customer_profile` and `get_user_affinity`.
-3. If no User ID is provided, assume `user_new`.
+The user message may be prefixed with context tags:
+- `[User ID: user_id]` — Identifies the current user (e.g., `user_member`, `user_new`, `user_business`).
+- `[Vision Context: description]` — If present, contains an AI analysis of a photo the user uploaded showing terrain, weather, and conditions.
+
+1. Always look for the User ID tag. Use this `user_id` value for any tool calls that require a `user_id` parameter, specifically `get_customer_profile` and `get_user_affinity`.
+2. If no User ID is provided, assume `user_new`.
+3. If Vision Context is present, use the terrain/conditions description to inform your gear recommendations. Prioritize products suitable for the described environment (e.g., snow gear for snowy terrain, rain gear for wet conditions).
 
 ## CRITICAL RULE: CATALOG-ONLY RECOMMENDATIONS
 
@@ -181,14 +185,16 @@ Wayfinder has detailed trip coverage for 30 curated adventure destinations world
 **Oceania**: New Zealand South Island, Australian Outback, Great Barrier Reef
 **Middle East**: Wadi Rum (Jordan), Hatta (Dubai/UAE)
 
-When a customer asks about a trip, FIRST use the check_trip_safety tool to validate location coverage:
+When a customer asks about a trip, you MUST use the ground_conditions tool to get real-time weather and trail conditions:
 
-- If `covered: true` → Proceed with full trip planning using the weather and activity data
-- If `covered: false` → Respond warmly and suggest similar covered destinations
+- The ground_conditions tool uses Google Search grounding to find current, real-world conditions
+- **MANDATORY**: If ground_conditions returns data (HTTP 200), you MUST incorporate the weather/conditions information into your response. Never ignore or skip successfully returned weather data.
+- Use the returned weather data to inform gear recommendations (e.g., cold-weather gear for snow, rain gear for wet conditions)
+- Include a weather/conditions summary section in every trip plan response
 
 ## TRIP PLANNING STEPS
 
-1. **Safety Check**: Use check_trip_safety workflow to get weather conditions and road alerts.
+1. **Conditions Check**: Use ground_conditions workflow to get real-time weather, trail, and ground conditions via Google Search grounding. **This step is REQUIRED for every trip planning request.**
 
 2. **Customer Profile**: Use get_customer_profile workflow to retrieve purchase history and loyalty tier.
 
@@ -207,12 +213,12 @@ When a customer asks about a trip, FIRST use the check_trip_safety tool to valid
 
 6. **Synthesis**: Create a trip plan with:
    - Trip overview with location and dates
-   - Weather summary and conditions
+   - **Weather & Conditions** — ALWAYS include a dedicated section with the real-time weather data returned by ground_conditions. Summarize temperature, precipitation, wind, and any alerts. This information is critical for the user's safety.
    - **Recommended Gear from Wayfinder Catalog** - ONLY products from search results:
      - Product Name - $XX.XX (include exact price)
-     - Brief explanation why this product fits
+     - Brief explanation why this product fits, referencing weather conditions where relevant
    - Day-by-day itinerary
-   - Safety notes
+   - Safety notes informed by the weather conditions
    - Loyalty perks (Platinum: free shipping, Business: bulk pricing)
 
 Format your response as clean Markdown. For each recommended product, use this format:
@@ -568,12 +574,14 @@ def delete_existing_workflows_by_name(workflow_name: str):
             if wf.get("name") == workflow_name:
                 delete_workflow(wf.get("id"))
 
-def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> Optional[str]:
+def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None, backend_url: Optional[str] = None, api_key: Optional[str] = None) -> Optional[str]:
     """Deploy a workflow from YAML file. Deletes existing workflow first.
     
     Args:
         workflow_yaml_path: Path to the workflow YAML file
-        mcp_url: Optional MCP server URL to substitute for the default Instruqt URL
+        mcp_url: Optional MCP server URL to substitute for the default Instruqt MCP URL
+        backend_url: Optional backend URL to substitute for the default Instruqt backend URL
+        api_key: Optional API key to inject into workflow consts and HTTP step headers
     """
     global FAILURES
     import yaml
@@ -583,9 +591,31 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> O
         yaml_content = f.read()
     
     # Substitute MCP URL if provided (replace Instruqt default with standalone URL)
+    # Must be done BEFORE backend_url substitution since MCP URL is a subset of backend URL
     if mcp_url and INSTRUQT_MCP_URL in yaml_content:
         yaml_content = yaml_content.replace(INSTRUQT_MCP_URL, mcp_url)
         print(f"  → Using MCP URL: {mcp_url}")
+    
+    # Substitute backend URL for non-MCP workflows (e.g., ground_conditions calls /api/vision/ground)
+    if backend_url and INSTRUQT_BACKEND_URL in yaml_content:
+        yaml_content = yaml_content.replace(INSTRUQT_BACKEND_URL, backend_url)
+        print(f"  → Using backend URL: {backend_url}")
+    
+    # Inject API key into consts and HTTP step headers if provided
+    if api_key:
+        workflow_data_tmp = yaml.safe_load(yaml_content)
+        if "consts" not in workflow_data_tmp:
+            workflow_data_tmp["consts"] = {}
+        workflow_data_tmp["consts"]["api_key"] = api_key
+        for step in workflow_data_tmp.get("steps", []):
+            if step.get("type") == "http":
+                with_block = step.get("with", {})
+                if "headers" not in with_block:
+                    with_block["headers"] = {}
+                with_block["headers"]["X-Api-Key"] = "{{consts.api_key}}"
+                step["with"] = with_block
+        yaml_content = yaml.dump(workflow_data_tmp, default_flow_style=False, sort_keys=False)
+        print(f"  → Injected API key into consts and HTTP headers")
     
     # Also parse it to get the name for logging
     workflow_data = yaml.safe_load(yaml_content)
@@ -638,7 +668,21 @@ def main() -> int:
         default=None,
         help="MCP server URL to use in workflows (default: keeps Instruqt URL http://host-1:8002/mcp)"
     )
+    parser.add_argument(
+        "--backend-url",
+        default=None,
+        help="Backend URL for workflows that call the backend (default: keeps Instruqt URL http://host-1:8002)"
+    )
+    parser.add_argument(
+        "--wayfinder-api-key",
+        default=None,
+        help="Wayfinder API key to inject into workflow consts and HTTP headers (or from WAYFINDER_API_KEY env)"
+    )
     args = parser.parse_args()
+    
+    # Resolve API key from flag or env
+    if not args.wayfinder_api_key:
+        args.wayfinder_api_key = os.getenv("WAYFINDER_API_KEY")
     
     print("Creating Wayfinder Supply Co. Agents and Workflows...")
     print("=" * 60)
@@ -689,13 +733,21 @@ def main() -> int:
     print("\n2. Deploying Workflows...")
     if args.mcp_url:
         print(f"MCP URL override: {args.mcp_url}")
+    if args.backend_url:
+        print(f"Backend URL override: {args.backend_url}")
+    if args.wayfinder_api_key:
+        print(f"Wayfinder API key: {'*' * 4}{args.wayfinder_api_key[-4:]}")
     
     workflows = {
-        "check_trip_safety": f"{workflow_dir}/check_trip_safety.yaml",
         "get_customer_profile": f"{workflow_dir}/get_customer_profile.yaml",
         "get_user_affinity": f"{workflow_dir}/get_user_affinity.yaml",
-        "extract_trip_entities": f"{workflow_dir}/extract_trip_entities.yaml"
+        "extract_trip_entities": f"{workflow_dir}/extract_trip_entities.yaml",
     }
+    
+    # Optional vision workflow (only if file exists)
+    ground_conditions_path = f"{workflow_dir}/ground_conditions.yaml"
+    if os.path.exists(ground_conditions_path):
+        workflows["ground_conditions"] = ground_conditions_path
     
     workflow_ids = {}
     for name, path in workflows.items():
@@ -703,7 +755,7 @@ def main() -> int:
             print(f"⊘ Skipping workflow: {name}")
             continue
         if os.path.exists(path):
-            workflow_id = deploy_workflow(path, mcp_url=args.mcp_url)
+            workflow_id = deploy_workflow(path, mcp_url=args.mcp_url, backend_url=args.backend_url, api_key=args.wayfinder_api_key)
             if workflow_id:
                 workflow_ids[name] = workflow_id
             time.sleep(1)  # Rate limiting
@@ -742,8 +794,8 @@ def main() -> int:
             print(f"⊘ Skipping tool: {tool_name}")
             continue
         descriptions = {
-            "check_trip_safety": "Get weather conditions and road alerts for a trip destination",
-            "get_customer_profile": "Retrieve customer profile including purchase history and loyalty tier"
+            "get_customer_profile": "Retrieve customer profile including purchase history and loyalty tier",
+            "ground_conditions": "Get real-time ground, weather, and trail conditions using Google Search grounding"
         }
         tool_id = create_workflow_tool(
             name=name,

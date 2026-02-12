@@ -1,0 +1,24 @@
+# Exclude static frontend build (served by separate frontend service in Cloud Run)
+static/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment files
+.env
+.env.local
+
+# GCP credentials (mounted at runtime, not baked into image)
+gcp-credentials.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Tests and docs
+tests/
+*.md

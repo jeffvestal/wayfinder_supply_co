@@ -1,20 +1,59 @@
-import { useState, useRef, useEffect } from 'react'
-import { ChatMessage, UserId, ThoughtTraceEvent, SuggestedProduct, ItineraryDay } from '../types'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { ChatMessage, UserId, ThoughtTraceEvent, SuggestedProduct, ItineraryDay, SettingsStatus } from '../types'
 import { api } from '../lib/api'
 import { getToolStatusMessage } from '../lib/constants'
 import { ItineraryModal } from './ItineraryModal'
 import { 
   Send, Loader2, Calendar, Mountain, ChevronDown, ChevronRight,
   Plus, Compass, Backpack, CheckCircle2, Clock,
-  Tent, Map, RefreshCw, MapPin, CloudSun
+  Tent, Map, RefreshCw, MapPin, CloudSun, ImagePlus, X, Camera
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
+import { VisionPreview } from './VisionPreview'
+
+// Max image dimensions before we resize (keeps payload reasonable)
+const MAX_IMAGE_DIMENSION = 2048
+const MAX_FILE_SIZE_MB = 50  // Generous limit — resizeImage() compresses to ~200KB-1MB output regardless
+
+/**
+ * Resize an image to fit within MAX_IMAGE_DIMENSION and return as base64 (no data URI prefix).
+ */
+function resizeImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        let { width, height } = img
+        // Scale down if needed
+        if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+          const ratio = Math.min(MAX_IMAGE_DIMENSION / width, MAX_IMAGE_DIMENSION / height)
+          width = Math.round(width * ratio)
+          height = Math.round(height * ratio)
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, width, height)
+        // Return base64 without data URI prefix
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        resolve(dataUrl.split(',')[1])
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 interface TripPlannerProps {
   userId: UserId
   initialMessage?: string
   onInitialMessageSent?: () => void
+  settingsStatus?: SettingsStatus
   // Persisted state from props
   messages: ChatMessage[]
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
@@ -194,10 +233,141 @@ const markdownComponents = {
   ),
 }
 
+/** Convert a weather JSON object (or string) into readable lines. */
+function weatherJsonToReadable(obj: Record<string, any>): string {
+  const labels: Record<string, string> = {
+    temperature_f: 'Temperature',
+    conditions: 'Conditions',
+    wind_mph: 'Wind',
+    trail_status: 'Trail Status',
+    safety_notes: 'Safety Notes',
+    conditions_text: 'Conditions',
+    location: 'Location',
+    activity: 'Activity',
+  }
+  const lines: string[] = []
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined || value === null || value === '') continue
+    const label = labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    lines.push(`${label}: ${String(value)}`)
+  }
+  return lines.join('\n')
+}
+
+/** Extract readable weather text from workflow tool_result data. */
+function formatWeatherData(results: any): string {
+  /** Try to find and parse embedded JSON in a string (```json ... ``` or bare { }) */
+  function tryParseEmbeddedJson(text: string): string | null {
+    // Match ```json ... ``` fenced blocks
+    const fenced = text.match(/```json\s*([\s\S]*?)```/)
+    const jsonStr = fenced ? fenced[1].trim() : null
+    // Also try bare JSON object
+    const bare = !jsonStr ? text.match(/(\{[\s\S]*\})/) : null
+    const candidate = jsonStr || (bare ? bare[1] : null)
+    if (candidate) {
+      try {
+        const parsed = JSON.parse(candidate)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          // Extract header text that precedes the JSON block
+          const header = text.split(/```json|^\s*\{/m)[0]
+            .replace(/```/g, '').trim()
+          const readable = weatherJsonToReadable(parsed)
+          return header ? `${header}\n\n${readable}` : readable
+        }
+      } catch { /* not valid JSON, fall through */ }
+    }
+    return null
+  }
+
+  // Handle workflow result array: [{ type, data: { execution: { output } } }]
+  if (Array.isArray(results)) {
+    for (const item of results) {
+      const output = item?.data?.execution?.output
+      if (output && typeof output === 'string') {
+        // Try to parse embedded JSON first
+        const parsed = tryParseEmbeddedJson(output)
+        if (parsed) return parsed
+        // Clean up [object Object] artifacts from workflow serialization
+        const cleaned = output.replace(/\[object Object\]/g, '').trim()
+        if (cleaned) return cleaned
+      }
+    }
+    return JSON.stringify(results, null, 2)
+  }
+  // Handle direct string
+  if (typeof results === 'string') {
+    const parsed = tryParseEmbeddedJson(results)
+    if (parsed) return parsed
+    return results
+  }
+  // Handle direct object with known keys
+  if (results && typeof results === 'object') {
+    if (results.conditions_text) return results.conditions_text
+    if (results.summary) return results.summary
+    if (results.conditions) {
+      if (typeof results.conditions === 'string') return results.conditions
+      if (typeof results.conditions === 'object') return weatherJsonToReadable(results.conditions)
+    }
+    if (results.message) return results.message
+    // Try to render the object as readable weather
+    return weatherJsonToReadable(results)
+  }
+  return JSON.stringify(results, null, 2)
+}
+
+/** Clickable info box card for service insights (Jina VLM, Google Grounding). */
+function InsightCard({ icon, label, accentColor, summary, fullContent }: {
+  icon: React.ReactNode;
+  label: string;
+  accentColor: 'purple' | 'amber';
+  summary: string;
+  fullContent: string;
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  const colors = accentColor === 'purple'
+    ? { border: 'border-purple-500/30', bg: 'bg-purple-500/10', hoverBg: 'hover:bg-purple-500/20', text: 'text-purple-400', badge: 'bg-purple-500/20 text-purple-300' }
+    : { border: 'border-amber-500/30', bg: 'bg-amber-500/10', hoverBg: 'hover:bg-amber-500/20', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300' }
+
+  return (
+    <motion.div
+      layout
+      className={`rounded-lg border ${colors.border} ${colors.bg} ${colors.hoverBg} cursor-pointer transition-all ${expanded ? 'max-w-2xl' : 'max-w-sm'}`}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <div className="flex items-center gap-2 px-3 py-2">
+        <span className={colors.text}>{icon}</span>
+        <span className={`text-xs font-medium ${colors.text}`}>{label}</span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${colors.badge}`}>
+          {expanded ? 'click to collapse' : 'click to expand'}
+        </span>
+      </div>
+      {!expanded && (
+        <div className="px-3 pb-2">
+          <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">{summary}</p>
+        </div>
+      )}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-3 pb-3"
+          >
+            <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{fullContent}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
 export function TripPlanner({ 
   userId, 
   initialMessage, 
   onInitialMessageSent,
+  settingsStatus,
   messages,
   setMessages,
   tripContext,
@@ -216,13 +386,56 @@ export function TripPlanner({
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [thoughtTrace, setThoughtTrace] = useState<ThoughtTraceEvent[]>([])
-  const [expandedThinking, setExpandedThinking] = useState(false)
+  const [expandedThinking, setExpandedThinking] = useState<Record<string, boolean>>({})
   const [isItineraryOpen, setIsItineraryOpen] = useState(false)
+  
+  // Per-message insight data (for info box cards)
+  const [messageInsights, setMessageInsights] = useState<Record<string, {
+    visionAnalysis?: string;
+    weatherGrounding?: string;
+  }>>({})
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
   const [justAddedToCart, setJustAddedToCart] = useState<string | null>(null)
   const [contextModified, setContextModified] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialMessageSentRef = useRef(false)
+  
+  // Vision / image state
+  const [pendingImage, setPendingImage] = useState<string | null>(null) // base64 (no prefix)
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null) // data URI for <img>
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const visionEnabled = settingsStatus?.jina_vlm === 'configured_ui' || settingsStatus?.jina_vlm === 'configured_env'
+
+  const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate type
+    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
+      alert('Please select a JPEG, PNG, or WebP image.')
+      return
+    }
+    // Validate size (raw file size — generous limit since resizeImage compresses significantly)
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      alert(`Image must be smaller than ${MAX_FILE_SIZE_MB}MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`)
+      return
+    }
+
+    try {
+      const base64 = await resizeImage(file)
+      setPendingImage(base64)
+      setPendingImagePreview(`data:image/jpeg;base64,${base64}`)
+    } catch (err) {
+      console.error('Failed to process image:', err)
+    }
+    // Reset file input so re-selecting the same file triggers onChange
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [])
+
+  const clearPendingImage = useCallback(() => {
+    setPendingImage(null)
+    setPendingImagePreview(null)
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -265,25 +478,28 @@ export function TripPlanner({
 
   const handleSubmit = async (e: React.FormEvent | null, overrideMessage?: string) => {
     if (e) e.preventDefault()
-    const messageText = overrideMessage || input.trim()
+    const rawText = overrideMessage || input.trim()
+    // Allow submit with just an image (provide default message)
+    const messageText = rawText || (pendingImage ? 'What gear do I need for this terrain?' : '')
     if (!messageText || isLoading) return
 
     const isFirstMessage = !tripContext.destination && !tripContext.dates && !tripContext.activity
 
     // Only parse context on FIRST message when boxes are empty
     if (isFirstMessage) {
-      // Show user message immediately
+      // Show user message immediately (include image preview if attached)
       const userMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'user',
         content: messageText,
         timestamp: new Date(),
+        image_url: pendingImagePreview || undefined,
       }
       setMessages((prev) => [...prev, userMessage])
       setInput('')
       setIsLoading(true)
       setThoughtTrace([])
-      setExpandedThinking(false)
+      setExpandedThinking({})
 
       // Parse context in parallel (don't block on it)
       api.parseTripContext(messageText)
@@ -303,7 +519,7 @@ export function TripPlanner({
         })
 
       // Start chat stream immediately (don't wait for context parsing)
-      await sendMessage(messageText, false) // false = don't add user message again
+      await sendMessage(messageText, false, userMessage.id) // false = don't add user message again
     } else {
       // Follow-up message - send immediately without parsing
       await sendMessage(messageText)
@@ -318,7 +534,12 @@ export function TripPlanner({
     await sendMessage(updateMessage)
   }
 
-  const sendMessage = async (messageText: string, addUserMessage: boolean = true) => {
+  const sendMessage = async (messageText: string, addUserMessage: boolean = true, overrideUserMessageId?: string) => {
+    // Capture and clear any pending image
+    const imageToSend = pendingImage
+    const imagePreviewToSend = pendingImagePreview
+    clearPendingImage()
+    
     // Generate a unique ID for this message's trace
     const currentMessageId = Date.now().toString()
     
@@ -328,6 +549,7 @@ export function TripPlanner({
         role: 'user',
         content: messageText,
         timestamp: new Date(),
+        image_url: imagePreviewToSend || undefined,
       }
       setMessages((prev) => [...prev, userMessage])
     }
@@ -335,13 +557,18 @@ export function TripPlanner({
     setInput('')
     setIsLoading(true)
     setThoughtTrace([])
-    setExpandedThinking(false)
+    setExpandedThinking({})
     
     // Track the current user message ID for storing the trace
-    const userMessageId = addUserMessage ? currentMessageId : messages[messages.length - 1]?.id || currentMessageId
+    const userMessageId = overrideUserMessageId || (addUserMessage ? currentMessageId : messages[messages.length - 1]?.id || currentMessageId)
     
     // Collect trace events locally so we can save them at the end
     const localTraceEvents: ThoughtTraceEvent[] = []
+    // Track insight data for info boxes
+    let localVisionAnalysis: string | undefined
+    let localWeatherGrounding: string | undefined
+    // Track active tool calls to match tool_result back to tool_id
+    const activeToolCalls: Record<string, string> = {} // tool_call_id → tool_id
 
     try {
       // Check if the trip-planner-agent exists first
@@ -379,7 +606,17 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
       await api.streamChat(messageText, userId, (event) => {
         const data = event.data
 
-        if (event.type === 'reasoning') {
+        if (event.type === 'vision_analysis') {
+          const description = data.description || (typeof data === 'string' ? data : '')
+          localVisionAnalysis = description
+          const traceEvent: ThoughtTraceEvent = {
+            event: 'vision_analysis',
+            data: description,
+            timestamp: new Date(),
+          }
+          localTraceEvents.push(traceEvent)
+          setThoughtTrace((prev) => [...prev, traceEvent])
+        } else if (event.type === 'reasoning') {
           const traceEvent: ThoughtTraceEvent = {
             event: 'reasoning',
             data: data.reasoning || data,
@@ -389,6 +626,10 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
           setThoughtTrace((prev) => [...prev, traceEvent])
         } else if (event.type === 'tool_call') {
           if (!data.tool_id || !data.params || Object.keys(data.params).length === 0) return
+          // Track tool_call_id → tool_id mapping for matching results
+          if (data.tool_call_id && data.tool_id) {
+            activeToolCalls[data.tool_call_id] = data.tool_id
+          }
           const traceEvent: ThoughtTraceEvent = {
             event: 'tool_call',
             data: {
@@ -411,6 +652,15 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
           }
           localTraceEvents.push(traceEvent)
           setThoughtTrace((prev) => [...prev, traceEvent])
+          
+          // Check if this is a ground_conditions result (weather grounding)
+          const toolId = activeToolCalls[data.tool_call_id] || ''
+          if (toolId.includes('ground-conditions') || toolId.includes('ground_conditions')) {
+            const weatherText = formatWeatherData(data.results)
+            if (weatherText) {
+              localWeatherGrounding = weatherText
+            }
+          }
           
           // Extract products from search results (product_search tool)
           let productsArray: any[] = []
@@ -444,6 +694,8 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                 price: typeof r.price === 'number' ? r.price : parseFloat(r.price) || 0,
                 image_url: r.image_url || r.image,
                 reason: (r.description || r.reason || '').slice(0, 100),
+                description: r.description || '',
+                category: r.category || '',
               }))
               .filter((p: SuggestedProduct) => p.price > 0)
             
@@ -506,7 +758,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
           setMessages((prev) => [...prev, errorMessage])
           setIsLoading(false)
         }
-      }, 'trip-planner-agent')
+      }, 'trip-planner-agent', imageToSend || undefined)
     } catch (error) {
       console.error('Chat error:', error)
       const errorMessage: ChatMessage = {
@@ -523,6 +775,16 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
         setMessageTraces(prev => ({
           ...prev,
           [userMessageId]: localTraceEvents
+        }))
+      }
+      // Store insight data for info box cards
+      if (localVisionAnalysis || localWeatherGrounding) {
+        setMessageInsights(prev => ({
+          ...prev,
+          [userMessageId]: {
+            ...(localVisionAnalysis ? { visionAnalysis: localVisionAnalysis } : {}),
+            ...(localWeatherGrounding ? { weatherGrounding: localWeatherGrounding } : {}),
+          }
         }))
       }
     }
@@ -579,6 +841,8 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
               price: product.price,
               image_url: product.image_url,
               reason: product.description?.slice(0, 100),
+              description: product.description || '',
+              category: product.category || '',
             }
           }
         }
@@ -601,6 +865,8 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
               price: product.price,
               image_url: product.image_url,
               reason: `Great for ${term}`,
+              description: product.description || '',
+              category: product.category || '',
             }
           }
         }
@@ -684,10 +950,12 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                   setMessages([])
                   setThoughtTrace([])
                   setMessageTraces({})
+                  setMessageInsights({})
                   setSuggestedProducts([])
                   setOtherRecommendedItems([])
                   setItinerary([])
                   setInput('')
+                  clearPendingImage()
                   setTripContext({
                     destination: '',
                     dates: '',
@@ -818,6 +1086,16 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                           ? 'bg-primary text-white rounded-tr-none' 
                           : 'bg-slate-800/80 text-gray-200 border border-white/10 rounded-tl-none'
                       }`}>
+                        {/* Show uploaded image in user bubble */}
+                        {message.role === 'user' && message.image_url && (
+                          <div className="mb-2">
+                            <img
+                              src={message.image_url}
+                              alt="Uploaded terrain"
+                              className="max-w-[200px] max-h-[150px] rounded-lg object-cover border border-white/20"
+                            />
+                          </div>
+                        )}
                         {message.role === 'assistant' && message.content ? (
                           <div className="prose-custom">
                             <ReactMarkdown components={markdownComponents}>
@@ -839,7 +1117,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                     {/* Thinking section under user message */}
                     {message.role === 'user' && (
                       (index === messages.length - 1 && (isLoading || thoughtTrace.length > 0)) ||
-                      messageTraces[messages[index + 1]?.id]?.length > 0
+                      messageTraces[message.id]?.length > 0
                     ) && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
@@ -847,10 +1125,10 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                         className="ml-4 mt-2"
                       >
                         <button
-                          onClick={() => setExpandedThinking(!expandedThinking)}
+                          onClick={() => setExpandedThinking(prev => ({ ...prev, [message.id]: !prev[message.id] }))}
                           className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-300 transition-colors py-1"
                         >
-                          {expandedThinking ? (
+                          {expandedThinking[message.id] ? (
                             <ChevronDown className="w-3 h-3" />
                           ) : (
                             <ChevronRight className="w-3 h-3" />
@@ -863,21 +1141,30 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                           ) : (
                             <span className="flex items-center gap-2">
                               <CheckCircle2 className="w-3 h-3 text-green-400" />
-                              <span>Completed {(messageTraces[messages[index + 1]?.id] || thoughtTrace).length} steps</span>
+                              <span>Completed {(messageTraces[message.id] || thoughtTrace).length} steps</span>
                             </span>
                           )}
                         </button>
                         
                         <AnimatePresence>
-                          {expandedThinking && (
+                          {expandedThinking[message.id] && (
                             <motion.div
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
                               exit={{ opacity: 0, height: 0 }}
                               className="mt-2 ml-4 space-y-2 border-l-2 border-slate-600 pl-3"
                             >
-                              {(index === messages.length - 1 ? thoughtTrace : messageTraces[messages[index + 1]?.id] || []).map((trace, idx) => (
+                              {(index === messages.length - 1 ? thoughtTrace : messageTraces[message.id] || []).map((trace, idx) => (
                                 <div key={idx} className="text-xs">
+                                  {trace.event === 'vision_analysis' && (
+                                    <div className="flex items-start gap-2 text-gray-400">
+                                      <Camera className="w-3 h-3 mt-0.5 text-purple-400" />
+                                      <div>
+                                        <span className="text-purple-400 font-medium">Image Analysis (Jina VLM)</span>
+                                        <p className="mt-1 text-gray-500 leading-relaxed">{typeof trace.data === 'string' ? trace.data : trace.data?.description}</p>
+                                      </div>
+                                    </div>
+                                  )}
                                   {trace.event === 'reasoning' && (
                                     <div className="flex items-start gap-2 text-gray-400">
                                       <Clock className="w-3 h-3 mt-0.5 text-blue-400" />
@@ -903,30 +1190,114 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                         </AnimatePresence>
                       </motion.div>
                     )}
+
+                    {/* Insight info boxes (below trace, above response) */}
+                    {message.role === 'user' && messageInsights[message.id] && !isLoading && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="ml-4 mt-2 flex flex-wrap gap-2"
+                      >
+                        {/* Jina VLM Image Analysis card */}
+                        {messageInsights[message.id]?.visionAnalysis && (
+                          <InsightCard
+                            icon={<Camera className="w-3.5 h-3.5" />}
+                            label="Jina VLM Image Analysis"
+                            accentColor="purple"
+                            summary={messageInsights[message.id]!.visionAnalysis!.slice(0, 200) + (messageInsights[message.id]!.visionAnalysis!.length > 200 ? '...' : '')}
+                            fullContent={messageInsights[message.id]!.visionAnalysis!}
+                          />
+                        )}
+                        {/* Google Weather Grounding card */}
+                        {messageInsights[message.id]?.weatherGrounding && (
+                          <InsightCard
+                            icon={<CloudSun className="w-3.5 h-3.5" />}
+                            label="☀️ Google Weather Grounding"
+                            accentColor="amber"
+                            summary={messageInsights[message.id]!.weatherGrounding!.slice(0, 200) + (messageInsights[message.id]!.weatherGrounding!.length > 200 ? '...' : '')}
+                            fullContent={messageInsights[message.id]!.weatherGrounding!}
+                          />
+                        )}
+                      </motion.div>
+                    )}
                   </div>
                 ))
-              )}
+            )}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input Area */}
             <div className="p-4 bg-slate-900/50 border-t border-white/10">
-              <form onSubmit={handleSubmit} className="relative">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Where should we go next?"
-                  disabled={isLoading}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
-                />
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50"
-                >
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                </button>
+              {/* Image preview thumbnail */}
+              <AnimatePresence>
+                {pendingImagePreview && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-2"
+                  >
+                    <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-white/10 rounded-lg p-1.5">
+                      <img
+                        src={pendingImagePreview}
+                        alt="Upload preview"
+                        className="w-12 h-12 rounded object-cover"
+                      />
+                      <span className="text-xs text-zinc-400 px-1">Terrain photo attached</span>
+                      <button
+                        onClick={clearPendingImage}
+                        className="p-1 text-zinc-500 hover:text-white transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
+                {/* Image upload button (only when vision is configured) */}
+                {visionEnabled && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={handleImageSelect}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isLoading}
+                      className={`p-2.5 rounded-xl transition-all ${
+                        pendingImage
+                          ? 'bg-primary/20 text-primary border border-primary/30'
+                          : 'bg-slate-800 text-zinc-400 hover:text-white hover:bg-slate-700 border border-white/10'
+                      } disabled:opacity-50`}
+                      title="Upload terrain photo for AI analysis"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                    </button>
+                  </>
+                )}
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={pendingImage ? "Describe your trip plans for this terrain..." : "Where should we go next?"}
+                    disabled={isLoading}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={(!input.trim() && !pendingImage) || isLoading}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-all disabled:opacity-50"
+                  >
+                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -957,7 +1328,27 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                       </div>
                       <div className="flex-1 min-w-0">
                         <h5 className="text-xs font-bold text-white truncate mb-0.5">{product.title}</h5>
-                        <div className="text-xs text-primary font-bold">${product.price}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-primary font-bold">${product.price}</span>
+                          {/* Visualize button - shown when Imagen is configured and a scene image exists */}
+                          {(settingsStatus?.imagen === 'configured_ui' || settingsStatus?.imagen === 'configured_env') && messages.some(m => m.image_url) && (
+                            <VisionPreview
+                              sceneImageBase64={
+                                messages.find(m => m.image_url)?.image_url?.split(',')[1] || ''
+                              }
+                              productName={product.title}
+                              productDescription={product.description || ''}
+                              productImageUrl={product.image_url || ''}
+                              sceneDescription={
+                                // Prefer the Jina VLM terrain analysis for rich scene context
+                                Object.values(messageInsights).find(i => i.visionAnalysis)?.visionAnalysis
+                                || tripContext.destination
+                                || 'outdoor scene'
+                              }
+                              imagenReady={settingsStatus?.imagen === 'configured_ui' || settingsStatus?.imagen === 'configured_env'}
+                            />
+                          )}
+                        </div>
                         {product.reason && (
                           <div className="text-[10px] text-gray-500 line-clamp-1 italic">
                             {product.reason}

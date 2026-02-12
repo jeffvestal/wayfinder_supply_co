@@ -18,8 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from routers import chat, products, cart, reviews, orders, users, clickstream, reports, workshop
+from routers import chat, products, cart, reviews, orders, users, clickstream, reports, workshop, settings, vision
 from middleware.logging import LoggingMiddleware
+from middleware.auth import ApiKeyMiddleware
 from services.error_handler import global_exception_handler, http_exception_handler
 import logging
 
@@ -39,6 +40,9 @@ app = FastAPI(
 # Exception handlers
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
+
+# API key authentication middleware (skipped when WAYFINDER_API_KEY is unset)
+app.add_middleware(ApiKeyMiddleware)
 
 # Logging middleware
 app.add_middleware(LoggingMiddleware)
@@ -65,22 +69,28 @@ app.include_router(users.router, prefix="/api", tags=["users"])
 app.include_router(clickstream.router, prefix="/api", tags=["clickstream"])
 app.include_router(reports.router, prefix="/api", tags=["reports"])
 app.include_router(workshop.router, prefix="/api", tags=["workshop"])
+app.include_router(settings.router, prefix="/api", tags=["settings"])
+app.include_router(vision.router, prefix="/api", tags=["vision"])
 
 # --- Static UI serving (Instruqt unified mode) ---
+# In Cloud Run / standalone deployments the frontend is a separate service,
+# so static serving should be disabled via DISABLE_STATIC_SERVING=true.
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_HTML = STATIC_DIR / "index.html"
+STATIC_SERVING_DISABLED = os.getenv("DISABLE_STATIC_SERVING", "").lower() in ("true", "1", "yes")
 
 logger.info(f"Checking for static files in: {STATIC_DIR}")
 logger.info(f"index.html exists: {INDEX_HTML.exists()}")
+if STATIC_SERVING_DISABLED:
+    logger.info("Static file serving disabled (DISABLE_STATIC_SERVING is set)")
 
 @app.get("/")
 async def root():
     # Prefer serving the built frontend when present (workshop/unified serving).
-    if INDEX_HTML.exists():
+    if INDEX_HTML.exists() and not STATIC_SERVING_DISABLED:
         logger.info(f"Serving UI index.html from {INDEX_HTML}")
         return FileResponse(INDEX_HTML)
 
-    logger.warning("index.html not found, serving default API message")
     return JSONResponse({"message": "Wayfinder Supply Co. Backend API", "status": "running"})
 
 
@@ -90,14 +100,15 @@ async def health():
 
 # Mount static files AFTER API routes so /api/* keeps working.
 # `html=True` enables SPA-style behavior for directory indexes (serves index.html).
-if STATIC_DIR.exists():
+if STATIC_DIR.exists() and not STATIC_SERVING_DISABLED:
     logger.info("Mounting StaticFiles at / (backend/static)")
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 else:
-    logger.warning("Not mounting StaticFiles (backend/static missing)")
+    logger.info("Not mounting StaticFiles (missing or disabled)")
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 

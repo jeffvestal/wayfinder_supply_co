@@ -1,12 +1,39 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 import json
 import os
+import logging
 from tools.weather_service import get_trip_conditions
 from tools.crm_service import get_customer_profile
 
+logger = logging.getLogger("wayfinder.mcp")
+
 app = FastAPI(title="Wayfinder Supply Co. MCP Server")
+
+
+class ApiKeyMiddleware(BaseHTTPMiddleware):
+    """Validate X-Api-Key header against WAYFINDER_API_KEY env var."""
+
+    async def dispatch(self, request: Request, call_next):
+        expected_key = os.getenv("WAYFINDER_API_KEY")
+        # No key configured → skip auth (local dev mode)
+        if not expected_key:
+            return await call_next(request)
+        # Exempt health checks
+        if request.url.path == "/health":
+            return await call_next(request)
+        provided_key = request.headers.get("X-Api-Key", "")
+        if provided_key != expected_key:
+            logger.warning(f"Rejected request to {request.url.path}: invalid or missing API key")
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+        return await call_next(request)
+
+
+# API key auth middleware (skipped when WAYFINDER_API_KEY is unset)
+app.add_middleware(ApiKeyMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -97,6 +124,6 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("MCP_SERVER_PORT", "8001"))
+    port = int(os.getenv("PORT", os.getenv("MCP_SERVER_PORT", "8001")))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

@@ -39,6 +39,9 @@ function getApiUrl(): string {
 
 const API_URL = getApiUrl();
 
+// API key for Cloud Run authentication (baked in at build time, empty for local dev)
+const API_KEY = import.meta.env.VITE_WAYFINDER_API_KEY || '';
+
 // Helper to create URL that works with both absolute and relative (empty) API_URL
 function createApiUrl(path: string): URL {
   if (API_URL) {
@@ -47,6 +50,17 @@ function createApiUrl(path: string): URL {
   // When API_URL is empty, use current origin as base for relative URL
   return new URL(path, window.location.origin);
 }
+
+// Build headers with optional API key authentication
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  if (API_KEY) {
+    headers['X-Api-Key'] = API_KEY;
+  }
+  return headers;
+}
+
+import type { SettingsStatus } from '../types';
 
 export interface StreamEvent {
   type: string;
@@ -87,9 +101,7 @@ export const api = {
 
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
     });
 
     if (!response.ok) {
@@ -103,20 +115,22 @@ export const api = {
     message: string,
     userId: string,
     onEvent: (event: StreamEvent) => void,
-    agentId?: string
+    agentId?: string,
+    imageBase64?: string
   ): Promise<void> {
     const url = createApiUrl('/api/chat');
-    url.searchParams.set('message', message);
-    url.searchParams.set('user_id', userId);
-    if (agentId) {
-      url.searchParams.set('agent_id', agentId);
-    }
-    
+
+    const body: Record<string, string> = {
+      message,
+      user_id: userId,
+    };
+    if (agentId) body.agent_id = agentId;
+    if (imageBase64) body.image_base64 = imageBase64;
+
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -158,7 +172,7 @@ export const api = {
   async checkAgentExists(agentId: string): Promise<boolean> {
     const url = createApiUrl(`/api/agent-status/${agentId}`);
     try {
-      const response = await fetch(url.toString());
+      const response = await fetch(url.toString(), { headers: authHeaders() });
       if (!response.ok) return false;
       const data = await response.json();
       return data.exists === true;
@@ -173,7 +187,7 @@ export const api = {
     if (category) url.searchParams.set('category', category);
     url.searchParams.set('limit', limit.toString());
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -183,7 +197,7 @@ export const api = {
 
   async getProduct(id: string): Promise<any> {
     const url = createApiUrl(`/api/products/${id}`);
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -196,7 +210,7 @@ export const api = {
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -209,7 +223,7 @@ export const api = {
     url.searchParams.set('user_id', userId);
     if (loyaltyTier) url.searchParams.set('loyalty_tier', loyaltyTier);
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -222,9 +236,7 @@ export const api = {
     url.searchParams.set('user_id', userId);
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         product_id: productId,
         quantity,
@@ -241,6 +253,7 @@ export const api = {
     url.searchParams.set('user_id', userId);
     const response = await fetch(url.toString(), {
       method: 'DELETE',
+      headers: authHeaders(),
     });
 
     if (!response.ok) {
@@ -253,6 +266,7 @@ export const api = {
     url.searchParams.set('user_id', userId);
     const response = await fetch(url.toString(), {
       method: 'DELETE',
+      headers: authHeaders(),
     });
 
     if (!response.ok) {
@@ -266,6 +280,7 @@ export const api = {
     url.searchParams.set('quantity', quantity.toString());
     const response = await fetch(url.toString(), {
       method: 'PUT',
+      headers: authHeaders(),
     });
 
     if (!response.ok) {
@@ -278,7 +293,7 @@ export const api = {
     url.searchParams.set('limit', limit.toString());
     url.searchParams.set('offset', offset.toString());
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -291,9 +306,7 @@ export const api = {
     url.searchParams.set('user_id', userId);
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         rating,
         title,
@@ -310,9 +323,7 @@ export const api = {
     const url = createApiUrl('/api/orders');
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         user_id: userId,
         shipping_address: shippingAddress,
@@ -333,9 +344,7 @@ export const api = {
 
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
     });
 
     if (!response.ok) {
@@ -352,9 +361,7 @@ export const api = {
 
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
     });
 
     if (!response.ok) {
@@ -372,7 +379,7 @@ export const api = {
 
   async getUserPersonas(): Promise<{ personas: any[] }> {
     const url = createApiUrl('/api/users/personas');
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -391,9 +398,7 @@ export const api = {
     const url = createApiUrl('/api/clickstream');
     fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         user_id: userId,
         action,
@@ -410,6 +415,7 @@ export const api = {
     const url = createApiUrl(`/api/clickstream/${userId}`);
     const response = await fetch(url.toString(), {
       method: 'DELETE',
+      headers: authHeaders(),
     });
 
     if (!response.ok) {
@@ -419,7 +425,7 @@ export const api = {
 
   async getUserStats(userId: string): Promise<{ total_views: number; total_cart_adds: number; total_events: number }> {
     const url = createApiUrl(`/api/clickstream/${userId}/stats`);
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -442,7 +448,7 @@ export const api = {
     const url = createApiUrl(`/api/clickstream/${userId}/events`);
     url.searchParams.set('action', action);
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -459,7 +465,7 @@ export const api = {
       url.searchParams.set('user_id', userId);
     }
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -474,7 +480,7 @@ export const api = {
       url.searchParams.set('user_id', userId);
     }
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -492,9 +498,7 @@ export const api = {
     const url = createApiUrl('/api/reports/trip-pdf');
     const response = await fetch(url.toString(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         user_name: userName,
         destination,
@@ -519,7 +523,7 @@ export const api = {
   }> {
     const url = createApiUrl('/api/workshop/status');
     try {
-      const response = await fetch(url.toString());
+      const response = await fetch(url.toString(), { headers: authHeaders() });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -534,5 +538,72 @@ export const api = {
         summary: { complete: 0, total: 0, percentage: 0 },
       };
     }
+  },
+
+  // --- Vision / Settings APIs ---
+
+  async getSettingsStatus(): Promise<SettingsStatus> {
+    const url = createApiUrl('/api/settings/status');
+    try {
+      const response = await fetch(url.toString(), { headers: authHeaders() });
+      if (!response.ok) {
+        return { jina_vlm: 'not_configured', vertex_ai: 'not_configured', imagen: 'not_configured' };
+      }
+      return response.json();
+    } catch {
+      return { jina_vlm: 'not_configured', vertex_ai: 'not_configured', imagen: 'not_configured' };
+    }
+  },
+
+  async updateSettings(settings: Record<string, string>): Promise<SettingsStatus> {
+    const url = createApiUrl('/api/settings');
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  async testJinaConnection(): Promise<{ success: boolean; message: string }> {
+    const url = createApiUrl('/api/settings/test/jina');
+    const response = await fetch(url.toString(), { method: 'POST', headers: authHeaders() });
+    return response.json();
+  },
+
+  async testVertexConnection(): Promise<{ success: boolean; message: string }> {
+    const url = createApiUrl('/api/settings/test/vertex');
+    const response = await fetch(url.toString(), { method: 'POST', headers: authHeaders() });
+    return response.json();
+  },
+
+  async generatePreview(
+    imageBase64: string,
+    productName: string,
+    sceneDescription: string,
+    productDescription?: string,
+    productImageUrl?: string
+  ): Promise<{ image_base64: string; prompt: string }> {
+    const url = createApiUrl('/api/vision/preview');
+    const body: Record<string, string> = {
+      image_base64: imageBase64,
+      product_name: productName,
+      scene_description: sceneDescription,
+    };
+    if (productDescription) body.product_description = productDescription;
+    if (productImageUrl) body.product_image_url = productImageUrl;
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return { image_base64: data.image_base64, prompt: data.prompt || '' };
   },
 };

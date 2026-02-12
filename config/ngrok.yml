@@ -1,0 +1,26 @@
+# ngrok configuration for Wayfinder Supply Co. standalone demo
+#
+# This config exposes both the MCP server and backend so Elastic Cloud
+# workflows can reach them via ngrok tunnels.
+#
+# Usage:
+#   ngrok start --config config/ngrok.yml --all
+#
+# Or let start_local.sh use it automatically.
+#
+# Prerequisites:
+#   ngrok config add-authtoken <your-token>
+#
+# The start_local.sh script detects this file and uses it for multi-tunnel
+# setup. If this file doesn't exist, it falls back to a single MCP tunnel.
+
+version: "2"
+tunnels:
+  mcp:
+    addr: 8001
+    proto: http
+    inspect: true
+  backend:
+    addr: 8000
+    proto: http
+    inspect: true

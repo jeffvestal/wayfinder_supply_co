@@ -8,4 +8,7 @@ pydantic>=2.5.0
 pyyaml>=6.0.1
 requests>=2.31.0
 reportlab>=4.0.0
+# Vision features (optional - only imported when credentials are configured)
+google-cloud-aiplatform>=1.38.0
+google-genai>=1.0.0
 

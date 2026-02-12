@@ -47,6 +47,8 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   tool_calls?: ToolCall[];
+  image_url?: string;           // Data URI of user-uploaded image
+  generated_preview?: string;   // Base64 of Imagen-generated preview
 }
 
 export interface ToolCall {
@@ -98,6 +100,17 @@ export interface SuggestedProduct {
   price: number;
   image_url?: string;
   reason?: string;
+  description?: string;
+  category?: string;
+}
+
+export type VisionServiceStatus = 'configured_ui' | 'configured_env' | 'not_configured';
+
+export interface SettingsStatus {
+  jina_vlm: VisionServiceStatus;
+  vertex_ai: VisionServiceStatus;
+  imagen: VisionServiceStatus;
+  vertex_project_id?: string;  // Auto-extracted from service account JSON
 }
 
 export interface UserPersona {

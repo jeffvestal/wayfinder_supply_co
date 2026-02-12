@@ -58,6 +58,11 @@ PROJECT_SUMMARY.md
 tmp.txt
 instrqut-run.log
 
+# GCP credentials (never commit)
+backend/gcp-credentials.json
+**/gcp-*-key.json
+**/service-account*.json
+
 # Build output (generated at runtime)
 backend/static/
 

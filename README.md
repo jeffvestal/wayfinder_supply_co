@@ -1,40 +1,45 @@
-# Wayfinder Supply Co. Workshop
+# Wayfinder Supply Co.
 
-> **Status**: 🎉 **Stable v1.0** - Production-ready demo and workshop platform
+> **Status**: 🎉 **Stable v1.1** — Production-ready demo and workshop platform with vision AI features
 
-A hands-on workshop demonstrating **Elastic Agentic Search** capabilities through "Wayfinder Supply Co." — a fictional outdoor retailer with an AI-powered trip planning assistant.
+An **Elastic + Google Better Together** demo showcasing **Elastic Agentic Search** through "Wayfinder Supply Co." — a fictional outdoor retailer with an AI-powered trip planning assistant, image analysis, real-time weather grounding, and AI-generated product visualizations.
 
 ![header photo](wayfinder_store_headshot.png)
 
-## Current Release (v1.0)
+## Current Release (v1.1 — Vision & Cloud Run)
 
 **What's Working:**
 - ✅ Complete E-commerce UI with 150+ products across 10 categories
-- ✅ AI Trip Planner with streaming responses and thought traces
+- ✅ AI Trip Planner with streaming responses and persistent thought traces
 - ✅ Personalization engine with real-time clickstream tracking
 - ✅ Search modes: Lexical, Hybrid (ELSER), and Agentic
 - ✅ Unified frontend/backend serving on port 8000
 - ✅ Complete checkout flow with AI-generated reviews
 - ✅ 5 pre-built user personas with rich clickstream data
 - ✅ Interactive Guest User mode for live demos
-- ✅30 global adventure destinations with seasonal data
-- ✅ MCP server with Weather and CRM simulations
+- ✅ 30 global adventure destinations with seasonal data
+- ✅ MCP server with CRM simulations (customer profiles)
 - ✅ Instruqt workshop with 5 challenges
 - ✅ Standalone Docker deployment mode
-
-**Known Stable Commits:**
-- Current: `c4b0396` - Restored streaming logic, all features working
-- Previous stable: `c40fde4` - Original working implementation
+- ✅ **NEW** — Jina VLM image analysis (upload a photo, get terrain description)
+- ✅ **NEW** — Google Grounding for real-time weather via Gemini + Google Search
+- ✅ **NEW** — Imagen 3 product visualization (generate product-in-scene images)
+- ✅ **NEW** — UI Settings page for runtime credential configuration
+- ✅ **NEW** — Google Cloud Run deployment with IAP authentication
+- ✅ **NEW** — Insight cards showing Jina VLM and Weather grounding data
 
 ## Overview
 
-This workshop showcases how to build an intelligent, conversational shopping experience that goes beyond keyword matching:
+This demo showcases how to build an intelligent, conversational shopping experience that goes beyond keyword matching:
 
-- **Federated Data**: Combines Elasticsearch product catalog with simulated CRM (Salesforce) and Weather APIs
+- **Federated Data**: Combines Elasticsearch product catalog with simulated CRM APIs and Google Search grounding
 - **Personalized Recommendations**: Uses clickstream data to understand user preferences (ultralight, budget, expedition, etc.)
 - **AI Trip Planning**: Agent Builder orchestrates multi-step trip planning with gear recommendations
-- **Location Intelligence**: Covers 30 global adventure destinations with seasonal activity and weather data
-- **Real-time Synthesis**: Creates personalized itineraries with gear checklists based on conditions
+- **Image Analysis**: Upload a trip photo and Jina VLM analyzes terrain, season, and conditions
+- **Real-time Weather**: Google Grounding (Gemini + Google Search) provides live weather for any destination
+- **Product Visualization**: Imagen 3 generates photorealistic product-in-scene images from trip context
+- **Location Intelligence**: Covers 30 global adventure destinations with seasonal activity data
+- **Cloud Deployment**: One-script deployment to Google Cloud Run with IAP authentication
 
 ## Getting Started
 
@@ -184,36 +189,90 @@ The preferred way to experience the full workshop with guided challenges.
 
 ---
 
+### Path C: Google Cloud Run Deployment
+
+Deploy the full stack to Google Cloud Run for a shareable, publicly accessible demo with Google IAP authentication.
+
+#### Prerequisites
+
+- **Google Cloud SDK** (`gcloud`) installed and authenticated
+- **Docker** installed (for building images)
+- A **GCP project** with billing enabled (e.g., `elastic-customer-eng`)
+- An **Elasticsearch 9.x cluster** on Elastic Cloud
+- (Optional) **Jina API key** for image analysis
+- (Optional) **GCP Service Account** with Vertex AI User role for Imagen 3 + Google Grounding
+
+#### Quick Deploy
+
+```bash
+# Set your .env with Elasticsearch credentials + optional vision keys
+cp .env.example .env
+# Edit .env (see Environment Variables section below)
+
+# Deploy everything to Cloud Run (builds, pushes, deploys, configures IAP)
+./scripts/deploy_cloudrun.sh --wayfinder-api-key "your-secret-key"
+```
+
+The script will:
+1. Build Docker images for frontend, backend, and MCP server
+2. Push them to Google Artifact Registry
+3. Deploy all three as Cloud Run services
+4. Configure Google IAP for frontend access (`@elastic.co` SSO)
+5. Print the frontend URL when complete
+
+#### Configuration Flags
+
+| Flag | Description |
+|------|-------------|
+| `--wayfinder-api-key KEY` | Shared API key for workflow-to-backend authentication |
+| `--project PROJECT` | GCP project ID (default: `elastic-customer-eng`) |
+| `--region REGION` | GCP region (default: `us-central1`) |
+| `--disable-iap` | Skip IAP setup (leave frontend publicly accessible) |
+
+> **Note:** Vision features (Jina VLM, Imagen 3, Google Grounding) are **optional** and auto-enable when credentials are provided. The demo works without them — you just won't see image analysis, weather grounding, or product visualization features.
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full Cloud Run deployment details.
+
+---
+
 ## Architecture
 
+### High-Level Architecture
+
+[View full diagram on Excalidraw](https://excalidraw.com/#json=YFOQIq5yC4L74JV3oaY3i,-8tMwxJwEFTFz71PQgdpRQ)
+
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                      Frontend (React)                         │
-│                  Modern UI with Trip Planner                  │
-└──────────────────────────────┬────────────────────────────────┘
-                               │
-┌──────────────────────────────▼────────────────────────────────┐
-│                   Backend Proxy (FastAPI)                     │
-│             Handles auth, streaming, user context             │
-└──────────────────────────────┬────────────────────────────────┘
-                               │
-┌──────────────────────────────▼────────────────────────────────┐
-│                        Elastic Stack                          │
-│                                                               │
-│  ┌─────────────────┐ ┌───────────────┐ ┌───────────────────┐  │
-│  │  Elasticsearch  │ │ Agent Builder │ │     Workflows     │  │
-│  │  - Products     │ │ Trip Planner  │ │ check_trip_safety │  │
-│  │  - Clickstream  │ │               │ │ get_customer_prof │  │
-│  └─────────────────┘ └───────────────┘ └─────────┬─────────┘  │
-│                                                  │            │
-└──────────────────────────────────────────────────┼────────────┘
-                                                   │
-┌──────────────────────────────────────────────────▼────────────┐
-│                     MCP Server (FastMCP)                      │
-│            Simulates external APIs (Weather, CRM)             │
-│          30 locations with seasonal weather patterns          │
-└───────────────────────────────────────────────────────────────┘
+User Browser
+    │
+    ▼
+┌──────────────┐     ┌──────────────┐     ┌─────────────────────┐     ┌───────────────────┐
+│   Frontend   │────▶│   Backend    │────▶│    Elastic Stack     │     │ External Services │
+│  React/Vite  │     │   FastAPI    │     │                     │     │                   │
+│  Trip Planner│     │  Chat Router │     │  Elasticsearch 9.x  │     │  Jina VLM         │
+│  Search Panel│     │  Products    │     │  Kibana             │     │  Vertex AI Gemini │
+│  Settings    │     │  Vision      │     │  Agent Builder      │     │  Imagen 3         │
+│              │     │  Credentials │     │  Workflows          │     │  MCP Server (CRM) │
+└──────────────┘     └──────────────┘     └─────────────────────┘     └───────────────────┘
+                            │                      │                          ▲
+                            │                      │  workflows ──────────────┘
+                            └──────────────────────┘
 ```
+
+### Vision Pipeline
+
+[View full diagram on Excalidraw](https://excalidraw.com/#json=T8NyrB-N7DjpAIlMe3kjn,JcLi3vDhYC_FWPWYje8tFw)
+
+The vision pipeline adds three AI capabilities to the trip planner:
+
+1. **Image Analysis** — User uploads a photo → Frontend resizes → Backend `/vision/analyze` → Jina VLM returns a terrain/scene description
+2. **Weather Grounding** — Agent Builder calls `ground_conditions` workflow → Backend `/vision/ground` → Gemini 2.0 Flash + Google Search returns real-time weather
+3. **Product Visualization** — User clicks "Visualize" → Backend `/vision/preview` → Imagen 3 generates a product-in-scene image using style reference and enhanced prompting
+
+### Cloud Run Deployment
+
+[View full diagram on Excalidraw](https://excalidraw.com/#json=SpU8tNmbRLFrEjnSrD6o1,8iwt2zWosGoZh43-A3IvDw)
+
+Three Cloud Run services in Google Cloud, with IAP protecting the frontend and a shared API key authenticating workflow calls to backend/MCP.
 
 ## Covered Adventure Destinations (30 locations)
 
@@ -273,6 +332,20 @@ Full catalog covers 10 categories with ~150 products:
 - **Review Display** — Expandable review section in product detail modal
 - **Post-Purchase Reviews** — Submit reviews after checkout
 
+### Vision & AI Features (v1.1)
+
+- **Jina VLM Image Analysis** — Upload a trip photo and get a detailed terrain/scene description displayed in an insight card
+- **Google Weather Grounding** — Real-time weather conditions via Gemini 2.0 Flash + Google Search, shown in a dedicated insight card with parsed data
+- **Imagen 3 Product Visualization** — Click "Visualize" on any suggested product to generate a photorealistic product-in-scene image
+  - Uses scene context from Jina VLM analysis
+  - Pulls product attributes (color, type, features) from the catalog for enhanced prompting
+  - Applies product catalog image as a style reference for visual fidelity
+  - Detects wearable items (jackets, boots) and renders them on a person
+  - "Show Prompt" button reveals the Imagen prompt used
+- **Insight Cards** — Clickable cards below the thought trace showing Jina VLM description and Google Weather grounding data
+- **Settings Page** — Runtime configuration of Jina API key and GCP credentials without restarting services
+- **Credential Manager** — UI-set credentials take precedence over `.env` file; status indicators show what's configured
+
 ### User Personalization
 
 - **User Personas** — Pre-built personas with unique shopping scenarios
@@ -301,8 +374,10 @@ wayfinder_supply_co/
 │   │   │   ├── ClickstreamEventsModal.tsx # View browsing history
 │   │   │   ├── ItineraryModal.tsx   # Trip export modal
 │   │   │   ├── ThoughtTrace.tsx     # Agent reasoning display
+│   │   │   ├── VisionPreview.tsx   # Imagen 3 product visualization ← NEW
+│   │   │   ├── SettingsPage.tsx    # Credential configuration UI ← NEW
 │   │   │   └── ...
-│   │   ├── lib/              # API client
+│   │   ├── lib/              # API client (incl. vision + settings endpoints)
 │   │   └── types/            # TypeScript types
 │   └── public/               # Static assets
 │
@@ -315,8 +390,14 @@ wayfinder_supply_co/
 │   │   ├── reviews.py        # Product reviews
 │   │   ├── orders.py         # Order creation
 │   │   ├── users.py          # User personas
-│   │   └── clickstream.py    # Clickstream tracking + stats
-│   └── services/             # Elasticsearch client
+│   │   ├── clickstream.py    # Clickstream tracking + stats
+│   │   ├── vision.py         # Vision API (Jina VLM, Grounding, Imagen) ← NEW
+│   │   └── settings.py       # Credential management API ← NEW
+│   ├── services/             # Elasticsearch client + vision
+│   │   ├── credential_manager.py  # UI/env credential management ← NEW
+│   │   └── vision_service.py      # Jina VLM, Gemini, Imagen logic ← NEW
+│   └── middleware/
+│       └── auth.py           # API key authentication ← NEW
 │
 ├── mcp_server/               # FastMCP external API simulation
 │   ├── main.py               # Entry point
@@ -336,7 +417,9 @@ wayfinder_supply_co/
 │   ├── seed_products.py      # Data indexing (products + reviews)
 │   ├── seed_clickstream.py   # Clickstream indexing
 │   ├── create_agents.py      # Agent Builder setup
-│   └── validate_setup.py     # Health checks
+│   ├── validate_setup.py     # Health checks
+│   ├── deploy_cloudrun.sh    # Google Cloud Run deployment ← NEW
+│   └── start_local.sh        # Local dev with ngrok tunnels ← NEW
 │
 ├── generated_products/       # Generated data files
 │   ├── products.json         # Product catalog
@@ -346,6 +429,11 @@ wayfinder_supply_co/
 ├── config/                   # Configuration
 │   ├── product_generation.yaml  # Full product catalog config
 │   └── workflows/            # Elastic Workflow definitions
+│       ├── check_trip_safety.yaml   # MCP weather (Instruqt)
+│       ├── get_customer_profile.yaml # MCP CRM personas
+│       ├── get_user_affinity.yaml   # ES|QL clickstream
+│       ├── extract_trip_entities.yaml # Trip parsing
+│       └── ground_conditions.yaml   # Google Grounding weather ← NEW
 │
 ├── instruqt/                 # Instruqt track configuration
 │   ├── track.yml             # Track metadata
@@ -353,7 +441,11 @@ wayfinder_supply_co/
 │   └── track_scripts/        # Setup scripts
 │
 └── docs/                     # Additional documentation
-    └── IMAGE_GENERATION_SETUP.md
+    ├── ARCHITECTURE.md       # Detailed system architecture
+    ├── API_REFERENCE.md      # Backend API documentation
+    ├── DEPLOYMENT.md         # Cloud Run deployment guide
+    ├── WORKSHOP_GUIDE.md     # Instruqt workshop instructions
+    └── images/               # Architecture diagrams
 ```
 
 ## Clickstream Data & Personalization
@@ -504,21 +596,49 @@ In hybrid mode, personalization is applied to the **lexical retriever** within a
 
 Key environment variables needed for different scenarios:
 
-**For Standalone Demo:**
-- `STANDALONE_ELASTICSEARCH_URL` - Demo Elasticsearch endpoint
-- `STANDALONE_ELASTICSEARCH_APIKEY` - API key for demo cluster
-- `STANDALONE_KIBANA_URL` - Demo Kibana endpoint
+**Required — Elasticsearch (all modes):**
 
-**For Data Loading:**
-- `SNAPSHOT_ELASTICSEARCH_URL` - Source Elasticsearch endpoint (falls back to `ELASTICSEARCH_URL`)
-- `SNAPSHOT_ELASTICSEARCH_APIKEY` - API key for source cluster (falls back to `ELASTICSEARCH_APIKEY`)
+| Variable | Description |
+|----------|-------------|
+| `STANDALONE_ELASTICSEARCH_URL` | Elasticsearch endpoint for runtime services |
+| `STANDALONE_ELASTICSEARCH_APIKEY` | API key for runtime services |
+| `STANDALONE_KIBANA_URL` | Kibana endpoint (Agent Builder APIs) |
+
+**Required — Data Loading:**
+
+| Variable | Description |
+|----------|-------------|
+| `SNAPSHOT_ELASTICSEARCH_URL` | Elasticsearch for data loading (can be same as STANDALONE) |
+| `SNAPSHOT_ELASTICSEARCH_APIKEY` | API key for data loading |
+
+**Optional — Vision AI Features (auto-enable when set):**
+
+| Variable | Description |
+|----------|-------------|
+| `JINA_API_KEY` | Jina VLM API key for image analysis |
+| `VERTEX_PROJECT_ID` | GCP project ID for Vertex AI (Gemini + Imagen) |
+| `VERTEX_LOCATION` | GCP region (default: `us-central1`) |
+| `GCP_SERVICE_ACCOUNT_JSON` | GCP service account JSON as a string (alternative to file) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON file |
+
+**Optional — Cloud Run / Security:**
+
+| Variable | Description |
+|----------|-------------|
+| `WAYFINDER_API_KEY` | Shared API key for workflow-to-backend authentication |
+| `PORT` | Server port (default: `8000`) |
+| `DISABLE_STATIC_SERVING` | Set to `true` to disable frontend serving from backend |
 
 **For Product Generation:**
-- `GOOGLE_API_KEY` - Gemini API key
-- `GOOGLE_CLOUD_PROJECT` - GCP project ID
-- `GOOGLE_APPLICATION_CREDENTIALS` - Path to Vertex AI service account JSON
-- `GCS_BUCKET_NAME` - GCS bucket for product images
-- `GCS_SERVICE_ACCOUNT_KEY` - Path to GCS service account JSON
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_API_KEY` | Gemini API key for product metadata generation |
+| `GOOGLE_CLOUD_PROJECT` | GCP project ID for Vertex AI Imagen |
+| `GCS_BUCKET_NAME` | GCS bucket for product images |
+| `GCS_SERVICE_ACCOUNT_KEY` | Path to GCS service account JSON |
+
+> **Credential Priority:** Vision credentials set via the UI Settings page take precedence over `.env` values. This allows runtime configuration without restarting services.
 
 See `.env.example` for a complete template.
 
@@ -553,9 +673,25 @@ Agent → Workflow Tool → get_customer_profile workflow → HTTP POST to MCP S
 - `mcp_server/data/crm_mock.json` — Mock customer data
 - `config/workflows/get_customer_profile.yaml` — Workflow that calls the service
 
-### Weather & Location Service (Trip Conditions)
+### Weather — Google Grounding (v1.1)
 
-Simulates a weather/travel conditions API covering 30 global destinations.
+In standalone/Cloud Run mode, weather data comes from **Google Grounding** — Gemini 2.0 Flash with Google Search tool. This provides real-time, accurate weather for any location worldwide (not limited to the 30 pre-defined destinations).
+
+**How it's called:**
+```
+Agent → Workflow Tool → ground_conditions workflow → Backend /vision/ground → Gemini + Google Search → Weather returned
+```
+
+**Files:**
+- `backend/services/vision_service.py` — Google Grounding implementation
+- `backend/routers/vision.py` — `/api/vision/ground` endpoint
+- `config/workflows/ground_conditions.yaml` — Workflow that calls the grounding endpoint
+
+> **Instruqt Note:** The Instruqt workshop still uses the simulated MCP weather service (`check_trip_safety` workflow) for environments without GCP access.
+
+### Weather & Location Service — MCP (Instruqt)
+
+Simulates a weather/travel conditions API covering 30 global destinations. Used in the Instruqt workshop environment.
 
 **What it provides:**
 - Weather conditions (temperature, precipitation, conditions)
@@ -997,8 +1133,10 @@ Separating these allows you to load data on a dev cluster and run demos on a pro
 - **Backend**: Python 3.11+, FastAPI, httpx, SSE (Server-Sent Events)
 - **MCP Server**: FastMCP, Pydantic
 - **Search & AI**: Elasticsearch 9.x, ELSER (semantic search), Agent Builder, Workflows
+- **Vision AI**: Jina VLM (image analysis), Vertex AI Gemini 2.0 Flash (grounding), Imagen 3 (generation)
 - **Data Generation**: Google Gemini 2.5 Flash (products, reviews), Vertex AI Imagen 3 (images)
 - **Personalization**: Elasticsearch clickstream analytics, user affinity scoring
+- **Deployment**: Docker Compose (local), Google Cloud Run, Artifact Registry, IAP
 
 ## License
 

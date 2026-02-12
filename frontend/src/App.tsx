@@ -11,16 +11,17 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { DemoOverlay } from './components/DemoOverlay'
 import { PersonalizationDemo } from './components/PersonalizationDemo'
 import { SearchComparisonDemo } from './components/SearchComparisonDemo'
-import { ShoppingCart, MapPin, Home, Menu, X, Search, Play, Eye, Sparkles, ChevronDown } from 'lucide-react'
+import { ShoppingCart, MapPin, Home, Menu, X, Search, Play, Eye, Sparkles, ChevronDown, Settings } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
-import { UserPersona, ChatMessage, ThoughtTraceEvent, SuggestedProduct, ItineraryDay } from './types'
+import { UserPersona, ChatMessage, ThoughtTraceEvent, SuggestedProduct, ItineraryDay, SettingsStatus } from './types'
+import { SettingsPage } from './components/SettingsPage'
 import { 
   SearchMode as SearchModeType, 
   ExtendedChatMessage 
 } from './components/search/types'
 
-type View = 'storefront' | 'trip-planner' | 'cart' | 'checkout' | 'order-confirmation' | 'account'
+type View = 'storefront' | 'trip-planner' | 'cart' | 'checkout' | 'order-confirmation' | 'account' | 'settings'
 
 const LEGACY_LOYALTY_TIERS: Record<string, string> = {
   'user_member': 'gold',
@@ -79,10 +80,18 @@ function App() {
   const [showSearchComparisonDemo, setShowSearchComparisonDemo] = useState(false)
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
   const [wowDropdownOpen, setWowDropdownOpen] = useState(false)
+  
+  // Vision / settings status
+  const [settingsStatus, setSettingsStatus] = useState<SettingsStatus>({
+    jina_vlm: 'not_configured',
+    vertex_ai: 'not_configured',
+    imagen: 'not_configured',
+  })
 
-  // Load personas on mount
+  // Load personas and settings status on mount
   useEffect(() => {
     loadPersonas()
+    api.getSettingsStatus().then(setSettingsStatus).catch(() => {})
   }, [])
 
   // Update current persona when user changes
@@ -387,6 +396,20 @@ function App() {
                 )}
               </div>
               <button
+                onClick={() => {
+                  setCurrentView('settings')
+                  setMobileMenuOpen(false)
+                }}
+                className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all border ${
+                  currentView === 'settings'
+                    ? 'bg-primary/20 text-primary border-primary/30'
+                    : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border-white/10'
+                }`}
+                title="Vision Settings"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+              <button
                 onClick={() => setSearchPanelOpen(true)}
                 className="flex items-center justify-center w-10 h-10 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
                 title="Search & Chat"
@@ -497,6 +520,7 @@ function App() {
                     userId={currentUser} 
                     initialMessage={tripPlannerInitialMessage}
                     onInitialMessageSent={() => setTripPlannerInitialMessage(undefined)}
+                    settingsStatus={settingsStatus}
                     messages={plannerMessages}
                     setMessages={setPlannerMessages}
                     tripContext={plannerContext}
@@ -588,6 +612,22 @@ function App() {
                       }
                       setCurrentView('storefront')
                     }}
+                  />
+                </ErrorBoundary>
+              </motion.div>
+            )}
+            {currentView === 'settings' && (
+              <motion.div
+                key="settings"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorBoundary>
+                  <SettingsPage
+                    settingsStatus={settingsStatus}
+                    onStatusChange={setSettingsStatus}
                   />
                 </ErrorBoundary>
               </motion.div>

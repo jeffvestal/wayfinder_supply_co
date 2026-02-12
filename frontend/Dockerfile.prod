@@ -3,6 +3,14 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Accept build-time API URL (baked into the JS bundle)
+ARG VITE_API_URL=http://localhost:8000
+ENV VITE_API_URL=$VITE_API_URL
+
+# Accept build-time API key for Cloud Run authentication (empty for local dev)
+ARG VITE_WAYFINDER_API_KEY=
+ENV VITE_WAYFINDER_API_KEY=$VITE_WAYFINDER_API_KEY
+
 COPY package*.json ./
 RUN npm ci
 
@@ -13,10 +21,12 @@ RUN npm run build
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+# Use envsubst template so nginx listens on $PORT (Cloud Run injects PORT env var).
+# The nginx Docker image processes /etc/nginx/templates/*.template automatically.
+COPY nginx.cloudrun.conf /etc/nginx/templates/default.conf.template
+
+# Default port (overridden by Cloud Run's PORT env var)
+ENV PORT=8080
 
 CMD ["nginx", "-g", "daemon off;"]
-
-

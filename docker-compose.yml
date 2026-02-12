@@ -10,8 +10,15 @@ services:
       - STANDALONE_ELASTICSEARCH_URL=${STANDALONE_ELASTICSEARCH_URL:-http://kubernetes-vm:30920}
       - STANDALONE_KIBANA_URL=${STANDALONE_KIBANA_URL:-http://kubernetes-vm:30001}
       - STANDALONE_ELASTICSEARCH_APIKEY=${STANDALONE_ELASTICSEARCH_APIKEY:-}
+      # Vision features (optional)
+      - JINA_API_KEY=${JINA_API_KEY:-}
+      - VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID:-}
+      - VERTEX_LOCATION=${VERTEX_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-credentials.json
     volumes:
       - ./backend:/app
+      # Mount GCP service account JSON if provided (falls back to /dev/null if not set)
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:/secrets/gcp-credentials.json:ro
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - wayfinder-network

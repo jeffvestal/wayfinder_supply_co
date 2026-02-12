@@ -42,16 +42,19 @@ def delete_workflow(workflow_id: str, workflow_name: str) -> bool:
     return False
 
 
-# Default MCP URL used in Instruqt environment
+# Default URLs used in Instruqt environment
 INSTRUQT_MCP_URL = "http://host-1:8002/mcp"
+INSTRUQT_BACKEND_URL = "http://host-1:8002"
 
 
-def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> Optional[str]:
+def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None, backend_url: Optional[str] = None, api_key: Optional[str] = None) -> Optional[str]:
     """Deploy a workflow from YAML file and return its ID. Deletes existing workflow first.
     
     Args:
         workflow_yaml_path: Path to the workflow YAML file
-        mcp_url: Optional MCP server URL to substitute for the default Instruqt URL
+        mcp_url: Optional MCP server URL to substitute for the default Instruqt MCP URL
+        backend_url: Optional backend URL to substitute for the default Instruqt backend URL
+        api_key: Optional API key to inject into workflow consts and HTTP step headers
     """
     workflow_path = Path(workflow_yaml_path)
     
@@ -64,9 +67,33 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> O
         yaml_content = f.read()
     
     # Substitute MCP URL if provided (replace Instruqt default with standalone URL)
+    # Must be done BEFORE backend_url substitution since MCP URL is a subset of backend URL
     if mcp_url and INSTRUQT_MCP_URL in yaml_content:
         yaml_content = yaml_content.replace(INSTRUQT_MCP_URL, mcp_url)
         print(f"  → Using MCP URL: {mcp_url}")
+    
+    # Substitute backend URL for non-MCP workflows (e.g., ground_conditions calls /api/vision/ground)
+    if backend_url and INSTRUQT_BACKEND_URL in yaml_content:
+        yaml_content = yaml_content.replace(INSTRUQT_BACKEND_URL, backend_url)
+        print(f"  → Using backend URL: {backend_url}")
+    
+    # Inject API key into consts and HTTP step headers if provided
+    if api_key:
+        workflow_data_tmp = yaml.safe_load(yaml_content)
+        # Add consts section with api_key
+        if "consts" not in workflow_data_tmp:
+            workflow_data_tmp["consts"] = {}
+        workflow_data_tmp["consts"]["api_key"] = api_key
+        # Add X-Api-Key header to all HTTP steps
+        for step in workflow_data_tmp.get("steps", []):
+            if step.get("type") == "http":
+                with_block = step.get("with", {})
+                if "headers" not in with_block:
+                    with_block["headers"] = {}
+                with_block["headers"]["X-Api-Key"] = "{{consts.api_key}}"
+                step["with"] = with_block
+        yaml_content = yaml.dump(workflow_data_tmp, default_flow_style=False, sort_keys=False)
+        print(f"  → Injected API key into consts and HTTP headers")
     
     # Also parse it to get the name for logging
     workflow_data = yaml.safe_load(yaml_content)
@@ -119,7 +146,21 @@ def main() -> int:
         default=None,
         help="MCP server URL to use in workflows (default: keeps Instruqt URL http://host-1:8002/mcp)"
     )
+    parser.add_argument(
+        "--backend-url",
+        default=None,
+        help="Backend URL for workflows that call the backend (default: keeps Instruqt URL http://host-1:8002)"
+    )
+    parser.add_argument(
+        "--wayfinder-api-key",
+        default=None,
+        help="Wayfinder API key to inject into workflow consts and HTTP headers (or from WAYFINDER_API_KEY env)"
+    )
     args = parser.parse_args()
+    
+    # Resolve API key from flag or env
+    if not args.wayfinder_api_key:
+        args.wayfinder_api_key = os.getenv("WAYFINDER_API_KEY")
     
     workflows_dir = Path(args.workflows_dir)
     
@@ -138,6 +179,10 @@ def main() -> int:
     
     if args.mcp_url:
         print(f"MCP URL override: {args.mcp_url}")
+    if args.backend_url:
+        print(f"Backend URL override: {args.backend_url}")
+    if args.wayfinder_api_key:
+        print(f"Wayfinder API key: {'*' * 4}{args.wayfinder_api_key[-4:]}")
     
     success_count = 0
     skipped_count = 0
@@ -148,7 +193,7 @@ def main() -> int:
             print(f"⊘ Skipping {workflow_name} (excluded)")
             skipped_count += 1
             continue
-        workflow_id = deploy_workflow(str(workflow_file), mcp_url=args.mcp_url)
+        workflow_id = deploy_workflow(str(workflow_file), mcp_url=args.mcp_url, backend_url=args.backend_url, api_key=args.wayfinder_api_key)
         if workflow_id:
             success_count += 1
             workflow_ids[workflow_file.stem] = workflow_id

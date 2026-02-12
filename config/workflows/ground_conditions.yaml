@@ -1,0 +1,51 @@
+version: "1"
+name: ground_conditions
+enabled: true
+
+inputs:
+  - name: location
+    type: string
+    required: true
+    description: "The destination location to check real-time conditions for"
+  - name: activity
+    type: string
+    required: true
+    description: "The planned outdoor activity (e.g., 'hiking', 'camping', 'skiing')"
+
+triggers:
+  - type: manual
+
+steps:
+  - name: call_grounding_api
+    type: http
+    with:
+      url: "http://host-1:8002/api/vision/ground"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        location: "{{ inputs.location }}"
+        activity: "{{ inputs.activity }}"
+      timeout: 30s
+    on-failure:
+      retry:
+        max-attempts: 2
+        delay: 1s
+
+  - name: parse_response
+    type: console
+    with:
+      message: |
+        Real-time Conditions for {{ inputs.location }} ({{ inputs.activity }}):
+        {% if steps.call_grounding_api.output.data.conditions.conditions_text %}
+        {{ steps.call_grounding_api.output.data.conditions.conditions_text }}
+        {% elsif steps.call_grounding_api.output.data.conditions.temperature_f %}
+        Temperature: {{ steps.call_grounding_api.output.data.conditions.temperature_f }}°F
+        Conditions: {{ steps.call_grounding_api.output.data.conditions.conditions }}
+        Wind: {{ steps.call_grounding_api.output.data.conditions.wind_mph }} mph
+        Trail Status: {{ steps.call_grounding_api.output.data.conditions.trail_status }}
+        Safety Notes: {{ steps.call_grounding_api.output.data.conditions.safety_notes }}
+        {% else %}
+        {{ steps.call_grounding_api.output.data }}
+        {% endif %}
+

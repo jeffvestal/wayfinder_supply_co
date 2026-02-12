@@ -2,20 +2,35 @@
 """
 Chat router that proxies requests to Elastic Agent Builder with streaming support.
 Based on the-price-is-bot implementation for proper SSE handling.
+Supports optional image analysis via Jina VLM when vision is configured.
 """
 
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 import httpx
 import os
 import json
+import logging
 from typing import Optional
 from services.json_parser import extract_json_from_response
+from services.credential_manager import get_credential_manager
+from services import vision_service
+
+logger = logging.getLogger("wayfinder.chat")
 
 router = APIRouter()
 
 KIBANA_URL = os.getenv("STANDALONE_KIBANA_URL", os.getenv("KIBANA_URL", "http://kubernetes-vm:30001"))
 ELASTICSEARCH_APIKEY = os.getenv("STANDALONE_ELASTICSEARCH_APIKEY", os.getenv("ELASTICSEARCH_APIKEY", ""))
+
+
+class ChatRequest(BaseModel):
+    """Chat request body - supports text and optional image."""
+    message: str
+    user_id: str = "user_new"
+    agent_id: str = "wayfinder-search-agent"
+    image_base64: Optional[str] = None
 
 
 @router.post("/parse-trip-context")
@@ -95,19 +110,62 @@ async def parse_trip_context_endpoint(
 
 @router.post("/chat")
 async def chat_endpoint(
-    message: str = Query(..., description="The chat message"),
-    user_id: Optional[str] = Query("user_new", description="User ID"),
-    agent_id: Optional[str] = Query("wayfinder-search-agent", description="Agent ID")
+    request: Optional[ChatRequest] = None,
+    message: Optional[str] = Query(None, description="The chat message (legacy query param)"),
+    user_id: Optional[str] = Query(None, description="User ID (legacy query param)"),
+    agent_id: Optional[str] = Query(None, description="Agent ID (legacy query param)"),
 ):
     """
     Chat endpoint that proxies to Elastic Agent Builder streaming API.
     Returns SSE stream with reasoning, tool_call, tool_result, message_chunk events.
+
+    Accepts either:
+    - JSON body: {"message": "...", "user_id": "...", "agent_id": "...", "image_base64": "..."}
+    - Query params: ?message=...&user_id=...&agent_id=... (backward compatible)
     """
-    # Prepend user context to message
-    contextual_message = f"[User ID: {user_id}] {message}"
-    
+    # Resolve parameters from JSON body or query params
+    if request and request.message:
+        msg = request.message
+        uid = request.user_id
+        aid = request.agent_id
+        image = request.image_base64
+    elif message:
+        msg = message
+        uid = user_id or "user_new"
+        aid = agent_id or "wayfinder-search-agent"
+        image = None
+    else:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    # If image provided, try to analyze with Jina VLM
+    vision_context = ""
+    vision_description = ""
+    if image:
+        cm = get_credential_manager()
+        if cm.is_vision_ready():
+            try:
+                vision_description = await vision_service.analyze_image(image)
+                vision_context = f"[Vision Context: {vision_description}] "
+                logger.info(f"Vision context added ({len(vision_description)} chars)")
+            except Exception as e:
+                logger.warning(f"Vision analysis failed, proceeding without: {type(e).__name__}: {e}")
+        else:
+            logger.info("Image provided but Jina VLM not configured, ignoring image")
+
+    # Build contextual message
+    contextual_message = f"{vision_context}[User ID: {uid}] {msg}"
+
+    async def chat_stream():
+        """Wrapper generator: emits vision_analysis event first, then agent stream."""
+        if vision_description:
+            yield format_sse_event("vision_analysis", {
+                "description": vision_description
+            })
+        async for chunk in stream_agent_response(contextual_message, aid):
+            yield chunk
+
     return StreamingResponse(
-        stream_agent_response(contextual_message, agent_id),
+        chat_stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
