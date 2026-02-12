@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Generate Excalidraw diagrams and render to SVG/PNG via kroki.io"""
+"""Generate Excalidraw architecture diagrams and render to SVG via kroki.io
+
+All diagrams use a dark background (#1e1e2e) with color-coded zones:
+  Blue   (#4a9eed / #1e3a5f) — Frontend
+  Purple (#8b5cf6 / #2d1b69) — Backend
+  Green  (#22c55e / #1a4d2e) — Elastic Stack
+  Orange (#f59e0b / #5c3d1a) — Google / External APIs
+  Teal   (#06b6d4 / #1a4d4d) — MCP Server
+  Pink   (#ec4899)           — Auth credentials
+  Red    (#ef4444 / #5c1a1a) — Fallback / Error
+"""
 
 import json
 import random
@@ -8,10 +18,30 @@ import os
 
 random.seed(42)
 
+# ── Dark-mode palette ────────────────────────────────────────────────
+
+BG       = "#1e1e2e"
+TEXT     = "#e5e5e5"
+MUTED    = "#a0a0a0"
+SUBTLE   = "#555555"
+
+BLUE_S   = "#4a9eed";  BLUE_F   = "#1e3a5f"
+PURPLE_S = "#8b5cf6";  PURPLE_F = "#2d1b69"
+GREEN_S  = "#22c55e";   GREEN_F  = "#1a4d2e"
+ORANGE_S = "#f59e0b";  ORANGE_F = "#5c3d1a"
+TEAL_S   = "#06b6d4";  TEAL_F   = "#1a4d4d"
+PINK     = "#ec4899"
+RED_S    = "#ef4444";   RED_F    = "#5c1a1a"
+
+
 def seed():
     return random.randint(1, 2**31)
 
-def rect(id, x, y, w, h, bg="transparent", stroke="#1e1e1e", sw=2, opacity=100, rounded=True, style="solid"):
+
+# ── Primitive helpers ────────────────────────────────────────────────
+
+def rect(id, x, y, w, h, bg="transparent", stroke="#1e1e1e", sw=2,
+         opacity=100, rounded=True, style="solid"):
     return {
         "type": "rectangle", "id": id, "x": x, "y": y, "width": w, "height": h,
         "angle": 0, "strokeColor": stroke, "backgroundColor": bg,
@@ -19,171 +49,563 @@ def rect(id, x, y, w, h, bg="transparent", stroke="#1e1e1e", sw=2, opacity=100, 
         "roughness": 1, "opacity": opacity, "groupIds": [], "frameId": None,
         "roundness": {"type": 3} if rounded else None,
         "seed": seed(), "version": 1, "versionNonce": seed(),
-        "isDeleted": False, "boundElements": [], "updated": 1, "link": None, "locked": False
+        "isDeleted": False, "boundElements": [], "updated": 1,
+        "link": None, "locked": False,
     }
 
-def text_el(id, x, y, txt, size=16, color="#1e1e1e", container_id=None):
+
+def text_el(id, x, y, txt, size=16, color=TEXT, container_id=None):
+    lines = txt.split("\n")
+    max_line = max(lines, key=len)
     return {
         "type": "text", "id": id, "x": x, "y": y,
-        "width": len(txt) * size * 0.55, "height": size * 1.4,
+        "width": len(max_line) * size * 0.55,
+        "height": size * 1.4 * len(lines),
         "angle": 0, "strokeColor": color, "backgroundColor": "transparent",
         "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
         "roughness": 1, "opacity": 100, "groupIds": [], "frameId": None,
         "roundness": None, "seed": seed(), "version": 1, "versionNonce": seed(),
-        "isDeleted": False, "boundElements": None, "updated": 1, "link": None, "locked": False,
+        "isDeleted": False, "boundElements": None, "updated": 1,
+        "link": None, "locked": False,
         "text": txt, "fontSize": size, "fontFamily": 1,
         "textAlign": "center", "verticalAlign": "middle",
-        "containerId": container_id, "originalText": txt, "autoResize": True
+        "containerId": container_id, "originalText": txt, "autoResize": True,
     }
 
-def standalone_text(id, x, y, txt, size=16, color="#1e1e1e"):
+
+def standalone_text(id, x, y, txt, size=16, color=TEXT):
     t = text_el(id, x, y, txt, size, color, container_id=None)
     t["textAlign"] = "left"
     t["verticalAlign"] = "top"
     return t
 
-def labeled_rect(id, x, y, w, h, label, bg="transparent", stroke="#1e1e1e", sw=2,
-                 opacity=100, rounded=True, font_size=16, font_color="#1e1e1e"):
+
+def labeled_rect(id, x, y, w, h, label, bg="transparent", stroke="#1e1e1e",
+                 sw=2, opacity=100, rounded=True, font_size=16, font_color=TEXT):
     r = rect(id, x, y, w, h, bg, stroke, sw, opacity, rounded)
     tid = f"{id}_t"
-    t = text_el(tid, x + 10, y + h / 2 - font_size * 0.7, label, font_size, font_color, container_id=id)
+    lines = label.split("\n")
+    text_h = font_size * 1.4 * len(lines)
+    t = text_el(tid, x + 10, y + h / 2 - text_h / 2,
+                label, font_size, font_color, container_id=id)
     r["boundElements"] = [{"id": tid, "type": "text"}]
     return [r, t]
 
-def arrow_el(id, x, y, pts, stroke="#1e1e1e", sw=2, style="solid", end_head="arrow"):
-    w = pts[-1][0] - pts[0][0]
-    h = pts[-1][1] - pts[0][1]
+
+def arrow_el(id, x, y, pts, stroke=TEXT, sw=2, style="solid", end_head="arrow"):
     return {
         "type": "arrow", "id": id, "x": x, "y": y,
-        "width": abs(w), "height": abs(h),
+        "width": abs(pts[-1][0] - pts[0][0]),
+        "height": abs(pts[-1][1] - pts[0][1]),
         "angle": 0, "strokeColor": stroke, "backgroundColor": "transparent",
         "fillStyle": "solid", "strokeWidth": sw, "strokeStyle": style,
         "roughness": 1, "opacity": 100, "groupIds": [], "frameId": None,
         "roundness": {"type": 2},
         "seed": seed(), "version": 1, "versionNonce": seed(),
-        "isDeleted": False, "boundElements": [], "updated": 1, "link": None, "locked": False,
+        "isDeleted": False, "boundElements": [], "updated": 1,
+        "link": None, "locked": False,
         "points": pts, "endArrowhead": end_head, "startArrowhead": None,
-        "startBinding": None, "endBinding": None
+        "startBinding": None, "endBinding": None,
     }
 
-def labeled_arrow(id, x, y, pts, label, stroke="#1e1e1e", sw=2, style="solid",
+
+def labeled_arrow(id, x, y, pts, label, stroke=TEXT, sw=2, style="solid",
                   end_head="arrow", font_size=14, font_color=None):
     a = arrow_el(id, x, y, pts, stroke, sw, style, end_head)
     tid = f"{id}_t"
     mx = x + (pts[0][0] + pts[-1][0]) / 2 - len(label) * font_size * 0.25
     my = y + (pts[0][1] + pts[-1][1]) / 2 - font_size * 1.2
-    t = text_el(tid, mx, my, label, font_size, font_color or stroke, container_id=id)
+    t = text_el(tid, mx, my, label, font_size, font_color or MUTED, container_id=id)
     a["boundElements"] = [{"id": tid, "type": "text"}]
     return [a, t]
 
+
 def lifeline(id, x, y_start, length):
     return arrow_el(id, x, y_start, [[0, 0], [0, length]],
-                    stroke="#c0c0c0", sw=1, style="dashed", end_head=None)
+                    stroke=SUBTLE, sw=1, style="dashed", end_head=None)
 
-def scene(elements):
-    return {"type": "excalidraw", "version": 2, "source": "wayfinder",
-            "elements": elements, "appState": {"viewBackgroundColor": "#ffffff"}}
 
-# ── Diagram 1: Vision Pipeline Sequence ──────────────────────────────
+def dark_scene(elements, width=1100, height=650):
+    """Wrap elements in a dark-background scene."""
+    bg = rect("_bg", -10, -10, width + 20, height + 20,
+              bg=BG, stroke="transparent", sw=0, opacity=100, rounded=False)
+    return {
+        "type": "excalidraw", "version": 2, "source": "wayfinder",
+        "elements": [bg] + elements,
+        "appState": {"viewBackgroundColor": BG},
+    }
 
-def build_sequence_diagram():
+
+# ── Legend helper ────────────────────────────────────────────────────
+
+def legend_row(prefix, y, items):
+    """items = [(label, fill, stroke), ...]"""
     els = []
-
-    # Title
-    els.append(standalone_text("title", 250, 5, "Vision Pipeline — Sequence Flow", 26, "#1e1e1e"))
-
-    # Participants: (id, label, x_center, color)
-    participants = [
-        ("user",    "User",          100,  "#a5d8ff", "#4a9eed"),
-        ("fe",      "Frontend",      270,  "#b2f2bb", "#22c55e"),
-        ("be",      "Backend",       440,  "#d0bfff", "#8b5cf6"),
-        ("jina",    "Jina VLM",      610,  "#ffd8a8", "#f59e0b"),
-        ("agent",   "Agent Builder", 790,  "#ffc9c9", "#ef4444"),
-        ("imagen",  "Imagen",        960,  "#c3fae8", "#06b6d4"),
-    ]
-
-    for pid, label, cx, bg, stroke in participants:
-        w = 140
-        els.extend(labeled_rect(f"{pid}H", cx - w/2, 55, w, 42, label,
-                                bg=bg, stroke=stroke, font_size=16))
-        els.append(lifeline(f"{pid}L", cx, 97, 520))
-
-    # Messages: (y, from_cx, to_cx, label, color, dashed)
-    messages = [
-        (150, 100,  270,  "Upload photo + optional prompt",            "#4a9eed", False),
-        (190, 270,  440,  "POST /api/chat (image + text)",             "#1e1e1e", False),
-        (230, 440,  610,  "Analyze terrain/conditions",                "#f59e0b", False),
-        (270, 610,  440,  "Text description",                          "#f59e0b", True),
-        (310, 440,  790,  "Enhanced prompt with vision context",       "#ef4444", False),
-        (350, 790,  440,  "SSE stream (reasoning, tools, products)",   "#ef4444", True),
-        (390, 440,  270,  "SSE stream (same as today)",                "#22c55e", True),
-        (430, 270,  440,  "POST /api/vision/preview (image + product)","#1e1e1e", False),
-        (470, 440,  960,  "Generate product-in-scene",                 "#06b6d4", False),
-        (510, 960,  440,  "Generated image",                           "#06b6d4", True),
-        (550, 440,  270,  "Base64 image",                              "#22c55e", True),
-        (590, 270,  100,  "Shows recommendations + preview image",     "#4a9eed", True),
-    ]
-
-    for i, (y, fx, tx, label, color, dashed) in enumerate(messages):
-        mid = f"m{i+1}"
-        dx = tx - fx
-        els.extend(labeled_arrow(mid, fx, y, [[0, 0], [dx, 0]], label,
-                                 stroke=color, sw=2,
-                                 style="dashed" if dashed else "solid",
-                                 font_size=14, font_color="#1e1e1e"))
-
-    return scene(els)
+    x = 20
+    for i, (label, fill, stroke) in enumerate(items):
+        rid = f"{prefix}_l{i}"
+        els.append(rect(rid, x, y, 16, 16, bg=fill, stroke=stroke, sw=1, opacity=100, rounded=False))
+        els.append(standalone_text(f"{rid}_t", x + 22, y - 1, label, 14, MUTED))
+        x += 22 + len(label) * 14 * 0.55 + 20
+    return els
 
 
-# ── Diagram 2: Credential Strategy ───────────────────────────────────
+# =====================================================================
+# Diagram 1 — High-Level Architecture
+# =====================================================================
 
-def build_credential_diagram():
+def build_high_level():
     els = []
-
-    # Title
-    els.append(standalone_text("title", 185, 0, "Credential Strategy — Resolution Flow", 24, "#1e1e1e"))
+    els.append(standalone_text("title", 220, 8,
+        "Wayfinder Supply Co. -- High-Level Architecture", 24, TEXT))
 
     # Zone backgrounds
-    els.extend([
-        rect("z1", 40, 60, 230, 250, bg="#dbe4ff", stroke="#4a9eed", sw=1, opacity=40),
-        standalone_text("z1t", 68, 68, "Credential Sources", 16, "#2563eb"),
-        rect("z2", 340, 100, 200, 180, bg="#e5dbff", stroke="#8b5cf6", sw=1, opacity=40),
-        standalone_text("z2t", 385, 108, "Resolution", 16, "#6d28d9"),
-        rect("z3", 610, 50, 210, 300, bg="#d3f9d8", stroke="#22c55e", sw=1, opacity=40),
-        standalone_text("z3t", 665, 58, "Consumers", 16, "#15803d"),
-    ])
+    els.append(rect("z_fe", 10, 55, 200, 350, bg=BLUE_F, stroke=BLUE_S, sw=1, opacity=30))
+    els.append(standalone_text("z_fe_t", 55, 62, "Frontend", 16, BLUE_S))
 
-    # Source boxes
-    els.extend(labeled_rect("ui", 60, 110, 190, 55, "Settings Page (UI)",
-                            bg="#a5d8ff", stroke="#4a9eed", font_size=16))
-    els.append(standalone_text("ui_note", 75, 172, "in-memory, runtime override", 13, "#757575"))
-    els.extend(labeled_rect("env", 60, 225, 190, 55, ".env file",
-                            bg="#a5d8ff", stroke="#4a9eed", font_size=16))
+    els.append(rect("z_be", 270, 55, 200, 350, bg=PURPLE_F, stroke=PURPLE_S, sw=1, opacity=30))
+    els.append(standalone_text("z_be_t", 305, 62, "Backend (FastAPI)", 16, PURPLE_S))
 
-    # Resolution box
-    els.extend(labeled_rect("cm", 365, 155, 150, 70, "CredentialManager",
-                            bg="#d0bfff", stroke="#8b5cf6", font_size=15))
+    els.append(rect("z_es", 530, 55, 220, 350, bg=GREEN_F, stroke=GREEN_S, sw=1, opacity=30))
+    els.append(standalone_text("z_es_t", 585, 62, "Elastic Stack", 16, GREEN_S))
 
-    # Consumer boxes
-    els.extend(labeled_rect("c_jina", 635, 95, 160, 50, "Jina VLM",
-                            bg="#ffd8a8", stroke="#f59e0b", font_size=16))
-    els.extend(labeled_rect("c_vertex", 635, 185, 160, 50, "Vertex AI",
-                            bg="#c3fae8", stroke="#06b6d4", font_size=16))
-    els.extend(labeled_rect("c_imagen", 635, 275, 160, 50, "Imagen 3",
-                            bg="#ffc9c9", stroke="#ef4444", font_size=16))
+    els.append(rect("z_ext", 810, 55, 220, 210, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
+    els.append(standalone_text("z_ext_t", 830, 62, "Google / External APIs", 16, ORANGE_S))
 
-    # Arrows: sources → CM
-    els.extend(labeled_arrow("a1", 250, 137, [[0, 0], [115, 53]],
-                             "priority 1", stroke="#4a9eed", font_size=14))
-    els.extend(labeled_arrow("a2", 250, 252, [[0, 0], [115, -62]],
-                             "priority 2", stroke="#4a9eed", font_size=14))
+    els.append(rect("z_mcp", 810, 290, 220, 115, bg=TEAL_F, stroke=TEAL_S, sw=1, opacity=30))
+    els.append(standalone_text("z_mcp_t", 870, 297, "MCP Server", 16, TEAL_S))
 
-    # Arrows: CM → consumers
-    els.append(arrow_el("a3", 515, 175, [[0, 0], [120, -55]], stroke="#8b5cf6", sw=2))
-    els.append(arrow_el("a4", 515, 190, [[0, 0], [120, 20]],  stroke="#8b5cf6", sw=2))
-    els.append(arrow_el("a5", 515, 205, [[0, 0], [120, 95]],  stroke="#8b5cf6", sw=2))
+    # Frontend boxes
+    for i, lbl in enumerate(["React / Vite", "Trip Planner", "Search Panel",
+                              "Settings Page", "Vision Preview"]):
+        y = 90 + i * 58
+        els.extend(labeled_rect(f"fe{i}", 30, y, 160, 45, lbl,
+                                bg=BLUE_F, stroke=BLUE_S, sw=2, font_size=15))
 
-    return scene(els)
+    # Backend boxes
+    for i, lbl in enumerate(["Chat Router", "Vision Router", "Products Router",
+                              "Credential Mgr", "API Key Auth"]):
+        y = 90 + i * 58
+        els.extend(labeled_rect(f"be{i}", 290, y, 160, 45, lbl,
+                                bg=PURPLE_F, stroke=PURPLE_S, sw=2, font_size=15))
+
+    # Elastic boxes
+    for i, lbl in enumerate(["Elasticsearch 9.x", "Kibana",
+                              "Agent Builder", "Workflows", "ELSER (Semantic)"]):
+        y = 90 + i * 58
+        els.extend(labeled_rect(f"es{i}", 550, y, 180, 45, lbl,
+                                bg=GREEN_F, stroke=GREEN_S, sw=2, font_size=15))
+
+    # External boxes
+    for i, lbl in enumerate(["Jina VLM", "Gemini + Grounding", "Imagen 3"]):
+        y = 90 + i * 58
+        els.extend(labeled_rect(f"ext{i}", 830, y, 180, 45, lbl,
+                                bg=ORANGE_F, stroke=ORANGE_S, sw=2, font_size=15))
+
+    # MCP boxes
+    els.extend(labeled_rect("mcp0", 830, 325, 180, 35, "CRM / Persona",
+                            bg=TEAL_F, stroke=TEAL_S, sw=2, font_size=15))
+    els.extend(labeled_rect("mcp1", 830, 368, 180, 35, "Weather (Mock)",
+                            bg=TEAL_F, stroke=TEAL_S, sw=2, font_size=15))
+
+    # Arrows
+    els.extend(labeled_arrow("a1", 190, 200, [[0, 0], [80, 0]], "HTTP / SSE",
+                             stroke=TEXT, font_color=MUTED))
+    els.extend(labeled_arrow("a2", 450, 120, [[0, 0], [100, 0]], "API Key",
+                             stroke=TEXT, font_color=MUTED))
+    els.extend(labeled_arrow("a3", 450, 235, [[0, 0], [100, 0]], "SSE Proxy",
+                             stroke=TEXT, font_color=MUTED))
+    # backend -> external (dashed)
+    els.append(arrow_el("a4", 450, 155, [[0, 0], [380, -45]], stroke=ORANGE_S, sw=2, style="dashed"))
+    els.append(arrow_el("a5", 450, 165, [[0, 0], [380, 0]],   stroke=ORANGE_S, sw=2, style="dashed"))
+    els.append(arrow_el("a6", 450, 175, [[0, 0], [380, 45]],  stroke=ORANGE_S, sw=2, style="dashed"))
+    # workflow callbacks
+    els.extend(labeled_arrow("a7", 640, 325, [[0, 0], [-190, -140]],
+        "workflow\ncallback", stroke=GREEN_S, style="dashed", font_color=MUTED))
+    els.extend(labeled_arrow("a8", 730, 325, [[0, 0], [100, 20]],
+        "workflow\ncallback", stroke=GREEN_S, style="dashed", font_color=MUTED))
+
+    # Legend
+    els.extend(legend_row("lg", 430, [
+        ("Frontend", BLUE_F, BLUE_S),
+        ("Backend", PURPLE_F, PURPLE_S),
+        ("Elastic", GREEN_F, GREEN_S),
+        ("Google / External", ORANGE_F, ORANGE_S),
+        ("MCP", TEAL_F, TEAL_S),
+    ]))
+
+    return dark_scene(els, 1060, 470)
+
+
+# =====================================================================
+# Diagram 2 — Elastic + Jina + Google Integration
+# =====================================================================
+
+def build_integration():
+    els = []
+    els.append(standalone_text("title", 150, 8,
+        "Elastic + Jina + Google -- Integration Architecture", 24, TEXT))
+
+    # User zone
+    els.append(rect("z_u", 10, 55, 170, 125, bg=BLUE_F, stroke=BLUE_S, sw=1, opacity=35))
+    els.append(standalone_text("z_u_t", 45, 62, "User Browser", 15, BLUE_S))
+    els.extend(labeled_rect("u1", 25, 90, 140, 35, "Upload Image",
+                            bg=BLUE_F, stroke=BLUE_S, font_size=14))
+    els.extend(labeled_rect("u2", 25, 135, 140, 35, "Chat / Plan Trip",
+                            bg=BLUE_F, stroke=BLUE_S, font_size=14))
+
+    # Jina zone
+    els.append(rect("z_j", 240, 50, 200, 145, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
+    els.append(standalone_text("z_j_t", 300, 57, "Jina AI", 18, ORANGE_S))
+    els.extend(labeled_rect("j1", 260, 85, 160, 50, "VLM (Vision)\nImage Analysis",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=14))
+    els.append(standalone_text("j_note", 265, 145, "Terrain description,\nconditions, scene", 13, MUTED))
+
+    # Elastic zone
+    els.append(rect("z_el", 500, 50, 250, 320, bg=GREEN_F, stroke=GREEN_S, sw=1, opacity=30))
+    els.append(standalone_text("z_el_t", 540, 57, "Elastic (Orchestrator)", 18, GREEN_S))
+    for i, lbl in enumerate(["Agent Builder\nTrip Planner Agent",
+                              "ground_conditions WF",
+                              "get_customer_profile WF",
+                              "product_search Tool",
+                              "get_user_affinity (ES|QL)"]):
+        y = 88 + i * 53
+        h = 48 if i == 0 else 40
+        els.extend(labeled_rect(f"el{i}", 520, y, 210, h, lbl,
+                                bg=GREEN_F, stroke=GREEN_S, font_size=14))
+
+    # GCP zone
+    els.append(rect("z_gcp", 810, 50, 250, 245, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
+    els.append(standalone_text("z_gcp_t", 850, 57, "Google Cloud (Vertex AI)", 18, ORANGE_S))
+    els.extend(labeled_rect("g1", 835, 90, 200, 50, "Gemini 2.0 Flash\n+ Google Search",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=14))
+    els.append(standalone_text("g1_note", 840, 148, "Real-time weather,\ntrail conditions", 13, MUTED))
+    els.extend(labeled_rect("g2", 835, 190, 200, 50, "Imagen 3\nProduct Visualization",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=14))
+    els.append(standalone_text("g2_note", 840, 248, "Scene generation,\nstyle reference", 13, MUTED))
+
+    # MCP zone
+    els.append(rect("z_mcp2", 810, 305, 250, 55, bg=TEAL_F, stroke=TEAL_S, sw=1, opacity=30))
+    els.extend(labeled_rect("mcp2", 835, 313, 200, 38, "MCP: CRM / Persona",
+                            bg=TEAL_F, stroke=TEAL_S, font_size=14))
+
+    # Arrows
+    els.extend(labeled_arrow("ia1", 165, 108, [[0, 0], [95, 0]], "photo",
+                             stroke=ORANGE_S, font_color=TEXT))
+    els.extend(labeled_arrow("ia2", 420, 110, [[0, 0], [100, 0]], "context",
+                             stroke=TEXT, font_color=MUTED))
+    els.extend(labeled_arrow("ia3", 165, 150, [[0, 0], [355, -35]], "SSE stream",
+                             stroke=TEXT, font_color=MUTED))
+    els.extend(labeled_arrow("ia4", 730, 175, [[0, 0], [105, -60]], "weather",
+                             stroke=ORANGE_S, font_color=TEXT))
+    els.extend(labeled_arrow("ia5", 730, 180, [[0, 0], [105, 35]], "image gen",
+                             stroke=ORANGE_S, font_color=TEXT, style="dashed"))
+    els.extend(labeled_arrow("ia6", 730, 235, [[0, 0], [105, 95]], "persona",
+                             stroke=TEAL_S, font_color=TEXT, style="dashed"))
+
+    # Data flow summary
+    els.append(standalone_text("flow_t", 10, 395, "Data Flow Summary", 18, TEXT))
+    for i, line in enumerate([
+        "1. User uploads photo -> Jina VLM analyzes terrain -> description injected into Agent context",
+        "2. Agent Builder orchestrates trip -> ground_conditions workflow -> Gemini + Google Search for live weather",
+        "3. Agent searches product catalog (ELSER semantic) -> recommends gear from Wayfinder catalog only",
+        "4. User clicks Visualize -> Imagen 3 generates product-in-scene preview with style reference",
+    ]):
+        els.append(standalone_text(f"flow{i}", 10, 425 + i * 22, line, 14, MUTED))
+
+    els.extend(legend_row("lg2", 530, [
+        ("Jina / Google", ORANGE_F, ORANGE_S),
+        ("Elastic", GREEN_F, GREEN_S),
+        ("MCP", TEAL_F, TEAL_S),
+        ("User", BLUE_F, BLUE_S),
+    ]))
+
+    return dark_scene(els, 1090, 570)
+
+
+# =====================================================================
+# Diagram 3 — Vision Pipeline (Detailed)
+# =====================================================================
+
+def build_vision_pipeline():
+    els = []
+    els.append(standalone_text("title", 310, 8,
+        "Vision Pipeline -- Detailed Flow", 24, TEXT))
+
+    # Phase 1
+    els.append(standalone_text("p1", 10, 48, "Phase 1: Image Analysis (Jina VLM)", 18, ORANGE_S))
+    boxes1 = [
+        ("v_usr", 10, 80, 130, 50, "User Selects\nPhoto", BLUE_F, BLUE_S),
+        ("v_rsz", 200, 80, 140, 50, "Frontend Resize\nmax 2048px", BLUE_F, BLUE_S),
+        ("v_ana", 400, 80, 155, 50, "Backend\n/vision/analyze", PURPLE_F, PURPLE_S),
+        ("v_jina", 615, 80, 150, 50, "Jina VLM API\nScene Analysis", ORANGE_F, ORANGE_S),
+        ("v_ctx", 825, 75, 170, 60, "[Vision Context:...]\nInjected into\nAgent prompt", GREEN_F, GREEN_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes1:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=14))
+    els.append(arrow_el("va1", 140, 105, [[0, 0], [60, 0]], stroke=TEXT))
+    els.extend(labeled_arrow("va2", 340, 105, [[0, 0], [60, 0]], "base64",
+                             stroke=TEXT, font_color=MUTED))
+    els.append(arrow_el("va3", 555, 105, [[0, 0], [60, 0]], stroke=ORANGE_S))
+    els.append(arrow_el("va4", 765, 105, [[0, 0], [60, 0]], stroke=GREEN_S))
+
+    # Phase 2
+    els.append(standalone_text("p2", 10, 155,
+        "Phase 2: Weather Grounding (Google Gemini + Search)", 18, GREEN_S))
+    boxes2 = [
+        ("v_ag", 10, 190, 155, 50, "Agent Builder\ncalls tool", GREEN_F, GREEN_S),
+        ("v_wf", 225, 190, 175, 50, "ground_conditions\nWorkflow", GREEN_F, GREEN_S),
+        ("v_gep", 470, 190, 155, 50, "Backend\n/vision/ground", PURPLE_F, PURPLE_S),
+        ("v_gem", 695, 185, 175, 60, "Gemini 2.0 Flash\n+ Google Search\nGrounding", ORANGE_F, ORANGE_S),
+        ("v_wout", 940, 190, 110, 50, "Weather\nCard in UI", GREEN_F, GREEN_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes2:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=14))
+    els.append(arrow_el("va5", 165, 215, [[0, 0], [60, 0]], stroke=TEXT))
+    els.extend(labeled_arrow("va6", 400, 215, [[0, 0], [70, 0]], "HTTP",
+                             stroke=TEXT, font_color=MUTED))
+    els.append(arrow_el("va7", 625, 215, [[0, 0], [70, 0]], stroke=ORANGE_S))
+    els.append(arrow_el("va8", 870, 215, [[0, 0], [70, 0]], stroke=GREEN_S))
+
+    # Phase 3
+    els.append(standalone_text("p3", 10, 268,
+        "Phase 3: Product Visualization (Imagen 3)", 18, PURPLE_S))
+    els.extend(labeled_rect("v_btn", 10, 305, 130, 50, "User Clicks\n\"Visualize\"",
+                            bg=BLUE_F, stroke=BLUE_S, font_size=14))
+    els.extend(labeled_rect("v_pep", 200, 305, 155, 50, "Backend\n/vision/preview",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=14))
+    els.append(arrow_el("va9", 140, 330, [[0, 0], [60, 0]], stroke=TEXT))
+
+    els.extend(labeled_rect("v_p1", 440, 295, 200, 55,
+        "Pass 1: Scene Generation\nImagen text-to-image\nfrom Jina description",
+        bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
+    els.append(arrow_el("va10", 355, 320, [[0, 0], [85, -15]], stroke=ORANGE_S))
+
+    els.extend(labeled_rect("v_p2", 710, 290, 220, 65,
+        "Pass 2: Product Composite\n+ Enhanced Prompting\n+ Style Reference (catalog img)\n+ Wearable Detection",
+        bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
+    els.append(arrow_el("va11", 640, 322, [[0, 0], [70, 0]], stroke=ORANGE_S))
+
+    els.extend(labeled_rect("v_fb", 440, 370, 200, 45,
+        "Fallback: Single-pass\ncomposite generation",
+        bg=RED_F, stroke=RED_S, font_size=13))
+    els.append(arrow_el("va_fb", 355, 340, [[0, 0], [85, 40]],
+                        stroke=RED_S, sw=2, style="dashed"))
+
+    els.extend(labeled_rect("v_out", 1000, 300, 120, 50,
+        "Preview Image\nin UI + lightbox",
+        bg=BLUE_F, stroke=BLUE_S, font_size=14))
+    els.append(arrow_el("va12", 930, 322, [[0, 0], [70, 0]], stroke=TEXT))
+
+    # Insight cards
+    els.append(standalone_text("p4", 10, 440, "Insight Cards (UI)", 18, TEXT))
+    els.extend(labeled_rect("ic1", 10, 470, 195, 45, "Jina VLM Description\nClickable info card",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
+    els.extend(labeled_rect("ic2", 225, 470, 195, 45, "Weather Grounding\nFormatted + emoji",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
+    els.extend(labeled_rect("ic3", 440, 470, 195, 45, "Show Prompt\nImagen text prompt",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
+
+    els.extend(legend_row("lg3", 540, [
+        ("Frontend", BLUE_F, BLUE_S),
+        ("Backend", PURPLE_F, PURPLE_S),
+        ("External API", ORANGE_F, ORANGE_S),
+        ("Elastic", GREEN_F, GREEN_S),
+        ("Fallback", RED_F, RED_S),
+    ]))
+
+    return dark_scene(els, 1150, 580)
+
+
+# =====================================================================
+# Diagram 4 — Security and Authentication
+# =====================================================================
+
+def build_security():
+    els = []
+    els.append(standalone_text("title", 260, 8,
+        "Security and Authentication Flow", 24, TEXT))
+
+    # Section 1: IAP
+    els.append(standalone_text("s1", 10, 50,
+        "1. User Access (Cloud Run + IAP)", 18, BLUE_S))
+    els.extend(labeled_rect("s1_u", 10, 85, 130, 45, "User Browser",
+                            bg=BLUE_F, stroke=BLUE_S))
+    els.extend(labeled_rect("s1_iap", 210, 80, 175, 55, "Google IAP\n@elastic.co SSO",
+                            bg=ORANGE_F, stroke=ORANGE_S))
+    els.extend(labeled_rect("s1_fe", 460, 85, 155, 45, "Frontend (React)",
+                            bg=BLUE_F, stroke=BLUE_S))
+    els.append(arrow_el("s1a1", 140, 107, [[0, 0], [70, 0]], stroke=TEXT))
+    els.extend(labeled_arrow("s1a2", 385, 107, [[0, 0], [75, 0]], "verified",
+                             stroke=GREEN_S, font_color=MUTED))
+    els.append(standalone_text("s1_note", 210, 142,
+        "Only @elastic.co Google accounts can access", 13, MUTED))
+
+    # Section 2: API Key
+    els.append(standalone_text("s2", 10, 175,
+        "2. Frontend -> Backend (API Key)", 18, PURPLE_S))
+    els.extend(labeled_rect("s2_fe", 10, 210, 155, 45, "Frontend",
+                            bg=BLUE_F, stroke=BLUE_S))
+    els.extend(labeled_rect("s2_mw", 270, 205, 175, 55, "ApiKeyMiddleware\nvalidates header",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=14))
+    els.extend(labeled_rect("s2_rt", 520, 210, 145, 45, "API Routers",
+                            bg=PURPLE_F, stroke=PURPLE_S))
+    els.extend(labeled_arrow("s2a1", 165, 232, [[0, 0], [105, 0]], "X-Api-Key",
+                             stroke=TEXT, font_color=PINK))
+    els.extend(labeled_arrow("s2a2", 445, 232, [[0, 0], [75, 0]], "pass",
+                             stroke=GREEN_S, font_color=MUTED))
+    els.append(standalone_text("s2_n1", 270, 266,
+        "WAYFINDER_API_KEY env var; skipped if unset (local dev)", 13, MUTED))
+    els.append(standalone_text("s2_n2", 270, 283,
+        "VITE_WAYFINDER_API_KEY baked into frontend at build time", 13, MUTED))
+
+    # Section 3: Workflow -> Backend
+    els.append(standalone_text("s3", 10, 310,
+        "3. Workflow -> Backend / MCP (API Key)", 18, GREEN_S))
+    els.extend(labeled_rect("s3_wf", 10, 345, 175, 50, "Elastic Workflow\n(from Cloud)",
+                            bg=GREEN_F, stroke=GREEN_S, font_size=14))
+    els.extend(labeled_rect("s3_mw", 285, 345, 170, 50, "Backend / MCP\nApiKeyMiddleware",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=14))
+    els.extend(labeled_arrow("s3a1", 185, 370, [[0, 0], [100, 0]], "X-Api-Key",
+                             stroke=TEXT, font_color=PINK))
+    els.append(standalone_text("s3_n", 285, 402,
+        "Key stored as workflow const (not in code/git)", 13, MUTED))
+
+    # Section 4: Backend -> ES
+    els.append(standalone_text("s4", 10, 430,
+        "4. Backend -> Elastic (ES API Key)", 18, GREEN_S))
+    els.extend(labeled_rect("s4_be", 10, 465, 155, 45, "Backend",
+                            bg=PURPLE_F, stroke=PURPLE_S))
+    els.extend(labeled_rect("s4_es", 285, 465, 170, 45, "ES / Kibana / Agent",
+                            bg=GREEN_F, stroke=GREEN_S))
+    els.extend(labeled_arrow("s4a1", 165, 487, [[0, 0], [120, 0]], "ApiKey header",
+                             stroke=TEXT, font_color=PINK))
+
+    # Section 5: External APIs
+    els.append(standalone_text("s5", 530, 310,
+        "5. Backend -> External APIs", 18, ORANGE_S))
+    els.extend(labeled_rect("s5_be", 530, 345, 130, 45, "Backend",
+                            bg=PURPLE_F, stroke=PURPLE_S))
+    els.extend(labeled_rect("s5_j", 745, 335, 155, 38, "Jina VLM",
+                            bg=ORANGE_F, stroke=ORANGE_S))
+    els.extend(labeled_rect("s5_v", 745, 385, 155, 38, "Vertex AI",
+                            bg=ORANGE_F, stroke=ORANGE_S))
+    els.append(arrow_el("s5a1", 660, 360, [[0, 0], [85, -10]], stroke=ORANGE_S))
+    els.append(arrow_el("s5a2", 660, 375, [[0, 0], [85, 20]], stroke=ORANGE_S))
+    els.append(standalone_text("s5_j_a", 750, 376, "Bearer JINA_API_KEY", 13, PINK))
+    els.append(standalone_text("s5_v_a", 750, 426, "GCP Service Account\nOAuth2 token", 13, PINK))
+
+    # Section 6: Credential priority
+    els.append(standalone_text("s6", 530, 470,
+        "6. Credential Manager (Priority)", 18, TEXT))
+    els.append(standalone_text("s6_1", 530, 498,
+        "1st: UI Settings (in-memory, runtime override)", 14, TEXT))
+    els.append(standalone_text("s6_2", 530, 518,
+        "2nd: Environment variables (.env file)", 14, MUTED))
+    els.append(standalone_text("s6_3", 530, 538,
+        "3rd: ADC (Application Default Credentials)", 14, MUTED))
+
+    els.extend(legend_row("lg4", 570, [
+        ("Frontend", BLUE_F, BLUE_S),
+        ("Backend", PURPLE_F, PURPLE_S),
+        ("Elastic", GREEN_F, GREEN_S),
+        ("External / Google", ORANGE_F, ORANGE_S),
+    ]))
+    els.append(standalone_text("lg4_pink", 10, 595,
+        "Pink text = authentication credentials / headers", 13, PINK))
+
+    return dark_scene(els, 940, 620)
+
+
+# =====================================================================
+# Diagram 5 — Cloud Run Deployment
+# =====================================================================
+
+def build_cloudrun():
+    els = []
+    els.append(standalone_text("title", 260, 8,
+        "Cloud Run Deployment Architecture", 24, TEXT))
+
+    # User
+    els.extend(labeled_rect("cr_u", 10, 80, 130, 55, "User\n@elastic.co",
+                            bg=BLUE_F, stroke=BLUE_S))
+
+    # GCP zone
+    els.append(rect("z_gcp2", 210, 45, 560, 440, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=20))
+    els.append(standalone_text("z_gcp2_t", 220, 52,
+        "Google Cloud (elastic-customer-eng / us-central1)", 16, ORANGE_S))
+
+    # IAP
+    els.extend(labeled_rect("cr_iap", 230, 80, 165, 50, "Identity-Aware\nProxy (IAP)",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=15))
+    els.append(arrow_el("cra0", 140, 107, [[0, 0], [90, 0]], stroke=TEXT))
+
+    # Cloud Run zone
+    els.append(rect("z_cr", 460, 70, 290, 265, bg=PURPLE_F, stroke=PURPLE_S, sw=1, opacity=25))
+    els.append(standalone_text("z_cr_t", 520, 77, "Cloud Run Services", 16, PURPLE_S))
+    els.extend(labeled_arrow("cra1", 395, 105, [[0, 0], [65, 0]], "SSO OK",
+                             stroke=GREEN_S, font_color=MUTED))
+
+    els.extend(labeled_rect("cr_fe", 480, 105, 175, 50, "Frontend\nnginx + React",
+                            bg=BLUE_F, stroke=BLUE_S, font_size=15))
+    els.extend(labeled_rect("cr_be", 480, 175, 175, 50, "Backend\nFastAPI",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=15))
+    els.extend(labeled_rect("cr_mcp", 480, 245, 175, 50, "MCP Server\nCRM / Persona",
+                            bg=TEAL_F, stroke=TEAL_S, font_size=15))
+
+    els.extend(labeled_arrow("cra2", 567, 155, [[0, 0], [0, 20]], "X-Api-Key",
+                             stroke=TEXT, font_color=PINK, font_size=12))
+    els.extend(labeled_arrow("cra3", 567, 225, [[0, 0], [0, 20]], "X-Api-Key",
+                             stroke=TEXT, font_color=PINK, font_size=12))
+
+    # Artifact Registry
+    els.extend(labeled_rect("cr_ar", 680, 105, 60, 190, "Artifact\nRegistry",
+                            bg=PURPLE_F, stroke=PURPLE_S, sw=1, opacity=40, font_size=12))
+
+    # Vertex AI zone
+    els.append(rect("z_vtx", 230, 355, 240, 120, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
+    els.append(standalone_text("z_vtx_t", 290, 362, "Vertex AI APIs", 16, ORANGE_S))
+    els.extend(labeled_rect("cr_gem", 250, 390, 200, 35, "Gemini + Google Search",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=14))
+    els.extend(labeled_rect("cr_img", 250, 435, 200, 35, "Imagen 3",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=14))
+    els.extend(labeled_arrow("cra4", 480, 210, [[0, 0], [-110, 190]], "GCP SA",
+                             stroke=ORANGE_S, style="dashed", font_color=MUTED))
+
+    # Elastic Cloud zone
+    els.append(rect("z_esc", 830, 45, 240, 280, bg=GREEN_F, stroke=GREEN_S, sw=1, opacity=30))
+    els.append(standalone_text("z_esc_t", 890, 52, "Elastic Cloud", 16, GREEN_S))
+    for i, lbl in enumerate(["Elasticsearch 9.x", "Kibana",
+                              "Agent Builder", "Workflows"]):
+        els.extend(labeled_rect(f"esc{i}", 855, 85 + i * 55, 195, 38, lbl,
+                                bg=GREEN_F, stroke=GREEN_S, font_size=15))
+
+    els.extend(labeled_arrow("cra5", 655, 195, [[0, 0], [200, -85]], "ES API Key",
+                             stroke=GREEN_S, font_color=MUTED))
+    els.extend(labeled_arrow("cra6", 655, 200, [[0, 0], [200, 10]], "SSE stream",
+                             stroke=GREEN_S, font_color=MUTED))
+    els.extend(labeled_arrow("cra7", 855, 265, [[0, 0], [-200, -50]], "HTTP callback",
+                             stroke=GREEN_S, style="dashed", font_color=MUTED))
+    els.extend(labeled_arrow("cra8", 855, 275, [[0, 0], [-200, 0]], "HTTP callback",
+                             stroke=TEAL_S, style="dashed", font_color=MUTED))
+
+    # Jina external
+    els.extend(labeled_rect("cr_jina", 10, 175, 165, 45, "Jina VLM API\n(External)",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=15))
+    els.extend(labeled_arrow("cra9", 480, 195, [[0, 0], [-305, 0]], "Bearer API Key",
+                             stroke=ORANGE_S, style="dashed", font_color=MUTED))
+
+    els.extend(legend_row("lg5", 500, [
+        ("Frontend", BLUE_F, BLUE_S),
+        ("Backend / Infra", PURPLE_F, PURPLE_S),
+        ("Elastic Cloud", GREEN_F, GREEN_S),
+        ("Google / External", ORANGE_F, ORANGE_S),
+        ("MCP", TEAL_F, TEAL_S),
+    ]))
+    els.append(standalone_text("lg5_note", 10, 525,
+        "Dashed arrows = external API calls  |  Pink text = auth credentials", 13, MUTED))
+
+    return dark_scene(els, 1100, 550)
 
 
 # ── Render & Save ────────────────────────────────────────────────────
@@ -200,26 +622,32 @@ def save_and_render(name, scene_data, output_dir):
 
     body = json.dumps(scene_data)
 
-    # Render SVG via kroki.io (expects text/plain for Excalidraw; only SVG supported)
-    for fmt in ["svg"]:
-        url = f"https://kroki.io/excalidraw/{fmt}"
-        resp = requests.post(url, headers={"Content-Type": "text/plain"}, data=body)
-        if resp.status_code == 200:
-            out_path = os.path.join(output_dir, f"{name}.{fmt}")
-            with open(out_path, "wb") as f:
-                f.write(resp.content)
-            print(f"  Saved {out_path} ({len(resp.content)} bytes)")
-        else:
-            print(f"  ERROR rendering {fmt}: {resp.status_code} - {resp.text[:200]}")
+    # Render SVG via kroki.io
+    url = "https://kroki.io/excalidraw/svg"
+    resp = requests.post(url, headers={"Content-Type": "text/plain"}, data=body)
+    if resp.status_code == 200:
+        out_path = os.path.join(output_dir, f"{name}.svg")
+        with open(out_path, "wb") as f:
+            f.write(resp.content)
+        print(f"  Saved {out_path} ({len(resp.content):,} bytes)")
+    else:
+        print(f"  ERROR rendering SVG: {resp.status_code} - {resp.text[:200]}")
 
 
 if __name__ == "__main__":
     output_dir = os.path.join(os.path.dirname(__file__), "..", "docs", "images")
 
-    print("Building Vision Pipeline Sequence diagram...")
-    save_and_render("vision_pipeline_sequence", build_sequence_diagram(), output_dir)
+    diagrams = [
+        ("arch_high_level",   "High-Level Architecture",          build_high_level),
+        ("arch_integration",  "Elastic + Jina + Google Integration", build_integration),
+        ("arch_vision_pipeline", "Vision Pipeline (Detailed)",     build_vision_pipeline),
+        ("arch_security",     "Security and Authentication",       build_security),
+        ("arch_cloud_run",    "Cloud Run Deployment",              build_cloudrun),
+    ]
 
-    print("\nBuilding Credential Strategy Flow diagram...")
-    save_and_render("credential_strategy_flow", build_credential_diagram(), output_dir)
+    for name, label, builder in diagrams:
+        print(f"Building {label}...")
+        save_and_render(name, builder(), output_dir)
+        print()
 
-    print("\nDone!")
+    print("Done! All diagrams saved to docs/images/")
