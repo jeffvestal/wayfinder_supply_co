@@ -241,7 +241,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full Cloud Run deployment detai
 
 All major components and their connections — color-coded by responsibility.
 
-![High-Level Architecture](docs/images/arch_high_level.svg)
+![High-Level Architecture](docs/images/arch_high_level.png)
 
 | Zone | Color | Components |
 |------|-------|------------|
@@ -255,7 +255,7 @@ All major components and their connections — color-coded by responsibility.
 
 How the three key platforms work together to power intelligent trip planning.
 
-![Integration Architecture](docs/images/arch_integration.svg)
+![Integration Architecture](docs/images/arch_integration.png)
 
 **Data flow:**
 1. User uploads photo → **Jina VLM** analyzes terrain/conditions → description injected into Agent context
@@ -267,7 +267,7 @@ How the three key platforms work together to power intelligent trip planning.
 
 Step-by-step flow: image analysis, weather grounding, and product visualization.
 
-![Vision Pipeline](docs/images/arch_vision_pipeline.svg)
+![Vision Pipeline](docs/images/arch_vision_pipeline.png)
 
 **Phase 1 — Image Analysis (Jina VLM):** User selects photo → Frontend resizes (max 2048px) → Backend `/vision/analyze` → Jina VLM API → `[Vision Context: ...]` injected into Agent prompt
 
@@ -282,7 +282,7 @@ Step-by-step flow: image analysis, weather grounding, and product visualization.
 
 All authentication mechanisms across the system.
 
-![Security Flow](docs/images/arch_security.svg)
+![Security Flow](docs/images/arch_security.png)
 
 | Layer | Mechanism | Details |
 |-------|-----------|---------|
@@ -298,7 +298,7 @@ All authentication mechanisms across the system.
 
 GCP infrastructure for the "fully cloud" Elastic + Google demo scenario.
 
-![Cloud Run Deployment](docs/images/arch_cloud_run.svg)
+![Cloud Run Deployment](docs/images/arch_cloud_run.png)
 
 Three Cloud Run services in Google Cloud (`elastic-customer-eng / us-central1`), with IAP protecting the frontend (@elastic.co SSO) and a shared API key authenticating workflow HTTP callbacks from Elastic Cloud to backend/MCP.
 

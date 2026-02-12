@@ -610,8 +610,21 @@ def build_cloudrun():
 
 # ── Render & Save ────────────────────────────────────────────────────
 
+def svg_to_png(svg_path, png_path, scale=2):
+    """Convert SVG to PNG using cairosvg (2x scale for retina clarity)."""
+    try:
+        import cairosvg
+        cairosvg.svg2png(url=svg_path, write_to=png_path, scale=scale)
+        size = os.path.getsize(png_path)
+        print(f"  Saved {png_path} ({size:,} bytes)")
+    except ImportError:
+        print("  SKIP PNG: cairosvg not installed (pip install cairosvg)")
+    except Exception as e:
+        print(f"  ERROR PNG: {e}")
+
+
 def save_and_render(name, scene_data, output_dir):
-    """Save .excalidraw file and render via kroki.io"""
+    """Save .excalidraw file, render SVG via kroki.io, convert to PNG."""
     os.makedirs(output_dir, exist_ok=True)
 
     # Save .excalidraw JSON
@@ -623,13 +636,17 @@ def save_and_render(name, scene_data, output_dir):
     body = json.dumps(scene_data)
 
     # Render SVG via kroki.io
+    svg_path = os.path.join(output_dir, f"{name}.svg")
     url = "https://kroki.io/excalidraw/svg"
     resp = requests.post(url, headers={"Content-Type": "text/plain"}, data=body)
     if resp.status_code == 200:
-        out_path = os.path.join(output_dir, f"{name}.svg")
-        with open(out_path, "wb") as f:
+        with open(svg_path, "wb") as f:
             f.write(resp.content)
-        print(f"  Saved {out_path} ({len(resp.content):,} bytes)")
+        print(f"  Saved {svg_path} ({len(resp.content):,} bytes)")
+
+        # Convert SVG -> PNG (2x for retina)
+        png_path = os.path.join(output_dir, f"{name}.png")
+        svg_to_png(svg_path, png_path)
     else:
         print(f"  ERROR rendering SVG: {resp.status_code} - {resp.text[:200]}")
 
