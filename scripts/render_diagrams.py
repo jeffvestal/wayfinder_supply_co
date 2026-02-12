@@ -5,7 +5,8 @@ All diagrams use a dark background (#1e1e2e) with color-coded zones:
   Blue   (#4a9eed / #1e3a5f) — Frontend
   Purple (#8b5cf6 / #2d1b69) — Backend
   Green  (#22c55e / #1a4d2e) — Elastic Stack
-  Orange (#f59e0b / #5c3d1a) — Google / External APIs
+  Orange (#f59e0b / #5c3d1a) — Google Cloud (Vertex AI)
+  Yellow (#facc15 / #4d4510) — Jina AI (external, jina.ai)
   Teal   (#06b6d4 / #1a4d4d) — MCP Server
   Pink   (#ec4899)           — Auth credentials
   Red    (#ef4444 / #5c1a1a) — Fallback / Error
@@ -29,6 +30,7 @@ BLUE_S   = "#4a9eed";  BLUE_F   = "#1e3a5f"
 PURPLE_S = "#8b5cf6";  PURPLE_F = "#2d1b69"
 GREEN_S  = "#22c55e";   GREEN_F  = "#1a4d2e"
 ORANGE_S = "#f59e0b";  ORANGE_F = "#5c3d1a"
+YELLOW_S = "#facc15";  YELLOW_F = "#4d4510"   # Jina AI
 TEAL_S   = "#06b6d4";  TEAL_F   = "#1a4d4d"
 PINK     = "#ec4899"
 RED_S    = "#ef4444";   RED_F    = "#5c1a1a"
@@ -169,8 +171,13 @@ def build_high_level():
     els.append(rect("z_es", 530, 55, 220, 350, bg=GREEN_F, stroke=GREEN_S, sw=1, opacity=30))
     els.append(standalone_text("z_es_t", 585, 62, "Elastic Stack", 16, GREEN_S))
 
-    els.append(rect("z_ext", 810, 55, 220, 210, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
-    els.append(standalone_text("z_ext_t", 830, 62, "Google / External APIs", 16, ORANGE_S))
+    # Jina AI zone (separate from Google — runs on jina.ai)
+    els.append(rect("z_jina", 810, 55, 220, 70, bg=YELLOW_F, stroke=YELLOW_S, sw=1, opacity=30))
+    els.append(standalone_text("z_jina_t", 875, 62, "Jina AI", 16, YELLOW_S))
+
+    # Google Cloud zone (Vertex AI only)
+    els.append(rect("z_ext", 810, 135, 220, 140, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
+    els.append(standalone_text("z_ext_t", 835, 142, "Google Cloud (Vertex AI)", 16, ORANGE_S))
 
     els.append(rect("z_mcp", 810, 290, 220, 115, bg=TEAL_F, stroke=TEAL_S, sw=1, opacity=30))
     els.append(standalone_text("z_mcp_t", 870, 297, "MCP Server", 16, TEAL_S))
@@ -196,9 +203,13 @@ def build_high_level():
         els.extend(labeled_rect(f"es{i}", 550, y, 180, 45, lbl,
                                 bg=GREEN_F, stroke=GREEN_S, sw=2, font_size=15))
 
-    # External boxes
-    for i, lbl in enumerate(["Jina VLM", "Gemini + Grounding", "Imagen 3"]):
-        y = 90 + i * 58
+    # Jina AI box
+    els.extend(labeled_rect("ext_jina", 830, 85, 180, 45, "Jina VLM",
+                            bg=YELLOW_F, stroke=YELLOW_S, sw=2, font_size=15))
+
+    # Google Cloud boxes
+    for i, lbl in enumerate(["Gemini + Grounding", "Imagen 3"]):
+        y = 165 + i * 58
         els.extend(labeled_rect(f"ext{i}", 830, y, 180, 45, lbl,
                                 bg=ORANGE_F, stroke=ORANGE_S, sw=2, font_size=15))
 
@@ -215,10 +226,11 @@ def build_high_level():
                              stroke=TEXT, font_color=MUTED))
     els.extend(labeled_arrow("a3", 450, 235, [[0, 0], [100, 0]], "SSE Proxy",
                              stroke=TEXT, font_color=MUTED))
-    # backend -> external (dashed)
-    els.append(arrow_el("a4", 450, 155, [[0, 0], [380, -45]], stroke=ORANGE_S, sw=2, style="dashed"))
-    els.append(arrow_el("a5", 450, 165, [[0, 0], [380, 0]],   stroke=ORANGE_S, sw=2, style="dashed"))
-    els.append(arrow_el("a6", 450, 175, [[0, 0], [380, 45]],  stroke=ORANGE_S, sw=2, style="dashed"))
+    # backend -> Jina (dashed, yellow)
+    els.append(arrow_el("a4", 450, 155, [[0, 0], [380, -45]], stroke=YELLOW_S, sw=2, style="dashed"))
+    # backend -> Google (dashed, orange)
+    els.append(arrow_el("a5", 450, 165, [[0, 0], [380, 25]],  stroke=ORANGE_S, sw=2, style="dashed"))
+    els.append(arrow_el("a6", 450, 175, [[0, 0], [380, 50]],  stroke=ORANGE_S, sw=2, style="dashed"))
     # workflow callbacks
     els.extend(labeled_arrow("a7", 640, 325, [[0, 0], [-190, -140]],
         "workflow\ncallback", stroke=GREEN_S, style="dashed", font_color=MUTED))
@@ -230,7 +242,8 @@ def build_high_level():
         ("Frontend", BLUE_F, BLUE_S),
         ("Backend", PURPLE_F, PURPLE_S),
         ("Elastic", GREEN_F, GREEN_S),
-        ("Google / External", ORANGE_F, ORANGE_S),
+        ("Google Cloud", ORANGE_F, ORANGE_S),
+        ("Jina AI", YELLOW_F, YELLOW_S),
         ("MCP", TEAL_F, TEAL_S),
     ]))
 
@@ -254,11 +267,11 @@ def build_integration():
     els.extend(labeled_rect("u2", 25, 135, 140, 35, "Chat / Plan Trip",
                             bg=BLUE_F, stroke=BLUE_S, font_size=14))
 
-    # Jina zone
-    els.append(rect("z_j", 240, 50, 200, 145, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
-    els.append(standalone_text("z_j_t", 300, 57, "Jina AI", 18, ORANGE_S))
+    # Jina zone (jina.ai — separate from Google Cloud)
+    els.append(rect("z_j", 240, 50, 200, 145, bg=YELLOW_F, stroke=YELLOW_S, sw=1, opacity=30))
+    els.append(standalone_text("z_j_t", 300, 57, "Jina AI", 18, YELLOW_S))
     els.extend(labeled_rect("j1", 260, 85, 160, 50, "VLM (Vision)\nImage Analysis",
-                            bg=ORANGE_F, stroke=ORANGE_S, font_size=14))
+                            bg=YELLOW_F, stroke=YELLOW_S, font_size=14))
     els.append(standalone_text("j_note", 265, 145, "Terrain description,\nconditions, scene", 13, MUTED))
 
     # Elastic zone
@@ -291,7 +304,7 @@ def build_integration():
 
     # Arrows
     els.extend(labeled_arrow("ia1", 165, 108, [[0, 0], [95, 0]], "photo",
-                             stroke=ORANGE_S, font_color=TEXT))
+                             stroke=YELLOW_S, font_color=TEXT))
     els.extend(labeled_arrow("ia2", 420, 110, [[0, 0], [100, 0]], "context",
                              stroke=TEXT, font_color=MUTED))
     els.extend(labeled_arrow("ia3", 165, 150, [[0, 0], [355, -35]], "SSE stream",
@@ -306,7 +319,7 @@ def build_integration():
     # Data flow summary
     els.append(standalone_text("flow_t", 10, 395, "Data Flow Summary", 18, TEXT))
     for i, line in enumerate([
-        "1. User uploads photo -> Jina VLM analyzes terrain -> description injected into Agent context",
+        "1. User uploads photo -> Jina VLM (jina.ai) analyzes terrain -> description injected into Agent context",
         "2. Agent Builder orchestrates trip -> ground_conditions workflow -> Gemini + Google Search for live weather",
         "3. Agent searches product catalog (ELSER semantic) -> recommends gear from Wayfinder catalog only",
         "4. User clicks Visualize -> Imagen 3 generates product-in-scene preview with style reference",
@@ -314,7 +327,8 @@ def build_integration():
         els.append(standalone_text(f"flow{i}", 10, 425 + i * 22, line, 14, MUTED))
 
     els.extend(legend_row("lg2", 530, [
-        ("Jina / Google", ORANGE_F, ORANGE_S),
+        ("Jina AI", YELLOW_F, YELLOW_S),
+        ("Google Cloud", ORANGE_F, ORANGE_S),
         ("Elastic", GREEN_F, GREEN_S),
         ("MCP", TEAL_F, TEAL_S),
         ("User", BLUE_F, BLUE_S),
@@ -333,12 +347,12 @@ def build_vision_pipeline():
         "Vision Pipeline -- Detailed Flow", 24, TEXT))
 
     # Phase 1
-    els.append(standalone_text("p1", 10, 48, "Phase 1: Image Analysis (Jina VLM)", 18, ORANGE_S))
+    els.append(standalone_text("p1", 10, 48, "Phase 1: Image Analysis (Jina VLM)", 18, YELLOW_S))
     boxes1 = [
         ("v_usr", 10, 80, 130, 50, "User Selects\nPhoto", BLUE_F, BLUE_S),
         ("v_rsz", 200, 80, 140, 50, "Frontend Resize\nmax 2048px", BLUE_F, BLUE_S),
         ("v_ana", 400, 80, 155, 50, "Backend\n/vision/analyze", PURPLE_F, PURPLE_S),
-        ("v_jina", 615, 80, 150, 50, "Jina VLM API\nScene Analysis", ORANGE_F, ORANGE_S),
+        ("v_jina", 615, 80, 150, 50, "Jina VLM API\nScene Analysis", YELLOW_F, YELLOW_S),
         ("v_ctx", 825, 75, 170, 60, "[Vision Context:...]\nInjected into\nAgent prompt", GREEN_F, GREEN_S),
     ]
     for id, x, y, w, h, lbl, bg, stroke in boxes1:
@@ -346,7 +360,7 @@ def build_vision_pipeline():
     els.append(arrow_el("va1", 140, 105, [[0, 0], [60, 0]], stroke=TEXT))
     els.extend(labeled_arrow("va2", 340, 105, [[0, 0], [60, 0]], "base64",
                              stroke=TEXT, font_color=MUTED))
-    els.append(arrow_el("va3", 555, 105, [[0, 0], [60, 0]], stroke=ORANGE_S))
+    els.append(arrow_el("va3", 555, 105, [[0, 0], [60, 0]], stroke=YELLOW_S))
     els.append(arrow_el("va4", 765, 105, [[0, 0], [60, 0]], stroke=GREEN_S))
 
     # Phase 2
@@ -400,7 +414,7 @@ def build_vision_pipeline():
     # Insight cards
     els.append(standalone_text("p4", 10, 440, "Insight Cards (UI)", 18, TEXT))
     els.extend(labeled_rect("ic1", 10, 470, 195, 45, "Jina VLM Description\nClickable info card",
-                            bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
+                            bg=YELLOW_F, stroke=YELLOW_S, font_size=13))
     els.extend(labeled_rect("ic2", 225, 470, 195, 45, "Weather Grounding\nFormatted + emoji",
                             bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
     els.extend(labeled_rect("ic3", 440, 470, 195, 45, "Show Prompt\nImagen text prompt",
@@ -409,7 +423,8 @@ def build_vision_pipeline():
     els.extend(legend_row("lg3", 540, [
         ("Frontend", BLUE_F, BLUE_S),
         ("Backend", PURPLE_F, PURPLE_S),
-        ("External API", ORANGE_F, ORANGE_S),
+        ("Jina AI", YELLOW_F, YELLOW_S),
+        ("Google Cloud", ORANGE_F, ORANGE_S),
         ("Elastic", GREEN_F, GREEN_S),
         ("Fallback", RED_F, RED_S),
     ]))
@@ -486,11 +501,11 @@ def build_security():
         "5. Backend -> External APIs", 18, ORANGE_S))
     els.extend(labeled_rect("s5_be", 530, 345, 130, 45, "Backend",
                             bg=PURPLE_F, stroke=PURPLE_S))
-    els.extend(labeled_rect("s5_j", 745, 335, 155, 38, "Jina VLM",
-                            bg=ORANGE_F, stroke=ORANGE_S))
+    els.extend(labeled_rect("s5_j", 745, 330, 155, 48, "Jina VLM\n(jina.ai)",
+                            bg=YELLOW_F, stroke=YELLOW_S))
     els.extend(labeled_rect("s5_v", 745, 385, 155, 38, "Vertex AI",
                             bg=ORANGE_F, stroke=ORANGE_S))
-    els.append(arrow_el("s5a1", 660, 360, [[0, 0], [85, -10]], stroke=ORANGE_S))
+    els.append(arrow_el("s5a1", 660, 360, [[0, 0], [85, -10]], stroke=YELLOW_S))
     els.append(arrow_el("s5a2", 660, 375, [[0, 0], [85, 20]], stroke=ORANGE_S))
     els.append(standalone_text("s5_j_a", 750, 376, "Bearer JINA_API_KEY", 13, PINK))
     els.append(standalone_text("s5_v_a", 750, 426, "GCP Service Account\nOAuth2 token", 13, PINK))
@@ -509,7 +524,8 @@ def build_security():
         ("Frontend", BLUE_F, BLUE_S),
         ("Backend", PURPLE_F, PURPLE_S),
         ("Elastic", GREEN_F, GREEN_S),
-        ("External / Google", ORANGE_F, ORANGE_S),
+        ("Google Cloud", ORANGE_F, ORANGE_S),
+        ("Jina AI", YELLOW_F, YELLOW_S),
     ]))
     els.append(standalone_text("lg4_pink", 10, 595,
         "Pink text = authentication credentials / headers", 13, PINK))
@@ -589,17 +605,18 @@ def build_cloudrun():
     els.extend(labeled_arrow("cra8", 855, 275, [[0, 0], [-200, 0]], "HTTP callback",
                              stroke=TEAL_S, style="dashed", font_color=MUTED))
 
-    # Jina external
-    els.extend(labeled_rect("cr_jina", 10, 175, 165, 45, "Jina VLM API\n(External)",
-                            bg=ORANGE_F, stroke=ORANGE_S, font_size=15))
+    # Jina external (jina.ai — not in GCP)
+    els.extend(labeled_rect("cr_jina", 10, 175, 165, 45, "Jina VLM API\n(jina.ai)",
+                            bg=YELLOW_F, stroke=YELLOW_S, font_size=15))
     els.extend(labeled_arrow("cra9", 480, 195, [[0, 0], [-305, 0]], "Bearer API Key",
-                             stroke=ORANGE_S, style="dashed", font_color=MUTED))
+                             stroke=YELLOW_S, style="dashed", font_color=MUTED))
 
     els.extend(legend_row("lg5", 500, [
         ("Frontend", BLUE_F, BLUE_S),
         ("Backend / Infra", PURPLE_F, PURPLE_S),
         ("Elastic Cloud", GREEN_F, GREEN_S),
-        ("Google / External", ORANGE_F, ORANGE_S),
+        ("Google Cloud", ORANGE_F, ORANGE_S),
+        ("Jina AI", YELLOW_F, YELLOW_S),
         ("MCP", TEAL_F, TEAL_S),
     ]))
     els.append(standalone_text("lg5_note", 10, 525,
