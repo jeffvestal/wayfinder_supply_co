@@ -239,40 +239,78 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full Cloud Run deployment detai
 
 ### High-Level Architecture
 
-[View full diagram on Excalidraw](https://excalidraw.com/#json=YFOQIq5yC4L74JV3oaY3i,-8tMwxJwEFTFz71PQgdpRQ)
+All major components and their connections — color-coded by responsibility.
 
-```
-User Browser
-    │
-    ▼
-┌──────────────┐     ┌──────────────┐     ┌─────────────────────┐     ┌───────────────────┐
-│   Frontend   │────▶│   Backend    │────▶│    Elastic Stack     │     │ External Services │
-│  React/Vite  │     │   FastAPI    │     │                     │     │                   │
-│  Trip Planner│     │  Chat Router │     │  Elasticsearch 9.x  │     │  Jina VLM         │
-│  Search Panel│     │  Products    │     │  Kibana             │     │  Vertex AI Gemini │
-│  Settings    │     │  Vision      │     │  Agent Builder      │     │  Imagen 3         │
-│              │     │  Credentials │     │  Workflows          │     │  MCP Server (CRM) │
-└──────────────┘     └──────────────┘     └─────────────────────┘     └───────────────────┘
-                            │                      │                          ▲
-                            │                      │  workflows ──────────────┘
-                            └──────────────────────┘
-```
+[![High-Level Architecture](https://excalidraw.com/#json=nljhlLTqBZ14Hd6rUiCQG,teronQeCuxaH_GFiNDcrSQ)](https://excalidraw.com/#json=nljhlLTqBZ14Hd6rUiCQG,teronQeCuxaH_GFiNDcrSQ)
 
-### Vision Pipeline
+> [Open in Excalidraw](https://excalidraw.com/#json=nljhlLTqBZ14Hd6rUiCQG,teronQeCuxaH_GFiNDcrSQ) (interactive, dark mode)
 
-[View full diagram on Excalidraw](https://excalidraw.com/#json=T8NyrB-N7DjpAIlMe3kjn,JcLi3vDhYC_FWPWYje8tFw)
+| Zone | Color | Components |
+|------|-------|------------|
+| Frontend | Blue | React/Vite, Trip Planner, Search Panel, Settings, Vision Preview |
+| Backend | Purple | FastAPI routers (Chat, Vision, Products), Credential Manager, API Key Auth |
+| Elastic Stack | Green | Elasticsearch 9.x, Kibana, Agent Builder, Workflows, ELSER |
+| Google / External | Orange | Jina VLM, Gemini + Grounding, Imagen 3 |
+| MCP Server | Teal | CRM / Persona, Weather (Mock) |
 
-The vision pipeline adds three AI capabilities to the trip planner:
+### Elastic + Jina + Google Integration
 
-1. **Image Analysis** — User uploads a photo → Frontend resizes → Backend `/vision/analyze` → Jina VLM returns a terrain/scene description
-2. **Weather Grounding** — Agent Builder calls `ground_conditions` workflow → Backend `/vision/ground` → Gemini 2.0 Flash + Google Search returns real-time weather
-3. **Product Visualization** — User clicks "Visualize" → Backend `/vision/preview` → Imagen 3 generates a product-in-scene image using style reference and enhanced prompting
+How the three key platforms work together to power intelligent trip planning.
+
+[![Integration Architecture](https://excalidraw.com/#json=HbdIupWY0lu9PE-T9fTub,-y1LdKh3XP3Dc-OzAZjhig)](https://excalidraw.com/#json=HbdIupWY0lu9PE-T9fTub,-y1LdKh3XP3Dc-OzAZjhig)
+
+> [Open in Excalidraw](https://excalidraw.com/#json=HbdIupWY0lu9PE-T9fTub,-y1LdKh3XP3Dc-OzAZjhig) (interactive, dark mode)
+
+**Data flow:**
+1. User uploads photo → **Jina VLM** analyzes terrain/conditions → description injected into Agent context
+2. **Elastic Agent Builder** orchestrates trip plan → calls `ground_conditions` workflow → **Gemini + Google Search** for live weather
+3. Agent searches product catalog (**ELSER** semantic search) → recommends gear from Wayfinder catalog only
+4. User clicks Visualize → **Imagen 3** generates product-in-scene preview with style reference from catalog image
+
+### Vision Pipeline (Detailed)
+
+Step-by-step flow: image analysis, weather grounding, and product visualization.
+
+[![Vision Pipeline](https://excalidraw.com/#json=IloLBT60OTM_T5H7b6cBv,1wpuFWaTdxl78EkFnWK8IA)](https://excalidraw.com/#json=IloLBT60OTM_T5H7b6cBv,1wpuFWaTdxl78EkFnWK8IA)
+
+> [Open in Excalidraw](https://excalidraw.com/#json=IloLBT60OTM_T5H7b6cBv,1wpuFWaTdxl78EkFnWK8IA) (interactive, dark mode)
+
+**Phase 1 — Image Analysis (Jina VLM):** User selects photo → Frontend resizes (max 2048px) → Backend `/vision/analyze` → Jina VLM API → `[Vision Context: ...]` injected into Agent prompt
+
+**Phase 2 — Weather Grounding (Google):** Agent Builder calls tool → `ground_conditions` workflow → Backend `/vision/ground` → Gemini 2.0 Flash + Google Search → Weather card in UI
+
+**Phase 3 — Product Visualization (Imagen 3):**
+- Pass 1: Scene generation (text-to-image from Jina description)
+- Pass 2: Product composite with enhanced prompting + style reference from catalog image + wearable detection
+- Fallback: Single-pass composite generation if Pass 2 fails
+
+### Security and Authentication
+
+All authentication mechanisms across the system.
+
+[![Security Flow](https://excalidraw.com/#json=ffFBpfoK7c0yZlYHzcTs2,XKlfQkSGIjrDsETxlyP72A)](https://excalidraw.com/#json=ffFBpfoK7c0yZlYHzcTs2,XKlfQkSGIjrDsETxlyP72A)
+
+> [Open in Excalidraw](https://excalidraw.com/#json=ffFBpfoK7c0yZlYHzcTs2,XKlfQkSGIjrDsETxlyP72A) (interactive, dark mode)
+
+| Layer | Mechanism | Details |
+|-------|-----------|---------|
+| User → Frontend | Google IAP | @elastic.co SSO (Cloud Run only) |
+| Frontend → Backend | `X-Api-Key` header | `WAYFINDER_API_KEY` env var; skipped if unset (local dev) |
+| Workflow → Backend/MCP | `X-Api-Key` header | Key stored as workflow const (not in code/git) |
+| Backend → Elastic | `Authorization: ApiKey` | `STANDALONE_ELASTICSEARCH_APIKEY` |
+| Backend → Jina VLM | `Authorization: Bearer` | `JINA_API_KEY` |
+| Backend → Vertex AI | GCP Service Account | OAuth2 token from service account JSON or ADC |
+| Credential Manager | Priority: UI Settings → env vars → ADC | Runtime overrides without restart |
 
 ### Cloud Run Deployment
 
-[View full diagram on Excalidraw](https://excalidraw.com/#json=SpU8tNmbRLFrEjnSrD6o1,8iwt2zWosGoZh43-A3IvDw)
+GCP infrastructure for the "fully cloud" Elastic + Google demo scenario.
 
-Three Cloud Run services in Google Cloud, with IAP protecting the frontend and a shared API key authenticating workflow calls to backend/MCP.
+[![Cloud Run Deployment](https://excalidraw.com/#json=JuLfqME87qZgxQu-_E3kY,rEAfI4TPmRNfmd0TVqaKhQ)](https://excalidraw.com/#json=JuLfqME87qZgxQu-_E3kY,rEAfI4TPmRNfmd0TVqaKhQ)
+
+> [Open in Excalidraw](https://excalidraw.com/#json=JuLfqME87qZgxQu-_E3kY,rEAfI4TPmRNfmd0TVqaKhQ) (interactive, dark mode)
+
+Three Cloud Run services in Google Cloud (`elastic-customer-eng / us-central1`), with IAP protecting the frontend (@elastic.co SSO) and a shared API key authenticating workflow HTTP callbacks from Elastic Cloud to backend/MCP.
 
 ## Covered Adventure Destinations (30 locations)
 
