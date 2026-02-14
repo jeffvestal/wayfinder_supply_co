@@ -11,7 +11,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { DemoOverlay } from './components/DemoOverlay'
 import { PersonalizationDemo } from './components/PersonalizationDemo'
 import { SearchComparisonDemo } from './components/SearchComparisonDemo'
-import { ShoppingCart, MapPin, Home, Menu, X, Search, Play, Eye, Sparkles, ChevronDown, Settings } from 'lucide-react'
+import { ShoppingCart, MapPin, Home, Menu, X, Search, Play, Eye, Sparkles, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from './lib/api'
 import { UserPersona, ChatMessage, ThoughtTraceEvent, SuggestedProduct, ItineraryDay, SettingsStatus } from './types'
@@ -402,20 +402,6 @@ function App() {
               )}
               {/* Search Icon */}
               <button
-                onClick={() => {
-                  setCurrentView('settings')
-                  setMobileMenuOpen(false)
-                }}
-                className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all border ${
-                  currentView === 'settings'
-                    ? 'bg-primary/20 text-primary border-primary/30'
-                    : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border-white/10'
-                }`}
-                title="Vision Settings"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-              <button
                 onClick={() => setSearchPanelOpen(true)}
                 className="flex items-center justify-center w-10 h-10 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-all border border-primary/30"
                 title="Search & Chat"
@@ -431,6 +417,10 @@ function App() {
                     setMobileMenuOpen(false)
                   }}
                   onClearHistory={handleClearHistory}
+                  onOpenSettings={() => {
+                    setCurrentView('settings')
+                    setMobileMenuOpen(false)
+                  }}
                 />
               )}
             </div>

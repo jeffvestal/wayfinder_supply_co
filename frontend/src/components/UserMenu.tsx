@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, Mountain, Users, Snowflake, Compass, Car, UserCircle, Footprints, Building, ArrowRight, Trash2 } from 'lucide-react'
+import { ChevronDown, Mountain, Users, Snowflake, Compass, Car, UserCircle, Footprints, Building, ArrowRight, Trash2, Settings } from 'lucide-react'
 import { api } from '../lib/api'
 import { ClickstreamEventsModal } from './ClickstreamEventsModal'
 import { UserPersona } from '../types'
@@ -9,6 +9,7 @@ interface UserMenuProps {
   currentPersona: UserPersona | null
   onSwitchUser: () => void
   onClearHistory?: () => void
+  onOpenSettings?: () => void
 }
 
 // Icon mapping for personas
@@ -25,7 +26,7 @@ const PERSONA_ICONS: Record<string, any> = {
 
 const DEFAULT_ICON = UserCircle
 
-export function UserMenu({ currentUserId, currentPersona, onSwitchUser, onClearHistory }: UserMenuProps) {
+export function UserMenu({ currentUserId, currentPersona, onSwitchUser, onClearHistory, onOpenSettings }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [liveStats, setLiveStats] = useState<{ total_views: number; total_cart_adds: number } | null>(null)
   const [clearing, setClearing] = useState(false)
@@ -178,8 +179,24 @@ export function UserMenu({ currentUserId, currentPersona, onSwitchUser, onClearH
               </div>
             )}
 
+            {/* Settings */}
+            {onOpenSettings && (
+              <div className="p-2 border-t border-white/10">
+                <button
+                  onClick={() => {
+                    setIsOpen(false)
+                    onOpenSettings()
+                  }}
+                  className="w-full px-4 py-2.5 rounded-lg flex items-center gap-2 text-gray-300 hover:text-white hover:bg-white/10 transition-all"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="text-sm font-medium">Vision Settings</span>
+                </button>
+              </div>
+            )}
+
             {/* Switch User Button */}
-            <div className="p-2">
+            <div className="p-2 border-t border-white/10">
               <button
                 onClick={() => {
                   setIsOpen(false)
