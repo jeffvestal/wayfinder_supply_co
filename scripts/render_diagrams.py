@@ -260,19 +260,23 @@ def build_integration():
         "Elastic + Jina + Google -- Integration Architecture", 24, TEXT))
 
     # User zone
-    els.append(rect("z_u", 10, 55, 170, 125, bg=BLUE_F, stroke=BLUE_S, sw=1, opacity=35))
+    els.append(rect("z_u", 10, 55, 170, 165, bg=BLUE_F, stroke=BLUE_S, sw=1, opacity=35))
     els.append(standalone_text("z_u_t", 45, 62, "User Browser", 15, BLUE_S))
-    els.extend(labeled_rect("u1", 25, 90, 140, 35, "Upload Image",
+    els.extend(labeled_rect("u1", 25, 90, 140, 35, "Trip Planner",
                             bg=BLUE_F, stroke=BLUE_S, font_size=14))
-    els.extend(labeled_rect("u2", 25, 135, 140, 35, "Chat / Plan Trip",
+    els.extend(labeled_rect("u2", 25, 135, 140, 35, "Search Panel",
+                            bg=BLUE_F, stroke=BLUE_S, font_size=14))
+    els.extend(labeled_rect("u3", 25, 180, 140, 35, "Image Upload",
                             bg=BLUE_F, stroke=BLUE_S, font_size=14))
 
     # Jina zone (jina.ai — separate from Google Cloud)
-    els.append(rect("z_j", 240, 50, 200, 145, bg=YELLOW_F, stroke=YELLOW_S, sw=1, opacity=30))
+    els.append(rect("z_j", 240, 50, 200, 175, bg=YELLOW_F, stroke=YELLOW_S, sw=1, opacity=30))
     els.append(standalone_text("z_j_t", 300, 57, "Jina AI", 18, YELLOW_S))
-    els.extend(labeled_rect("j1", 260, 85, 160, 50, "VLM (Vision)\nImage Analysis",
+    els.extend(labeled_rect("j1", 260, 85, 160, 50, "VLM (Vision)\nTerrain Analysis",
                             bg=YELLOW_F, stroke=YELLOW_S, font_size=14))
-    els.append(standalone_text("j_note", 265, 145, "Terrain description,\nconditions, scene", 13, MUTED))
+    els.extend(labeled_rect("j2", 260, 145, 160, 50, "VLM (Vision)\nProduct Structured",
+                            bg=YELLOW_F, stroke=YELLOW_S, font_size=14))
+    els.append(standalone_text("j_note", 265, 200, "JSON: type, category,\nkey_terms, description", 12, MUTED))
 
     # Elastic zone
     els.append(rect("z_el", 500, 50, 250, 320, bg=GREEN_F, stroke=GREEN_S, sw=1, opacity=30))
@@ -303,9 +307,13 @@ def build_integration():
                             bg=TEAL_F, stroke=TEAL_S, font_size=14))
 
     # Arrows
-    els.extend(labeled_arrow("ia1", 165, 108, [[0, 0], [95, 0]], "photo",
+    els.extend(labeled_arrow("ia1", 165, 108, [[0, 0], [95, 0]], "terrain",
+                             stroke=YELLOW_S, font_color=TEXT))
+    els.extend(labeled_arrow("ia1b", 165, 170, [[0, 0], [95, 0]], "product",
                              stroke=YELLOW_S, font_color=TEXT))
     els.extend(labeled_arrow("ia2", 420, 110, [[0, 0], [100, 0]], "context",
+                             stroke=TEXT, font_color=MUTED))
+    els.extend(labeled_arrow("ia2b", 420, 170, [[0, 0], [100, 0]], "structured",
                              stroke=TEXT, font_color=MUTED))
     els.extend(labeled_arrow("ia3", 165, 150, [[0, 0], [355, -35]], "SSE stream",
                              stroke=TEXT, font_color=MUTED))
@@ -319,14 +327,15 @@ def build_integration():
     # Data flow summary
     els.append(standalone_text("flow_t", 10, 395, "Data Flow Summary", 18, TEXT))
     for i, line in enumerate([
-        "1. User uploads photo -> Jina VLM (jina.ai) analyzes terrain -> description injected into Agent context",
-        "2. Agent Builder orchestrates trip -> ground_conditions workflow -> Gemini + Google Search for live weather",
-        "3. Agent searches product catalog (ELSER semantic) -> recommends gear from Wayfinder catalog only",
-        "4. User clicks Visualize -> Imagen 3 generates product-in-scene preview with style reference",
+        "1. Trip Planner: photo -> Jina VLM terrain analysis -> description injected into Agent context",
+        "2. Search Panel: photo -> Jina VLM structured JSON -> category filter + semantic/lexical search",
+        "3. Agent Builder orchestrates trip -> ground_conditions workflow -> Gemini + Google Search for live weather",
+        "4. Agent searches product catalog (ELSER semantic) -> recommends gear from Wayfinder catalog only",
+        "5. User clicks Visualize -> Imagen 3 generates product-in-scene preview with style reference",
     ]):
         els.append(standalone_text(f"flow{i}", 10, 425 + i * 22, line, 14, MUTED))
 
-    els.extend(legend_row("lg2", 530, [
+    els.extend(legend_row("lg2", 555, [
         ("Jina AI", YELLOW_F, YELLOW_S),
         ("Google Cloud", ORANGE_F, ORANGE_S),
         ("Elastic", GREEN_F, GREEN_S),
@@ -334,7 +343,7 @@ def build_integration():
         ("User", BLUE_F, BLUE_S),
     ]))
 
-    return dark_scene(els, 1090, 570)
+    return dark_scene(els, 1090, 595)
 
 
 # =====================================================================
@@ -346,90 +355,113 @@ def build_vision_pipeline():
     els.append(standalone_text("title", 310, 8,
         "Vision Pipeline -- Detailed Flow", 24, TEXT))
 
-    # Phase 1
-    els.append(standalone_text("p1", 10, 48, "Phase 1: Image Analysis (Jina VLM)", 18, YELLOW_S))
-    boxes1 = [
-        ("v_usr", 10, 80, 130, 50, "User Selects\nPhoto", BLUE_F, BLUE_S),
-        ("v_rsz", 200, 80, 140, 50, "Frontend Resize\nmax 2048px", BLUE_F, BLUE_S),
-        ("v_ana", 400, 80, 155, 50, "Backend\n/vision/analyze", PURPLE_F, PURPLE_S),
-        ("v_jina", 615, 80, 150, 50, "Jina VLM API\nScene Analysis", YELLOW_F, YELLOW_S),
-        ("v_ctx", 825, 75, 170, 60, "[Vision Context:...]\nInjected into\nAgent prompt", GREEN_F, GREEN_S),
+    # Phase 1a — Trip Planner path (terrain analysis)
+    els.append(standalone_text("p1", 10, 48,
+        "Phase 1a: Terrain Analysis -- Trip Planner (Jina VLM)", 18, YELLOW_S))
+    boxes1a = [
+        ("v_usr", 10, 80, 130, 50, "User Uploads\nTerrain Photo", BLUE_F, BLUE_S),
+        ("v_rsz", 195, 80, 140, 50, "Frontend Resize\nmax 2048px", BLUE_F, BLUE_S),
+        ("v_ana", 390, 75, 160, 60, "POST /api/chat\nanalyze_image()\nterrain prompt", PURPLE_F, PURPLE_S),
+        ("v_jina", 610, 80, 160, 50, "Jina VLM API\nTerrain Analysis", YELLOW_F, YELLOW_S),
+        ("v_ctx", 830, 75, 185, 60, "[Vision Context:...]\nInjected into\nAgent prompt", GREEN_F, GREEN_S),
     ]
-    for id, x, y, w, h, lbl, bg, stroke in boxes1:
-        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=14))
-    els.append(arrow_el("va1", 140, 105, [[0, 0], [60, 0]], stroke=TEXT))
-    els.extend(labeled_arrow("va2", 340, 105, [[0, 0], [60, 0]], "base64",
+    for id, x, y, w, h, lbl, bg, stroke in boxes1a:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
+    els.append(arrow_el("va1", 140, 105, [[0, 0], [55, 0]], stroke=TEXT))
+    els.extend(labeled_arrow("va2", 335, 105, [[0, 0], [55, 0]], "base64",
                              stroke=TEXT, font_color=MUTED))
-    els.append(arrow_el("va3", 555, 105, [[0, 0], [60, 0]], stroke=YELLOW_S))
-    els.append(arrow_el("va4", 765, 105, [[0, 0], [60, 0]], stroke=GREEN_S))
+    els.append(arrow_el("va3", 550, 105, [[0, 0], [60, 0]], stroke=YELLOW_S))
+    els.append(arrow_el("va4", 770, 105, [[0, 0], [60, 0]], stroke=GREEN_S))
+
+    # Phase 1b — Product Search path (structured analysis)
+    els.append(standalone_text("p1b", 10, 152,
+        "Phase 1b: Product Search -- Search Panel (Jina VLM Structured)", 18, YELLOW_S))
+    boxes1b = [
+        ("vs_usr", 10, 185, 130, 50, "User Uploads\nProduct Photo", BLUE_F, BLUE_S),
+        ("vs_rsz", 195, 185, 140, 50, "Frontend Resize\n+ base64 encode", BLUE_F, BLUE_S),
+        ("vs_be", 390, 180, 160, 60, "Chat or Hybrid\nanalyze_image\n_structured()", PURPLE_F, PURPLE_S),
+        ("vs_jina", 610, 185, 160, 50, "Jina VLM API\nStructured JSON", YELLOW_F, YELLOW_S),
+        ("vs_out", 830, 178, 185, 64, "product_type, category\nsubcategory, key_terms\ndescription", YELLOW_F, YELLOW_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes1b:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
+    els.append(arrow_el("vb1", 140, 210, [[0, 0], [55, 0]], stroke=TEXT))
+    els.append(arrow_el("vb2", 335, 210, [[0, 0], [55, 0]], stroke=TEXT))
+    els.append(arrow_el("vb3", 550, 210, [[0, 0], [60, 0]], stroke=YELLOW_S))
+    els.append(arrow_el("vb4", 770, 210, [[0, 0], [60, 0]], stroke=YELLOW_S))
+    # Retry annotation
+    els.append(standalone_text("retry_n", 610, 240,
+        "Retries 502/503/429 (15s, 30s backoff)", 12, MUTED))
 
     # Phase 2
-    els.append(standalone_text("p2", 10, 155,
+    els.append(standalone_text("p2", 10, 265,
         "Phase 2: Weather Grounding (Google Gemini + Search)", 18, GREEN_S))
     boxes2 = [
-        ("v_ag", 10, 190, 155, 50, "Agent Builder\ncalls tool", GREEN_F, GREEN_S),
-        ("v_wf", 225, 190, 175, 50, "ground_conditions\nWorkflow", GREEN_F, GREEN_S),
-        ("v_gep", 470, 190, 155, 50, "Backend\n/vision/ground", PURPLE_F, PURPLE_S),
-        ("v_gem", 695, 185, 175, 60, "Gemini 2.0 Flash\n+ Google Search\nGrounding", ORANGE_F, ORANGE_S),
-        ("v_wout", 940, 190, 110, 50, "Weather\nCard in UI", GREEN_F, GREEN_S),
+        ("v_ag", 10, 300, 155, 50, "Agent Builder\ncalls tool", GREEN_F, GREEN_S),
+        ("v_wf", 225, 300, 175, 50, "ground_conditions\nWorkflow", GREEN_F, GREEN_S),
+        ("v_gep", 470, 300, 155, 50, "Backend\n/vision/ground", PURPLE_F, PURPLE_S),
+        ("v_gem", 695, 295, 175, 60, "Gemini 2.0 Flash\n+ Google Search\nGrounding", ORANGE_F, ORANGE_S),
+        ("v_wout", 940, 300, 110, 50, "Weather\nCard in UI", GREEN_F, GREEN_S),
     ]
     for id, x, y, w, h, lbl, bg, stroke in boxes2:
         els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=14))
-    els.append(arrow_el("va5", 165, 215, [[0, 0], [60, 0]], stroke=TEXT))
-    els.extend(labeled_arrow("va6", 400, 215, [[0, 0], [70, 0]], "HTTP",
+    els.append(arrow_el("va5", 165, 325, [[0, 0], [60, 0]], stroke=TEXT))
+    els.extend(labeled_arrow("va6", 400, 325, [[0, 0], [70, 0]], "HTTP",
                              stroke=TEXT, font_color=MUTED))
-    els.append(arrow_el("va7", 625, 215, [[0, 0], [70, 0]], stroke=ORANGE_S))
-    els.append(arrow_el("va8", 870, 215, [[0, 0], [70, 0]], stroke=GREEN_S))
+    els.append(arrow_el("va7", 625, 325, [[0, 0], [70, 0]], stroke=ORANGE_S))
+    els.append(arrow_el("va8", 870, 325, [[0, 0], [70, 0]], stroke=GREEN_S))
 
     # Phase 3
-    els.append(standalone_text("p3", 10, 268,
+    els.append(standalone_text("p3", 10, 378,
         "Phase 3: Product Visualization (Imagen 3)", 18, PURPLE_S))
-    els.extend(labeled_rect("v_btn", 10, 305, 130, 50, "User Clicks\n\"Visualize\"",
+    els.extend(labeled_rect("v_btn", 10, 415, 130, 50, "User Clicks\n\"Visualize\"",
                             bg=BLUE_F, stroke=BLUE_S, font_size=14))
-    els.extend(labeled_rect("v_pep", 200, 305, 155, 50, "Backend\n/vision/preview",
+    els.extend(labeled_rect("v_pep", 200, 415, 155, 50, "Backend\n/vision/preview",
                             bg=PURPLE_F, stroke=PURPLE_S, font_size=14))
-    els.append(arrow_el("va9", 140, 330, [[0, 0], [60, 0]], stroke=TEXT))
+    els.append(arrow_el("va9", 140, 440, [[0, 0], [60, 0]], stroke=TEXT))
 
-    els.extend(labeled_rect("v_p1", 440, 295, 200, 55,
+    els.extend(labeled_rect("v_p1", 440, 405, 200, 55,
         "Pass 1: Scene Generation\nImagen text-to-image\nfrom Jina description",
         bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
-    els.append(arrow_el("va10", 355, 320, [[0, 0], [85, -15]], stroke=ORANGE_S))
+    els.append(arrow_el("va10", 355, 430, [[0, 0], [85, -15]], stroke=ORANGE_S))
 
-    els.extend(labeled_rect("v_p2", 710, 290, 220, 65,
+    els.extend(labeled_rect("v_p2", 710, 400, 220, 65,
         "Pass 2: Product Composite\n+ Enhanced Prompting\n+ Style Reference (catalog img)\n+ Wearable Detection",
         bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
-    els.append(arrow_el("va11", 640, 322, [[0, 0], [70, 0]], stroke=ORANGE_S))
+    els.append(arrow_el("va11", 640, 432, [[0, 0], [70, 0]], stroke=ORANGE_S))
 
-    els.extend(labeled_rect("v_fb", 440, 370, 200, 45,
+    els.extend(labeled_rect("v_fb", 440, 480, 200, 45,
         "Fallback: Single-pass\ncomposite generation",
         bg=RED_F, stroke=RED_S, font_size=13))
-    els.append(arrow_el("va_fb", 355, 340, [[0, 0], [85, 40]],
+    els.append(arrow_el("va_fb", 355, 450, [[0, 0], [85, 40]],
                         stroke=RED_S, sw=2, style="dashed"))
 
-    els.extend(labeled_rect("v_out", 1000, 300, 120, 50,
+    els.extend(labeled_rect("v_out", 1000, 410, 120, 50,
         "Preview Image\nin UI + lightbox",
         bg=BLUE_F, stroke=BLUE_S, font_size=14))
-    els.append(arrow_el("va12", 930, 322, [[0, 0], [70, 0]], stroke=TEXT))
+    els.append(arrow_el("va12", 930, 432, [[0, 0], [70, 0]], stroke=TEXT))
 
     # Insight cards
-    els.append(standalone_text("p4", 10, 440, "Insight Cards (UI)", 18, TEXT))
-    els.extend(labeled_rect("ic1", 10, 470, 195, 45, "Jina VLM Description\nClickable info card",
-                            bg=YELLOW_F, stroke=YELLOW_S, font_size=13))
-    els.extend(labeled_rect("ic2", 225, 470, 195, 45, "Weather Grounding\nFormatted + emoji",
-                            bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
-    els.extend(labeled_rect("ic3", 440, 470, 195, 45, "Show Prompt\nImagen text prompt",
+    els.append(standalone_text("p4", 10, 550, "UI Cards", 18, TEXT))
+    els.extend(labeled_rect("ic1", 10, 580, 175, 45, "Vision Analysis\n(structured data)",
                             bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
+    els.extend(labeled_rect("ic2", 205, 580, 175, 45, "Weather Grounding\nFormatted card",
+                            bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
+    els.extend(labeled_rect("ic3", 400, 580, 165, 45, "Imagen Prompt\nShow Prompt btn",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
+    els.extend(labeled_rect("ic4", 585, 580, 175, 45, "Vision Error\n(cold start / 503)",
+                            bg=RED_F, stroke=RED_S, font_size=13))
 
-    els.extend(legend_row("lg3", 540, [
+    els.extend(legend_row("lg3", 650, [
         ("Frontend", BLUE_F, BLUE_S),
         ("Backend", PURPLE_F, PURPLE_S),
         ("Jina AI", YELLOW_F, YELLOW_S),
         ("Google Cloud", ORANGE_F, ORANGE_S),
         ("Elastic", GREEN_F, GREEN_S),
-        ("Fallback", RED_F, RED_S),
+        ("Fallback / Error", RED_F, RED_S),
     ]))
 
-    return dark_scene(els, 1150, 580)
+    return dark_scene(els, 1150, 695)
 
 
 # =====================================================================
@@ -625,6 +657,90 @@ def build_cloudrun():
     return dark_scene(els, 1100, 550)
 
 
+# =====================================================================
+# Diagram 6 — Vision Product Search Flow
+# =====================================================================
+
+def build_vision_search():
+    els = []
+    els.append(standalone_text("title", 220, 8,
+        "Vision Product Search -- Chat and Hybrid Modes", 24, TEXT))
+
+    # --- Chat Mode path (top) ---
+    els.append(standalone_text("cm_t", 10, 50, "Chat Mode (Agent-Based)", 18, PURPLE_S))
+
+    boxes_chat = [
+        ("cs_usr", 10, 82, 135, 50, "User Uploads\nProduct Photo", BLUE_F, BLUE_S),
+        ("cs_rsz", 195, 82, 130, 50, "imageUtils.ts\nResize + b64", BLUE_F, BLUE_S),
+        ("cs_api", 375, 77, 170, 60, "POST /api/chat\nanalyze_image\n_structured()", PURPLE_F, PURPLE_S),
+        ("cs_jina", 600, 82, 150, 50, "Jina VLM\nStructured JSON", YELLOW_F, YELLOW_S),
+        ("cs_ctx", 805, 77, 195, 60, "[Vision Context: type]\n[Product Category: cat]\n-> Agent Builder", GREEN_F, GREEN_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes_chat:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
+    els.append(arrow_el("ca1", 145, 107, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("ca2", 325, 107, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("ca3", 545, 107, [[0, 0], [55, 0]], stroke=YELLOW_S))
+    els.append(arrow_el("ca4", 750, 107, [[0, 0], [55, 0]], stroke=GREEN_S))
+
+    # Agent tool call
+    els.extend(labeled_rect("cs_tool", 805, 150, 195, 40, "product_search tool\ncategory-aware results",
+                            bg=GREEN_F, stroke=GREEN_S, font_size=13))
+    els.append(arrow_el("ca5", 902, 137, [[0, 0], [0, 13]], stroke=GREEN_S))
+
+    # --- Hybrid Mode path (bottom) ---
+    els.append(standalone_text("hm_t", 10, 210, "Hybrid Mode (Direct ES Search)", 18, BLUE_S))
+
+    boxes_hybrid = [
+        ("hs_usr", 10, 245, 135, 50, "User Uploads\nProduct Photo", BLUE_F, BLUE_S),
+        ("hs_rsz", 195, 245, 130, 50, "imageUtils.ts\nResize + b64", BLUE_F, BLUE_S),
+        ("hs_api", 375, 240, 170, 60, "POST /api/products\n/search/hybrid\nimage_base64", PURPLE_F, PURPLE_S),
+        ("hs_jina", 600, 245, 150, 50, "Jina VLM\nStructured JSON", YELLOW_F, YELLOW_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes_hybrid:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
+    els.append(arrow_el("ha1", 145, 270, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("ha2", 325, 270, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("ha3", 545, 270, [[0, 0], [55, 0]], stroke=YELLOW_S))
+
+    # Three ES query branches from structured output
+    els.extend(labeled_rect("hs_sem", 810, 225, 195, 38, "ELSER Semantic\ndescription field",
+                            bg=GREEN_F, stroke=GREEN_S, font_size=13))
+    els.extend(labeled_rect("hs_lex", 810, 270, 195, 38, "BM25 Lexical\nkey_terms field",
+                            bg=GREEN_F, stroke=GREEN_S, font_size=13))
+    els.extend(labeled_rect("hs_flt", 810, 315, 195, 38, "Category Filter\ncategory -> term filter",
+                            bg=GREEN_F, stroke=GREEN_S, font_size=13))
+
+    els.append(arrow_el("ha4a", 750, 255, [[0, 0], [60, -12]], stroke=GREEN_S))
+    els.append(arrow_el("ha4b", 750, 270, [[0, 0], [60, 0]], stroke=GREEN_S))
+    els.append(arrow_el("ha4c", 750, 285, [[0, 0], [60, 12]], stroke=GREEN_S, style="dashed"))
+
+    # --- Error handling ---
+    els.append(standalone_text("err_t", 10, 375, "Error Handling", 18, RED_S))
+    els.extend(labeled_rect("err_503", 10, 410, 175, 50, "Jina 503\nCold Start",
+                            bg=RED_F, stroke=RED_S, font_size=13))
+    els.extend(labeled_rect("err_retry", 245, 410, 175, 50, "Retry w/ Backoff\n15s, 30s (3 attempts)",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
+    els.extend(labeled_rect("err_evt", 480, 410, 175, 50, "vision_error SSE\nor JSON response",
+                            bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
+    els.extend(labeled_rect("err_card", 720, 410, 175, 50, "Amber Error Card\nin Search Panel UI",
+                            bg=RED_F, stroke=RED_S, font_size=13))
+    els.append(arrow_el("ea1", 185, 435, [[0, 0], [60, 0]], stroke=RED_S))
+    els.extend(labeled_arrow("ea2", 420, 435, [[0, 0], [60, 0]], "still fails",
+                             stroke=RED_S, font_color=MUTED))
+    els.append(arrow_el("ea3", 655, 435, [[0, 0], [65, 0]], stroke=RED_S))
+
+    els.extend(legend_row("lg6", 485, [
+        ("Frontend", BLUE_F, BLUE_S),
+        ("Backend", PURPLE_F, PURPLE_S),
+        ("Jina AI", YELLOW_F, YELLOW_S),
+        ("Elastic", GREEN_F, GREEN_S),
+        ("Error", RED_F, RED_S),
+    ]))
+
+    return dark_scene(els, 1040, 525)
+
+
 # ── Render & Save ────────────────────────────────────────────────────
 
 def svg_to_png(svg_path, png_path, scale=2):
@@ -685,11 +801,12 @@ if __name__ == "__main__":
     output_dir = os.path.join(os.path.dirname(__file__), "..", "docs", "images")
 
     diagrams = [
-        ("arch_high_level",   "High-Level Architecture",          build_high_level),
-        ("arch_integration",  "Elastic + Jina + Google Integration", build_integration),
-        ("arch_vision_pipeline", "Vision Pipeline (Detailed)",     build_vision_pipeline),
-        ("arch_security",     "Security and Authentication",       build_security),
-        ("arch_cloud_run",    "Cloud Run Deployment",              build_cloudrun),
+        ("arch_high_level",      "High-Level Architecture",            build_high_level),
+        ("arch_integration",     "Elastic + Jina + Google Integration", build_integration),
+        ("arch_vision_pipeline", "Vision Pipeline (Detailed)",          build_vision_pipeline),
+        ("arch_vision_search",   "Vision Product Search Flow",          build_vision_search),
+        ("arch_security",        "Security and Authentication",         build_security),
+        ("arch_cloud_run",       "Cloud Run Deployment",                build_cloudrun),
     ]
 
     for name, label, builder in diagrams:

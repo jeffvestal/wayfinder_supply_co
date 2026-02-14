@@ -18,7 +18,7 @@ This branch extends the base Wayfinder Supply Co. demo with **Vision AI capabili
 
 **Feature gating:** Vision features are progressively enabled based on configured credentials:
 - **No keys**: Original app works normally; vision UI is hidden
-- **Jina key only**: Image upload + terrain-aware trip recommendations
+- **Jina key only**: Image upload in Trip Planner (terrain analysis) AND Search Panel (structured product analysis) + terrain-aware trip recommendations
 - **Jina + Vertex AI**: Plus real-time grounding and Imagen 3 product previews
 
 ---
@@ -118,11 +118,13 @@ The vision pipeline is the primary new feature on this branch. It has three phas
 
 ### Phase 1: Image Analysis (Jina VLM)
 
-1. User attaches a terrain photo in Trip Planner (JPEG/PNG/WebP, resized to max 2048px client-side)
-2. `POST /api/chat` with `image_base64` → backend calls `vision_service.analyze_image()`
-3. Jina VLM API (`https://api-beta-vlm.jina.ai/v1/chat/completions`, model `jina-vlm`) analyzes terrain
-4. Result injected into agent prompt as `[Vision Context: {description}] [User ID: {uid}] {message}`
-5. A `vision_analysis` SSE event is emitted first, then the normal agent stream begins
+**1A: Trip Planner (Terrain Analysis)** — User uploads terrain photo → `POST /api/chat` with `image_base64` → `vision_service.analyze_image()` → terrain description injected as `[Vision Context: {description}]`
+
+**1B: Search Panel (Product Analysis)** — User uploads product photo in Chat or Hybrid mode → `analyze_image_structured()` returns JSON with `product_type`, `category`, `subcategory`, `key_terms`, `description`
+- **Chat mode**: Context injected as `[Vision Context: {product_type} - {description}] [Product Category: {category}]` → Agent Builder
+- **Hybrid mode**: `POST /api/products/search/hybrid` with `image_base64` → category filter + semantic desc + lexical key_terms → ES product-catalog
+
+**Note:** Jina VLM retries on 502/503/429 with progressive backoff (15s, 30s). Max 3 attempts. A `vision_analysis` SSE event is emitted on success; `vision_error` SSE event on failure.
 
 ### Phase 2: Weather Grounding (Gemini + Google Search)
 
@@ -144,11 +146,15 @@ The vision pipeline is the primary new feature on this branch. It has three phas
 
 | File | Role |
 |------|------|
-| `backend/services/vision_service.py` | All vision logic: `analyze_image()`, `ground_conditions()`, `generate_preview()` |
+| `backend/services/vision_service.py` | All vision logic: `analyze_image()`, `analyze_image_structured()`, `ground_conditions()`, `generate_preview()` |
 | `backend/routers/vision.py` | Vision endpoints: `/api/vision/ground`, `/api/vision/preview`, `/api/vision/status` |
 | `backend/routers/chat.py` | Integrates vision into chat flow: image handling, context injection |
+| `backend/routers/products.py` | Hybrid search with `image_base64`; uses `analyze_image_structured()` for category filtering |
 | `frontend/src/components/TripPlanner.tsx` | Image upload UI, handles `vision_analysis` SSE events, insight cards |
+| `frontend/src/components/SearchPanel.tsx` | Image upload in Chat + Hybrid modes; Vision Analysis/Error cards |
 | `frontend/src/components/VisionPreview.tsx` | Visualize button on products, Imagen preview modal, "Show Prompt" |
+| `frontend/src/lib/imageUtils.ts` | Shared image resize/validation used by TripPlanner and SearchPanel |
+| `frontend/src/components/search/ChatMode.tsx` | Chat mode with Vision Analysis card (structured data + source image thumbnail) |
 
 ---
 
@@ -227,7 +233,7 @@ The credential manager provides a **three-tier priority system**:
 | Router | Primary Endpoints | Purpose |
 |--------|-------------------|---------|
 | `chat.py` | `/api/chat`, `/api/parse-trip-context` | Agent Builder streaming, vision context injection |
-| `products.py` | `/api/products`, `/api/products/search` | Product CRUD, semantic/hybrid/lexical search |
+| `products.py` | `/api/products`, `/api/products/search`, `POST /api/products/search/hybrid` (accepts `image_base64`) | Product CRUD, semantic/hybrid/lexical search |
 | `vision.py` | `/api/vision/ground`, `/api/vision/preview`, `/api/vision/status` | Weather grounding, Imagen 3 previews |
 | `settings.py` | `/api/settings`, `/api/settings/status`, `/api/settings/test/*` | Credential management UI |
 | `cart.py` | `/api/cart` | Shopping cart management |
@@ -265,17 +271,23 @@ headers = {
 **Vision integration in chat flow:**
 ```python
 # If image_base64 is present and Jina is configured:
-# 1. Call vision_service.analyze_image(image_base64)
-# 2. Emit SSE event: vision_analysis with description
-# 3. Inject: "[Vision Context: {desc}] [User ID: {uid}] {message}"
-# 4. Send enriched message to Agent Builder
+# wayfinder-search-agent:
+#   1. Call vision_service.analyze_image_structured(image_base64)
+#   2. vision_context = "[Vision Context: {product_type} - {desc}] [Product Category: {cat}]"
+#   3. Emit vision_analysis SSE event with structured JSON
+# trip-planner-agent:
+#   1. Call vision_service.analyze_image(image_base64)
+#   2. vision_context = "[Vision Context: {terrain_description}]"
+#   3. Emit vision_analysis SSE event with description
+# On failure: emit vision_error SSE event, proceed without vision context
 ```
 
 **SSE Event Types (Backend → Frontend):**
 
 | Event | Purpose | Payload |
 |-------|---------|---------|
-| `vision_analysis` | Jina VLM terrain description | `{"description": "..."}` |
+| `vision_analysis` | Jina VLM terrain or product analysis | `{"description": "...", "product_type": "...", "category": "...", "subcategory": "...", "key_terms": [...]}` |
+| `vision_error` | Vision analysis failed (e.g. Jina cold start) | `{"error": "..."}` |
 | `reasoning` | Agent thinking steps | `{"content": "..."}` |
 | `tool_call` | Tool invocation | `{"tool": "name", "params": {...}}` |
 | `tool_result` | Tool execution result | `{"tool": "name", "result": {...}}` |
@@ -309,12 +321,13 @@ ES_URL = os.getenv("STANDALONE_ELASTICSEARCH_URL",
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | `TripPlanner.tsx` | `frontend/src/components/` | Main trip planning interface with streaming chat + image upload |
-| `SearchPanel.tsx` | `frontend/src/components/` | Slide-out search panel (Chat/Hybrid/Lexical modes) |
+| `SearchPanel.tsx` | `frontend/src/components/` | Slide-out search panel (Chat/Hybrid/Lexical); image upload in Chat + Hybrid; Vision Analysis/Error cards |
 | `ProductCard.tsx` | `frontend/src/components/` | Reusable product display card |
 | `VisionPreview.tsx` | `frontend/src/components/` | Imagen 3 product-in-scene preview with modal |
 | `SettingsPage.tsx` | `frontend/src/components/` | Vision credential management (Jina key, GCP SA JSON) |
 | `StepRenderer.tsx` | `frontend/src/components/search/` | Renders agent reasoning steps |
-| `ChatMode.tsx` | `frontend/src/components/search/` | Chat mode with product cards |
+| `ChatMode.tsx` | `frontend/src/components/search/` | Chat mode with product cards; Vision Analysis card with structured data and source image |
+| `imageUtils.ts` | `frontend/src/lib/` | Shared image resize/validation for TripPlanner and SearchPanel |
 
 ### Frontend Types (`frontend/src/types/index.ts`)
 
@@ -325,6 +338,7 @@ Key types added for vision features:
 | `VisionServiceStatus` | `'configured_ui' \| 'configured_env' \| 'not_configured'` |
 | `SettingsStatus` | `{ jina_vlm, vertex_ai, imagen, vertex_project_id? }` |
 | `ChatMessage` | Added `image_url?`, `generated_preview?` |
+| `ExtendedChatMessage` | Added `vision_analysis?` for structured Jina VLM output on chat messages |
 
 ### Streaming Response Handling
 
@@ -581,6 +595,7 @@ docker-compose up -d
 | `frontend/src/App.tsx` | Main app, routing, lifted state, settings status |
 | `frontend/src/components/TripPlanner.tsx` | Trip planning UI with streaming + image upload |
 | `frontend/src/components/SearchPanel.tsx` | Search modes (Chat/Hybrid/Lexical) |
+| `frontend/src/lib/imageUtils.ts` | Shared image resize/validation for TripPlanner and SearchPanel |
 | `frontend/src/components/VisionPreview.tsx` | Imagen 3 product preview modal |
 | `frontend/src/components/SettingsPage.tsx` | Vision credential management UI |
 | `frontend/src/lib/api.ts` | API client with SSE streaming + auth headers |
@@ -623,6 +638,7 @@ docker-compose up -d
 | `docs/images/arch_high_level.png` | High-level architecture (5 zones + Jina) |
 | `docs/images/arch_integration.png` | Elastic + Jina + Google integration flow |
 | `docs/images/arch_vision_pipeline.png` | Vision pipeline detail (3 phases) |
+| `docs/images/arch_vision_search.png` | Vision product search flow (Chat + Hybrid modes) |
 | `docs/images/arch_security.png` | Security and authentication flow |
 | `docs/images/arch_cloud_run.png` | Cloud Run deployment architecture |
 
@@ -652,6 +668,7 @@ docker-compose up -d
 ### Modifying Vision Behavior
 
 - **Jina VLM prompt**: `backend/services/vision_service.py` → `analyze_image()`
+- **Structured product analysis**: `backend/services/vision_service.py` → `analyze_image_structured()`, `PRODUCT_STRUCTURED_PROMPT`
 - **Grounding prompt**: `backend/services/vision_service.py` → `ground_conditions()`
 - **Imagen generation**: `backend/services/vision_service.py` → `generate_preview()`
 - **Context injection format**: `backend/routers/chat.py` → look for `[Vision Context:`
@@ -732,6 +749,11 @@ curl -X POST "http://localhost:8000/api/settings/test/jina"
 # Hybrid search
 curl "http://localhost:8000/api/products/search/hybrid?q=camping+tent&user_id=user_new"
 
+# Hybrid search with image
+curl -X POST "http://localhost:8000/api/products/search/hybrid" \
+  -H "Content-Type: application/json" \
+  -d '{"q": "", "image_base64": "...", "user_id": "user_new"}'
+
 # Lexical search
 curl "http://localhost:8000/api/products/search/lexical?q=camping+tent"
 ```
@@ -773,4 +795,4 @@ curl -X POST "http://localhost:8000/api/clickstream" \
 
 ---
 
-*Last updated: 2026-02-12*
+*Last updated: 2026-02-13*

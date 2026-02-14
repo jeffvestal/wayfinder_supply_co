@@ -22,6 +22,10 @@ An **Elastic + Google Better Together** demo showcasing **Elastic Agentic Search
 - ✅ Instruqt workshop with 5 challenges
 - ✅ Standalone Docker deployment mode
 - ✅ **NEW** — Jina VLM image analysis (upload a photo, get terrain description)
+- ✅ **NEW** — Image upload in Search and Chat flyout (Chat + Hybrid modes) for vision-based product search
+- ✅ **NEW** — Structured Jina VLM analysis with category filtering for precise product matching
+- ✅ **NEW** — Jina VLM cold-start retry with progressive backoff (502/503/429)
+- ✅ **NEW** — Vision error handling with user-facing amber error cards
 - ✅ **NEW** — Google Grounding for real-time weather via Gemini + Google Search
 - ✅ **NEW** — Imagen 3 product visualization (generate product-in-scene images)
 - ✅ **NEW** — UI Settings page for runtime credential configuration
@@ -269,7 +273,10 @@ Step-by-step flow: image analysis, weather grounding, and product visualization.
 
 ![Vision Pipeline](docs/images/arch_vision_pipeline.png)
 
-**Phase 1 — Image Analysis (Jina VLM):** User selects photo → Frontend resizes (max 2048px) → Backend `/vision/analyze` → Jina VLM API → `[Vision Context: ...]` injected into Agent prompt
+**Phase 1 — Image Analysis (Jina VLM):** User selects photo → Frontend resizes (max 2048px) → Backend routes to Jina VLM API:
+- **Trip Planner:** `POST /api/chat` with `image_base64` → `analyze_image()` (terrain prompt) → `[Vision Context: ...]` injected into Agent prompt
+- **Search Panel (Chat/Hybrid):** `POST /api/chat` with `image_base64` → `analyze_image_structured()` (structured JSON)
+- **Hybrid search only:** `POST /api/products/search/hybrid` with `image_base64` → `analyze_image_structured()`
 
 **Phase 2 — Weather Grounding (Google):** Agent Builder calls tool → `ground_conditions` workflow → Backend `/vision/ground` → Gemini 2.0 Flash + Google Search → Weather card in UI
 
@@ -301,6 +308,12 @@ GCP infrastructure for the "fully cloud" Elastic + Google demo scenario.
 ![Cloud Run Deployment](docs/images/arch_cloud_run.png)
 
 Three Cloud Run services in Google Cloud (`elastic-customer-eng / us-central1`), with IAP protecting the frontend (@elastic.co SSO) and a shared API key authenticating workflow HTTP callbacks from Elastic Cloud to backend/MCP.
+
+### Vision Product Search
+
+End-to-end flow for vision-based product search in the Search & Chat panel.
+
+![Vision Product Search](docs/images/arch_vision_search.png)
 
 ## Covered Adventure Destinations (30 locations)
 
@@ -374,6 +387,8 @@ Full catalog covers 10 categories with ~150 products:
 - **Settings Page** — Runtime configuration of Jina API key and GCP credentials without restarting services
 - **Credential Manager** — UI-set credentials take precedence over `.env` file; status indicators show what's configured
 
+- **Vision Product Search** — Upload product photos in the Search & Chat panel to find similar items. Works in both Chat mode (agent-guided with category awareness) and Hybrid mode (direct ES search with category filtering). Jina VLM returns structured JSON (`product_type`, `category`, `key_terms`) for precise matching. Vision Analysis card displays analysis results; amber error card shown on Jina cold-start failures.
+
 ### User Personalization
 
 - **User Personas** — Pre-built personas with unique shopping scenarios
@@ -406,6 +421,7 @@ wayfinder_supply_co/
 │   │   │   ├── SettingsPage.tsx    # Credential configuration UI ← NEW
 │   │   │   └── ...
 │   │   ├── lib/              # API client (incl. vision + settings endpoints)
+│   │   │   └── imageUtils.ts # Shared image resize/validation utilities
 │   │   └── types/            # TypeScript types
 │   └── public/               # Static assets
 │
@@ -648,6 +664,8 @@ Key environment variables needed for different scenarios:
 | `VERTEX_LOCATION` | GCP region (default: `us-central1`) |
 | `GCP_SERVICE_ACCOUNT_JSON` | GCP service account JSON as a string (alternative to file) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON file |
+
+> **Note:** The first Jina VLM request may take 30–60 seconds if the model is cold. The backend automatically retries with progressive backoff (502/503/429).
 
 **Optional — Cloud Run / Security:**
 

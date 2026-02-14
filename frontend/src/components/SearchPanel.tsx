@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Product, UserId } from '../types'
+import { Product, UserId, SettingsStatus } from '../types'
 import { api, StreamEvent } from '../lib/api'
-import { X, Search, Send, Loader2, MessageSquare, Zap, BookOpen, Target, Plus } from 'lucide-react'
+import { X, Search, Send, Loader2, MessageSquare, Zap, BookOpen, Target, Plus, ImagePlus, ChevronDown, ChevronRight, Eye } from 'lucide-react'
+import { resizeImage, MAX_FILE_SIZE_MB } from '../lib/imageUtils'
 import { ProductDetailModal } from './ProductDetailModal'
 import { ChatMode } from './search/ChatMode'
 import { SearchMode } from './search/SearchMode'
@@ -38,6 +39,7 @@ interface SearchPanelProps {
   setExpandedSteps: React.Dispatch<React.SetStateAction<Set<string>>>
   personalizationEnabled: boolean
   setPersonalizationEnabled: React.Dispatch<React.SetStateAction<boolean>>
+  settingsStatus?: SettingsStatus
 }
 
 export function SearchPanel({ 
@@ -59,7 +61,8 @@ export function SearchPanel({
   expandedSteps,
   setExpandedSteps,
   personalizationEnabled,
-  setPersonalizationEnabled
+  setPersonalizationEnabled,
+  settingsStatus
 }: SearchPanelProps) {
   // UI State
   const [panelWidth, setPanelWidth] = useState(50)
@@ -72,6 +75,9 @@ export function SearchPanel({
   const [searchResults, setSearchResults] = useState<Product[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isProductModalOpen, setIsProductModalOpen] = useState(false)
+  const [visionAnalysis, setVisionAnalysis] = useState<any>(null)
+  const [visionCardExpanded, setVisionCardExpanded] = useState(false)
+  const [visionSourceImage, setVisionSourceImage] = useState<string | null>(null)
   
   // Demo state
   const [isDemoRunning, setIsDemoRunning] = useState(false)
@@ -92,11 +98,17 @@ export function SearchPanel({
   // Narration state
   const [currentNarration, setCurrentNarration] = useState<string | null>(null)
   
+  // Image upload state (vision search in chat mode)
+  const [pendingImage, setPendingImage] = useState<string | null>(null)
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null)
+  const visionEnabled = settingsStatus?.jina_vlm === 'configured_ui' || settingsStatus?.jina_vlm === 'configured_env'
+
   // Refs
   const dragStartX = useRef(0)
   const dragStartWidth = useRef(50)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialMessageSentRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Extract product IDs from agent tool results (Agent Builder returns "resource" format)
   const extractProductIdsFromSteps = (steps: AgentStep[]): string[] => {
@@ -289,16 +301,62 @@ export function SearchPanel({
     setStepsExpanded(prev => ({ ...prev, [messageId]: !prev[messageId] }))
   }
 
-  const sendMessage = async (messageText: string) => {
-    if (!messageText.trim() || isLoading) return
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset the input so selecting the same file again triggers onChange
+    e.target.value = ''
 
-    setLastQuery(messageText.trim())
+    // Validate type
+    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) {
+      alert('Please select a JPEG, PNG, or WebP image.')
+      return
+    }
+    // Validate size
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      alert(`Image must be smaller than ${MAX_FILE_SIZE_MB}MB.`)
+      return
+    }
+
+    try {
+      const base64 = await resizeImage(file)
+      setPendingImage(base64)
+      setPendingImagePreview(`data:image/jpeg;base64,${base64}`)
+    } catch (err) {
+      console.error('Failed to process image:', err)
+    }
+  }
+
+  const clearPendingImage = () => {
+    setPendingImage(null)
+    setPendingImagePreview(null)
+  }
+
+  const sendMessage = async (messageText: string) => {
+    // #region agent log
+    console.warn('[DBG:sendMessage] entry', { hasPendingImage: !!pendingImage, pendingImageLen: pendingImage?.length || 0, messageText: messageText?.substring(0, 50), isLoading, mode, visionEnabled })
+    // #endregion
+    // Allow sending if there's text OR a pending image
+    if ((!messageText.trim() && !pendingImage) || isLoading) return
+
+    // Capture and clear pending image before async work
+    const imageToSend = pendingImage
+    const imagePreviewToSend = pendingImagePreview
+    // #region agent log
+    console.warn('[DBG:sendMessage] captured image', { hasImageToSend: !!imageToSend, imageToSendLen: imageToSend?.length || 0 })
+    // #endregion
+    clearPendingImage()
+
+    if (messageText.trim()) {
+      setLastQuery(messageText.trim())
+    }
     
     const userMessage: ExtendedChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: messageText.trim(),
+      content: messageText.trim() || (imageToSend ? 'Find similar products' : ''),
       timestamp: new Date(),
+      image_url: imagePreviewToSend || undefined,
     }
 
     setMessages((prev) => [...prev, userMessage])
@@ -320,10 +378,51 @@ export function SearchPanel({
       let currentSteps: AgentStep[] = []
       let currentContent = ''
       
-      await api.streamChat(messageText, userId, (event: StreamEvent) => {
+      await api.streamChat(messageText || '', userId, (event: StreamEvent) => {
         const { type, data } = event
+        // #region agent log
+        console.warn('[DBG:streamChat] SSE event', { type, dataKeys: data ? Object.keys(data) : null })
+        // #endregion
 
         switch (type) {
+          case 'vision_analysis': {
+            // Add vision analysis as a reasoning step in the collapsible thought trace
+            const visionDesc = data.description || (typeof data === 'string' ? data : '')
+            const productType = data.product_type || ''
+            const category = data.category || ''
+            const structuredInfo = productType
+              ? `Product: ${productType}${category ? ` | Category: ${category}` : ''}\n${visionDesc}`
+              : visionDesc
+            currentSteps = [...currentSteps, {
+              type: 'reasoning',
+              reasoning: `Image Analysis (Jina VLM): ${structuredInfo}`
+            }, {
+              type: 'reasoning',
+              reasoning: `Raw Jina VLM Response:\n${JSON.stringify(data, null, 2)}`
+            }]
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, steps: currentSteps, status: 'thinking', vision_analysis: data }
+                : msg
+            ))
+            break
+          }
+
+          case 'vision_error': {
+            // Vision analysis failed (e.g. Jina cold start 503)
+            const errorMsg = data.error || 'Image analysis failed'
+            currentSteps = [...currentSteps, {
+              type: 'reasoning',
+              reasoning: `⚠️ Vision Error: ${errorMsg}`
+            }]
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, steps: currentSteps, status: 'thinking' }
+                : msg
+            ))
+            break
+          }
+
           case 'reasoning':
             currentSteps = [...currentSteps, { type: 'reasoning', reasoning: data.reasoning }]
             setMessages(prev => prev.map(msg => 
@@ -407,7 +506,7 @@ export function SearchPanel({
             ))
             break
         }
-      })
+      }, undefined, imageToSend || undefined)
     } catch (error) {
       console.error('Chat error:', error)
       setMessages(prev => prev.map(msg => 
@@ -424,20 +523,28 @@ export function SearchPanel({
     e.preventDefault()
     if (mode === 'chat') {
       sendMessage(input)
+    } else if (mode === 'hybrid' && pendingImage) {
+      // Hybrid search with image — pass pending image for vision analysis
+      const imageToSend = pendingImage
+      const imagePreview = pendingImagePreview
+      clearPendingImage()
+      setVisionSourceImage(imagePreview)
+      handleSearch(input, undefined, imageToSend)
     } else {
-      // Hybrid or lexical search
       handleSearch(input)
     }
   }
 
-  const handleSearch = async (query: string, targetMode?: 'hybrid' | 'lexical') => {
-    if (!query.trim() || isLoading) return
+  const handleSearch = async (query: string, targetMode?: 'hybrid' | 'lexical', imageBase64?: string) => {
+    if ((!query.trim() && !imageBase64) || isLoading) return
 
     const searchMode = targetMode || mode
     
-    setLastQuery(query.trim())
+    if (query.trim()) setLastQuery(query.trim())
     setIsLoading(true)
     setInput('')
+    setVisionAnalysis(null)
+    if (!imageBase64) setVisionSourceImage(null)
     const personalizedUserId = personalizationEnabled ? userId : undefined
 
     // Show narration banner
@@ -449,17 +556,34 @@ export function SearchPanel({
 
     try {
       const results = searchMode === 'hybrid' 
-        ? await api.hybridSearch(query, 10, personalizedUserId)
+        ? await api.hybridSearch(query, 10, personalizedUserId, imageBase64)
         : await api.lexicalSearch(query, 10, personalizedUserId)
       setSearchResults(results.products)
+
+      // Store vision analysis if present (from image-enhanced hybrid search)
+      if (results.vision_analysis) {
+        setVisionAnalysis(results.vision_analysis)
+        setVisionCardExpanded(true)
+      }
+
+      // Show vision error if image analysis failed (e.g. Jina cold start)
+      if (results.vision_error) {
+        setVisionAnalysis({ error: results.vision_error })
+        setVisionCardExpanded(true)
+      }
       
       // Show personalized narration if applicable
       if (narrationMode && personalizationEnabled) {
         setCurrentNarration('personalized')
         setTimeout(() => setCurrentNarration(null), 3000)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Search error:', error)
+      // If the error is a 503 from vision service warming up, show a helpful message
+      if (imageBase64 && error?.message?.includes('503')) {
+        setVisionAnalysis({ error: 'Image analysis service is warming up — please try again in 30-60 seconds' })
+        setVisionCardExpanded(true)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -837,12 +961,88 @@ export function SearchPanel({
 
                     {/* Hybrid/Lexical Mode */}
                     {(mode === 'hybrid' || mode === 'lexical') && (
-                      <SearchMode
-                        mode={mode}
-                        results={searchResults}
-                        isLoading={isLoading}
-                        onProductClick={handleProductClick}
-                      />
+                      <>
+                        {/* Vision Analysis Card - shown when image search returns structured data */}
+                        {visionAnalysis && mode === 'hybrid' && (
+                          <div className="mb-4">
+                            <button
+                              onClick={() => setVisionCardExpanded(!visionCardExpanded)}
+                              className={`w-full flex items-center gap-2 px-3 py-2 ${visionAnalysis.error ? 'bg-amber-900/30 border-amber-700/40' : 'bg-purple-900/30 border-purple-700/40'} border rounded-lg text-sm ${visionAnalysis.error ? 'text-amber-300' : 'text-purple-300'} hover:bg-opacity-60 transition-colors`}
+                            >
+                              <Eye className={`w-4 h-4 ${visionAnalysis.error ? 'text-amber-400' : 'text-purple-400'}`} />
+                              <span className="font-medium">{visionAnalysis.error ? 'Vision Error' : 'Vision Analysis'}</span>
+                              {!visionAnalysis.error && visionAnalysis.product_type && (
+                                <span className="text-purple-400/70 ml-1">— {visionAnalysis.product_type}</span>
+                              )}
+                              <span className="ml-auto">
+                                {visionCardExpanded
+                                  ? <ChevronDown className="w-4 h-4" />
+                                  : <ChevronRight className="w-4 h-4" />
+                                }
+                              </span>
+                            </button>
+                            {visionCardExpanded && (
+                              <div className={`mt-1 px-3 py-2 ${visionAnalysis.error ? 'bg-amber-900/20 border-amber-700/30' : 'bg-purple-900/20 border-purple-700/30'} border rounded-lg text-xs`}>
+                                {visionAnalysis.error ? (
+                                  <div className="flex items-center gap-2 text-amber-300 py-1">
+                                    <span className="text-amber-400">⚠️</span>
+                                    <span>{visionAnalysis.error}</span>
+                                  </div>
+                                ) : (
+                                <div className="flex gap-3">
+                                  {/* Source image thumbnail */}
+                                  {visionSourceImage && (
+                                    <img
+                                      src={visionSourceImage}
+                                      alt="Source"
+                                      className="w-16 h-16 object-cover rounded-lg border border-purple-700/30 shrink-0"
+                                    />
+                                  )}
+                                  <div className="space-y-1.5 flex-1">
+                                    {visionAnalysis.product_type && (
+                                      <div className="flex gap-2">
+                                        <span className="text-purple-400 font-medium w-20 shrink-0">Type:</span>
+                                        <span className="text-gray-300">{visionAnalysis.product_type}</span>
+                                      </div>
+                                    )}
+                                    {visionAnalysis.category && (
+                                      <div className="flex gap-2">
+                                        <span className="text-purple-400 font-medium w-20 shrink-0">Category:</span>
+                                        <span className="text-gray-300">{visionAnalysis.category}</span>
+                                      </div>
+                                    )}
+                                    {visionAnalysis.key_terms && visionAnalysis.key_terms.length > 0 && (
+                                      <div className="flex gap-2">
+                                        <span className="text-purple-400 font-medium w-20 shrink-0">Terms:</span>
+                                        <div className="flex flex-wrap gap-1">
+                                          {visionAnalysis.key_terms.map((term: string, i: number) => (
+                                            <span key={i} className="px-1.5 py-0.5 bg-purple-800/40 text-purple-300 rounded text-xs">
+                                              {term}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {visionAnalysis.description && (
+                                      <div className="flex gap-2">
+                                        <span className="text-purple-400 font-medium w-20 shrink-0">Details:</span>
+                                        <span className="text-gray-400">{visionAnalysis.description}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <SearchMode
+                          mode={mode}
+                          results={searchResults}
+                          isLoading={isLoading}
+                          onProductClick={handleProductClick}
+                        />
+                      </>
                     )}
                   </>
                 )}
@@ -851,18 +1051,65 @@ export function SearchPanel({
               {/* Input */}
               {!isDemoRunning && (
                 <form onSubmit={handleSubmit} className="p-4 border-t border-slate-700">
+                  {/* Hidden file input for image upload */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+
+                  {/* Image preview bar */}
+                  {pendingImagePreview && (
+                    <div className="flex items-center gap-2 mb-2 p-2 bg-slate-800/50 border border-slate-700 rounded-lg">
+                      <img
+                        src={pendingImagePreview}
+                        alt="Upload preview"
+                        className="w-12 h-12 object-cover rounded"
+                      />
+                      <span className="text-xs text-gray-400 flex-1">Image attached</span>
+                      <button
+                        type="button"
+                        onClick={clearPendingImage}
+                        className="p-1 hover:bg-white/10 rounded transition-colors"
+                      >
+                        <X className="w-4 h-4 text-gray-400" />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
+                    {/* Image upload button - in chat and hybrid modes when Jina VLM is configured */}
+                    {(mode === 'chat' || mode === 'hybrid') && visionEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isLoading}
+                        className="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-gray-400 hover:text-white px-3 py-3 rounded-xl transition-all disabled:opacity-50"
+                        title="Upload a product image to find similar items"
+                      >
+                        <ImagePlus className="w-5 h-5" />
+                      </button>
+                    )}
                     <input
                       type="text"
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      placeholder={mode === 'chat' ? "Ask about gear or your trip..." : "Search for products..."}
+                      placeholder={
+                        mode === 'chat'
+                          ? (pendingImage ? "Describe what you're looking for, or just send the image..." : "Ask about gear or your trip...")
+                          : mode === 'hybrid' && pendingImage
+                            ? "Add optional search terms, or just send the image..."
+                            : "Search for products..."
+                      }
                       className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary"
                       disabled={isLoading}
                     />
                     <button
                       type="submit"
-                      disabled={!input.trim() || isLoading}
+                      disabled={(!input.trim() && !pendingImage) || isLoading}
+                      title={pendingImage && !input.trim() ? 'Search by image' : 'Search'}
                       className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
                     >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

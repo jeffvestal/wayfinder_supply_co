@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from typing import List, Optional
 from services.elastic_client import get_elastic_client
+from services import vision_service
 import logging
 
 logger = logging.getLogger("wayfinder.backend")
@@ -271,22 +273,83 @@ async def lexical_search(
         raise HTTPException(status_code=500, detail=f"Lexical search error: {str(e)}")
 
 
+class HybridSearchRequest(BaseModel):
+    """POST body for hybrid search with optional vision image."""
+    q: str = ""
+    limit: int = 20
+    user_id: Optional[str] = None
+    image_base64: Optional[str] = None
+
+
 @router.get("/products/search/hybrid")
-async def hybrid_search(
+async def hybrid_search_get(
     q: str,
     limit: int = 20,
     user_id: Optional[str] = Query(None, description="User ID for personalization")
 ):
+    """GET variant — text-only hybrid search (backward compatible)."""
+    return await _hybrid_search_impl(q=q, limit=limit, user_id=user_id, image_base64=None)
+
+
+@router.post("/products/search/hybrid")
+async def hybrid_search_post(request: HybridSearchRequest):
+    """POST variant — supports optional image_base64 for vision-enhanced search."""
+    return await _hybrid_search_impl(
+        q=request.q,
+        limit=request.limit,
+        user_id=request.user_id,
+        image_base64=request.image_base64,
+    )
+
+
+async def _hybrid_search_impl(
+    q: str,
+    limit: int = 20,
+    user_id: Optional[str] = None,
+    image_base64: Optional[str] = None,
+):
     """
-    Real hybrid search combining semantic (ELSER) and lexical (BM25) using linear combination.
-    Uses weighted linear combination to merge results from both search types.
+    Core hybrid search combining semantic (ELSER) and lexical (BM25) using linear combination.
+    When image_base64 is provided, uses structured Jina VLM analysis to build a more precise
+    query with category filtering, key_terms for lexical, and description for semantic.
     """
     es = get_elastic_client()
-    
+
+    # --- Vision-enhanced search path ---
+    vision_analysis = None
+    vision_error = None
+    if image_base64:
+        try:
+            vision_analysis = await vision_service.analyze_image_structured(image_base64)
+            logger.info(f"Vision analysis: product_type={vision_analysis.get('product_type')}, category={vision_analysis.get('category')}")
+        except Exception as e:
+            if "503" in str(e):
+                vision_error = "Image analysis service is warming up — please try again in 30-60 seconds"
+            else:
+                vision_error = f"Image analysis unavailable: {type(e).__name__}"
+            logger.warning(f"Vision analysis failed, falling back to text query: {e}")
+
+    # Determine query strings based on whether vision analysis succeeded
+    if vision_analysis and vision_analysis.get("description"):
+        semantic_query = vision_analysis["description"]
+        key_terms = vision_analysis.get("key_terms", [])
+        lexical_text = " ".join(key_terms) if key_terms else vision_analysis.get("product_type", q)
+        # If user also typed text, prepend it to give their intent priority
+        if q.strip():
+            semantic_query = f"{q} {semantic_query}"
+            lexical_text = f"{q} {lexical_text}"
+    else:
+        if not q.strip():
+            if vision_error:
+                raise HTTPException(status_code=503, detail=vision_error)
+            raise HTTPException(status_code=400, detail="Query text or image is required")
+        semantic_query = q
+        lexical_text = q
+
     # Build retriever config for Linear combination (weighted)
     lexical_query = {
         "multi_match": {
-            "query": q,
+            "query": lexical_text,
             "fields": ["title^3", "description^2", "category^2", "brand", "tags"],
             "type": "best_fields",
             "fuzziness": "AUTO"
@@ -317,36 +380,49 @@ async def hybrid_search(
                 }
             }
 
+    # Build base retrievers
+    semantic_retriever = {
+        "retriever": {
+            "standard": {
+                "query": {
+                    "semantic": {
+                        "field": "description.semantic",
+                        "query": semantic_query
+                    }
+                }
+            }
+        },
+        "weight": 0.7  # Semantic gets higher weight
+    }
+
+    lexical_retriever = {
+        "retriever": {
+            "standard": {
+                "query": lexical_query
+            }
+        },
+        "weight": 0.3  # Lexical for keyword boost
+    }
+
     retriever_config = {
         "linear": {
-            "retrievers": [
-                # Semantic retriever (ELSER via semantic_text) - higher weight for meaning
-                {
-                    "retriever": {
-                        "standard": {
-                            "query": {
-                                "semantic": {
-                                    "field": "description.semantic",
-                                    "query": q
-                                }
-                            }
-                        }
-                    },
-                    "weight": 0.7  # Semantic gets higher weight
-                },
-                # Lexical retriever (BM25) - for exact matches
-                {
-                    "retriever": {
-                        "standard": {
-                            "query": lexical_query
-                        }
-                    },
-                    "weight": 0.3  # Lexical for keyword boost
-                }
-            ]
+            "retrievers": [semantic_retriever, lexical_retriever]
         }
     }
-    
+
+    # Apply category filter when vision analysis provides a category
+    if vision_analysis and vision_analysis.get("category"):
+        category_filter = vision_analysis["category"]
+        retriever_config = {
+            "linear": {
+                "retrievers": [semantic_retriever, lexical_retriever],
+                "filter": {
+                    "term": {"category": category_filter}
+                }
+            }
+        }
+        logger.info(f"Vision category filter applied: {category_filter}")
+
     # Build the es_query representation for display
     es_query_display = {
         "retriever": retriever_config,
@@ -405,16 +481,24 @@ async def hybrid_search(
                     "highlight": hit.get("highlight", {})
                 })
         
-        return {
+        result = {
             "products": products,
             "total": response["hits"]["total"]["value"],
-            "query": q,
+            "query": q or (vision_analysis.get("product_type", "") if vision_analysis else ""),
             "es_query": es_query_display,
             "user_prefs": user_prefs,
             "raw_hits": raw_hits,
             "search_type": "hybrid_linear",
             "personalized": personalized
         }
+
+        # Include vision analysis in response so frontend can display it
+        if vision_analysis:
+            result["vision_analysis"] = vision_analysis
+        if vision_error:
+            result["vision_error"] = vision_error
+
+        return result
     except Exception as e:
         # Don't silently fallback - fail clearly so we know there's an issue
         error_msg = str(e)

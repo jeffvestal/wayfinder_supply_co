@@ -666,6 +666,7 @@ function App() {
           setExpandedSteps={setSearchExpandedSteps}
           personalizationEnabled={personalizationEnabled}
           setPersonalizationEnabled={setPersonalizationEnabled}
+          settingsStatus={settingsStatus}
         />
       </ErrorBoundary>
 

@@ -126,6 +126,9 @@ export const api = {
     };
     if (agentId) body.agent_id = agentId;
     if (imageBase64) body.image_base64 = imageBase64;
+    // #region agent log
+    console.warn('[DBG:streamChat] sending request', { url: url.toString(), hasImage: !!imageBase64, imageLen: imageBase64?.length || 0, agentId: agentId || '(default)', message: message.substring(0, 50) })
+    // #endregion
 
     const response = await fetch(url.toString(), {
       method: 'POST',
@@ -457,7 +460,7 @@ export const api = {
     return response.json();
   },
 
-  async lexicalSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[] }> {
+  async lexicalSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[]; vision_analysis?: any; vision_error?: string }> {
     const url = createApiUrl('/api/products/search/lexical');
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
@@ -472,8 +475,30 @@ export const api = {
     return response.json();
   },
 
-  async hybridSearch(query: string, limit = 10, userId?: string): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[] }> {
+  async hybridSearch(query: string, limit = 10, userId?: string, imageBase64?: string): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[]; vision_analysis?: any; vision_error?: string }> {
     const url = createApiUrl('/api/products/search/hybrid');
+
+    if (imageBase64) {
+      // POST variant — supports image_base64 in body
+      const body: Record<string, any> = {
+        q: query,
+        limit,
+        image_base64: imageBase64,
+      };
+      if (userId) body.user_id = userId;
+
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    }
+
+    // GET variant — text-only (backward compatible)
     url.searchParams.set('q', query);
     url.searchParams.set('limit', limit.toString());
     if (userId) {

@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { MessageSquare, Loader2, ChevronRight, ChevronDown, CheckCircle2 } from 'lucide-react'
+import { MessageSquare, Loader2, ChevronRight, ChevronDown, CheckCircle2, Eye } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ExtendedChatMessage, AgentStep } from './types'
 import { StepRenderer } from './StepRenderer'
@@ -70,6 +71,19 @@ export function ChatMode({
   userId,
   onProductClick
 }: ChatModeProps) {
+  // Vision analysis card expand state (keyed by message ID)
+  const [visionExpanded, setVisionExpanded] = useState<Record<string, boolean>>({})
+
+  // Find the source image from the preceding user message
+  const getSourceImage = (messageIndex: number): string | undefined => {
+    for (let i = messageIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'user' && messages[i].image_url) {
+        return messages[i].image_url
+      }
+    }
+    return undefined
+  }
+
   // Empty state
   if (messages.length === 0) {
     return (
@@ -87,7 +101,7 @@ export function ChatMode({
 
   return (
     <div className="space-y-4">
-      {messages.map((message) => (
+      {messages.map((message, msgIndex) => (
         <motion.div
           key={message.id}
           initial={{ opacity: 0, y: 20 }}
@@ -138,6 +152,77 @@ export function ChatMode({
               </div>
             )}
 
+            {/* Vision Analysis Card - between reasoning and response */}
+            {message.role === 'assistant' && message.vision_analysis && (
+              <div className="mb-2 ml-4 w-full max-w-[85%]">
+                <button
+                  onClick={() => setVisionExpanded(prev => ({ ...prev, [message.id]: !prev[message.id] }))}
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-purple-900/30 border border-purple-700/40 rounded-lg text-sm text-purple-300 hover:bg-purple-900/40 transition-colors"
+                >
+                  <Eye className="w-4 h-4 text-purple-400" />
+                  <span className="font-medium">Vision Analysis</span>
+                  {message.vision_analysis.product_type && (
+                    <span className="text-purple-400/70 ml-1">— {message.vision_analysis.product_type}</span>
+                  )}
+                  <span className="ml-auto">
+                    {visionExpanded[message.id]
+                      ? <ChevronDown className="w-4 h-4" />
+                      : <ChevronRight className="w-4 h-4" />
+                    }
+                  </span>
+                </button>
+                {visionExpanded[message.id] && (
+                  <div className="mt-1 px-3 py-2 bg-purple-900/20 border border-purple-700/30 rounded-lg text-xs">
+                    <div className="flex gap-3">
+                      {/* Source image thumbnail */}
+                      {(() => {
+                        const sourceImg = getSourceImage(msgIndex)
+                        return sourceImg ? (
+                          <img
+                            src={sourceImg}
+                            alt="Source"
+                            className="w-16 h-16 object-cover rounded-lg border border-purple-700/30 shrink-0"
+                          />
+                        ) : null
+                      })()}
+                      <div className="space-y-1.5 flex-1">
+                        {message.vision_analysis.product_type && (
+                          <div className="flex gap-2">
+                            <span className="text-purple-400 font-medium w-20 shrink-0">Type:</span>
+                            <span className="text-gray-300">{message.vision_analysis.product_type}</span>
+                          </div>
+                        )}
+                        {message.vision_analysis.category && (
+                          <div className="flex gap-2">
+                            <span className="text-purple-400 font-medium w-20 shrink-0">Category:</span>
+                            <span className="text-gray-300">{message.vision_analysis.category}</span>
+                          </div>
+                        )}
+                        {message.vision_analysis.key_terms && message.vision_analysis.key_terms.length > 0 && (
+                          <div className="flex gap-2">
+                            <span className="text-purple-400 font-medium w-20 shrink-0">Terms:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {message.vision_analysis.key_terms.map((term: string, i: number) => (
+                                <span key={i} className="px-1.5 py-0.5 bg-purple-800/40 text-purple-300 rounded text-xs">
+                                  {term}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {message.vision_analysis.description && (
+                          <div className="flex gap-2">
+                            <span className="text-purple-400 font-medium w-20 shrink-0">Details:</span>
+                            <span className="text-gray-400">{message.vision_analysis.description}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                 message.role === 'user'
@@ -166,7 +251,17 @@ export function ChatMode({
                 </ReactMarkdown>
               </div>
             ) : (
-              <p className="text-sm">{message.content}</p>
+              <>
+                {/* User-uploaded image thumbnail */}
+                {message.image_url && (
+                  <img
+                    src={message.image_url}
+                    alt="Uploaded product"
+                    className="max-w-[200px] max-h-[150px] object-cover rounded-lg mb-2"
+                  />
+                )}
+                <p className="text-sm">{message.content}</p>
+              </>
             )}
             
             <p className="text-xs opacity-70 mt-2">

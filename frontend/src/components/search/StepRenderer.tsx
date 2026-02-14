@@ -40,7 +40,7 @@ export function StepRenderer({ step, index, messageId, isExpanded, onToggle }: S
             <div>
               <div className="text-xs font-semibold text-primary/70 mb-2 uppercase tracking-wide">Agent Thinking:</div>
               <div className="bg-slate-800 rounded-md p-3">
-                <div className="text-xs text-gray-300 leading-relaxed">{step.reasoning}</div>
+                <div className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{step.reasoning}</div>
               </div>
             </div>
           )}

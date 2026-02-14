@@ -19,12 +19,24 @@ logger = logging.getLogger("wayfinder.vision")
 # Jina VLM endpoint (OpenAI-compatible)
 JINA_VLM_URL = "https://api-beta-vlm.jina.ai/v1/chat/completions"
 
-# Default terrain analysis prompt
+# Default terrain analysis prompt (used by Trip Planner)
 DEFAULT_TERRAIN_PROMPT = (
     "Describe the terrain, weather conditions, elevation, and ground conditions "
     "in this image for outdoor activity planning. Be specific about what gear "
     "would be needed. Mention the likely location type (mountain, desert, forest, "
     "coastal, arctic, etc.), season, and any hazards visible. Be concise."
+)
+
+# Structured product analysis prompt — returns JSON for precise search
+PRODUCT_STRUCTURED_PROMPT = (
+    'Analyze this product image and return a JSON object with the following fields:\n'
+    '- "product_type": The SPECIFIC product type (e.g., "hiking boots" not "boots")\n'
+    '- "category": One of: Accessories, Apparel, Camping, Climbing, Cycling, '
+    'Fishing, Hiking, Tropical & Safari, Water Sports, Winter Sports\n'
+    '- "subcategory": A specific subcategory (e.g., "Hiking Boots", "Rain Jackets")\n'
+    '- "key_terms": An array of 3-5 specific search terms that distinguish this product\n'
+    '- "description": A concise description focusing on materials, style, colors, intended use\n'
+    'Return ONLY valid JSON, no other text.'
 )
 
 # Max image payload size (4MB base64)
@@ -88,7 +100,9 @@ async def analyze_image(image_base64: str, prompt: Optional[str] = None) -> str:
         "max_tokens": 500,
     }
 
-    max_attempts = 2
+    # Retryable HTTP status codes (Jina cold start returns 503)
+    RETRYABLE_STATUS_CODES = {502, 503, 429}
+    max_attempts = 3
     last_error: Optional[Exception] = None
 
     for attempt in range(1, max_attempts + 1):
@@ -104,6 +118,20 @@ async def analyze_image(image_base64: str, prompt: Optional[str] = None) -> str:
                     json=payload,
                 )
 
+                if response.status_code in RETRYABLE_STATUS_CODES:
+                    logger.warning(
+                        f"Jina VLM attempt {attempt} returned {response.status_code} "
+                        f"({'retrying after delay...' if attempt < max_attempts else 'giving up'})"
+                    )
+                    last_error = ValueError(f"Jina VLM API error: {response.status_code}")
+                    if attempt < max_attempts:
+                        import asyncio
+                        delay = 15 * attempt  # 15s, 30s — gives cold model time to load
+                        logger.info(f"Waiting {delay}s before retry (cold start backoff)...")
+                        await asyncio.sleep(delay)
+                        continue
+                    raise last_error
+
                 if response.status_code != 200:
                     logger.error(f"Jina VLM error: {response.status_code} - {response.text}")
                     raise ValueError(f"Jina VLM API error: {response.status_code}")
@@ -117,11 +145,54 @@ async def analyze_image(image_base64: str, prompt: Optional[str] = None) -> str:
             last_error = e
             logger.warning(f"Jina VLM attempt {attempt} failed ({type(e).__name__}), {'retrying...' if attempt < max_attempts else 'giving up'}")
             if attempt < max_attempts:
+                import asyncio
+                await asyncio.sleep(5)
                 continue
         except Exception:
             raise  # Don't retry non-transient errors
 
     raise last_error or ValueError("Jina VLM failed after retries")
+
+
+async def analyze_image_structured(image_base64: str) -> Dict[str, Any]:
+    """
+    Analyze a product image and return structured JSON for precise search.
+
+    Calls Jina VLM with a structured prompt that requests JSON output including
+    product_type, category, subcategory, key_terms, and description.
+
+    Args:
+        image_base64: Base64-encoded image (with or without data URI prefix)
+
+    Returns:
+        Dict with product_type, category, subcategory, key_terms, description.
+        Falls back to {"description": raw_text} if JSON parsing fails.
+    """
+    raw = await analyze_image(image_base64, prompt=PRODUCT_STRUCTURED_PROMPT)
+
+    # Strip markdown code fences if Jina wraps the JSON in ```json ... ```
+    text = raw.strip()
+    if text.startswith("```"):
+        # Remove opening fence (```json or ```)
+        first_newline = text.index("\n") if "\n" in text else 3
+        text = text[first_newline + 1:]
+        # Remove closing fence
+        if text.endswith("```"):
+            text = text[:-3].strip()
+
+    try:
+        data = json.loads(text)
+        # Ensure expected keys exist with sensible defaults
+        return {
+            "product_type": data.get("product_type", ""),
+            "category": data.get("category", ""),
+            "subcategory": data.get("subcategory", ""),
+            "key_terms": data.get("key_terms", []),
+            "description": data.get("description", ""),
+        }
+    except json.JSONDecodeError:
+        logger.warning(f"Failed to parse structured VLM response as JSON, using raw text. Response: {text[:200]}")
+        return {"description": raw, "product_type": "", "category": "", "subcategory": "", "key_terms": []}
 
 
 async def ground_conditions(location: str, activity: str) -> Dict[str, Any]:

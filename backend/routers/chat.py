@@ -124,7 +124,7 @@ async def chat_endpoint(
     - Query params: ?message=...&user_id=...&agent_id=... (backward compatible)
     """
     # Resolve parameters from JSON body or query params
-    if request and request.message:
+    if request and (request.message or request.image_base64):
         msg = request.message
         uid = request.user_id
         aid = request.agent_id
@@ -135,22 +135,63 @@ async def chat_endpoint(
         aid = agent_id or "wayfinder-search-agent"
         image = None
     else:
-        raise HTTPException(status_code=400, detail="Message is required")
+        raise HTTPException(status_code=400, detail="Message or image is required")
 
     # If image provided, try to analyze with Jina VLM
     vision_context = ""
     vision_description = ""
+    vision_structured_data = None
+    vision_error = None  # Set if vision analysis fails (e.g. Jina cold start 503)
+    # #region agent log
+    logger.warning(f"[DBG] chat_endpoint: has_image={bool(image)}, image_len={len(image) if image else 0}, aid={aid}, msg_preview={(msg or '')[:50]}")
+    # #endregion
     if image:
         cm = get_credential_manager()
-        if cm.is_vision_ready():
+        vision_ready = cm.is_vision_ready()
+        # #region agent log
+        logger.warning(f"[DBG] vision_ready={vision_ready}, aid={aid}")
+        # #endregion
+        if vision_ready:
             try:
-                vision_description = await vision_service.analyze_image(image)
-                vision_context = f"[Vision Context: {vision_description}] "
-                logger.info(f"Vision context added ({len(vision_description)} chars)")
+                if aid == "wayfinder-search-agent":
+                    # Search agent: use structured analysis for precise product matching
+                    # #region agent log
+                    logger.warning("[DBG] calling analyze_image_structured...")
+                    # #endregion
+                    vision_structured_data = await vision_service.analyze_image_structured(image)
+                    vision_description = vision_structured_data.get("description", "")
+                    product_type = vision_structured_data.get("product_type", "")
+                    category = vision_structured_data.get("category", "")
+                    vision_context = (
+                        f"[Vision Context: {product_type} - {vision_description}] "
+                        f"[Product Category: {category}] "
+                    )
+                    # #region agent log
+                    logger.warning(f"[DBG] structured_analysis SUCCESS: product_type={product_type}, category={category}, desc_len={len(vision_description)}")
+                    # #endregion
+                    logger.info(f"Structured vision context: product_type={product_type}, category={category}")
+                else:
+                    # Trip planner: use terrain-focused analysis (default prompt)
+                    vision_description = await vision_service.analyze_image(image)
+                    vision_context = f"[Vision Context: {vision_description}] "
+                    logger.info(f"Vision context added ({len(vision_description)} chars)")
             except Exception as e:
+                # #region agent log
+                logger.warning(f"[DBG] vision_analysis FAILED: {type(e).__name__}: {e}")
+                # #endregion
+                vision_error = f"Image analysis unavailable: {type(e).__name__}"
+                if "503" in str(e):
+                    vision_error = "Image analysis service is warming up — please try again in 30-60 seconds"
                 logger.warning(f"Vision analysis failed, proceeding without: {type(e).__name__}: {e}")
         else:
+            # #region agent log
+            logger.warning(f"[DBG] vision NOT ready - is_vision_ready returned False")
+            # #endregion
             logger.info("Image provided but Jina VLM not configured, ignoring image")
+
+    # Handle image-only submissions (no user text)
+    if not msg.strip() and image:
+        msg = "Find products similar to what's shown in this image"
 
     # Build contextual message
     contextual_message = f"{vision_context}[User ID: {uid}] {msg}"
@@ -158,9 +199,17 @@ async def chat_endpoint(
     async def chat_stream():
         """Wrapper generator: emits vision_analysis event first, then agent stream."""
         if vision_description:
-            yield format_sse_event("vision_analysis", {
-                "description": vision_description
-            })
+            vision_event_data = {"description": vision_description}
+            if vision_structured_data:
+                vision_event_data.update({
+                    "product_type": vision_structured_data.get("product_type", ""),
+                    "category": vision_structured_data.get("category", ""),
+                    "subcategory": vision_structured_data.get("subcategory", ""),
+                    "key_terms": vision_structured_data.get("key_terms", []),
+                })
+            yield format_sse_event("vision_analysis", vision_event_data)
+        elif vision_error:
+            yield format_sse_event("vision_error", {"error": vision_error})
         async for chunk in stream_agent_response(contextual_message, aid):
             yield chunk
 

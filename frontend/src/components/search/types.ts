@@ -15,6 +15,7 @@ export interface ExtendedChatMessage extends ChatMessage {
   steps?: AgentStep[];
   status?: 'thinking' | 'working' | 'typing' | 'complete';
   products?: Product[];
+  vision_analysis?: any;
 }
 
 // Search mode type
