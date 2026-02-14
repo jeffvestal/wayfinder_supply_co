@@ -321,46 +321,21 @@ function App() {
                   <MapPin className="w-4 h-4" />
                   Trip Planner
                 </button>
-                {!focusMode && (
-                  <button
-                    onClick={() => {
-                      setCurrentView('cart')
-                      setMobileMenuOpen(false)
-                    }}
-                    className={`px-5 py-2.5 rounded-lg flex items-center gap-2 font-medium transition-all relative ${
-                      currentView === 'cart'
-                        ? 'bg-primary/20 text-primary'
-                        : 'text-gray-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                    Cart
-                  </button>
-                )}
               </nav>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleStartDemo}
-                disabled={isDemoRunning}
-                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-cyan-500 hover:from-primary-dark hover:to-cyan-600 text-white rounded-lg transition-all border border-primary/30 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm shadow-lg shadow-primary/20"
-                title="Watch Demo"
-              >
-                <Play className="w-4 h-4" />
-                Watch Demo
-              </button>
-              {/* Wow Demos Dropdown */}
+              {/* Demos Dropdown - combines Watch Demo + Wow Moments */}
               <div className="relative hidden sm:block">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
                     setWowDropdownOpen(!wowDropdownOpen)
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all border border-purple-500/30 font-medium text-sm shadow-lg shadow-purple-500/20"
-                  title="Wow Moments"
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-cyan-500 hover:from-primary-dark hover:to-cyan-600 text-white rounded-lg transition-all border border-primary/30 font-medium text-sm shadow-lg shadow-primary/20"
+                  title="Demos"
                 >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Wow</span>
+                  <Play className="w-4 h-4" />
+                  <span>Demos</span>
                   <ChevronDown className={`w-4 h-4 transition-transform ${wowDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {wowDropdownOpen && (
@@ -370,11 +345,26 @@ function App() {
                   >
                     <button
                       onClick={() => {
+                        setWowDropdownOpen(false)
+                        handleStartDemo()
+                      }}
+                      disabled={isDemoRunning}
+                      className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Play className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-white font-medium">Watch Demo</div>
+                        <div className="text-gray-400 text-xs mt-1">Guided search walkthrough</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
                         setShowPersonalizationDemo(true)
                         setWowDropdownOpen(false)
                       }}
-                      className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors flex items-center gap-3"
+                      className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors flex items-center gap-3 border-t border-slate-700"
                     >
+                      <Sparkles className="w-4 h-4 text-purple-400 flex-shrink-0" />
                       <div className="flex-1">
                         <div className="text-white font-medium">Personalization Difference</div>
                         <div className="text-gray-400 text-xs mt-1">Compare Guest vs Sarah results</div>
@@ -387,6 +377,7 @@ function App() {
                       }}
                       className="w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors flex items-center gap-3 border-t border-slate-700"
                     >
+                      <Sparkles className="w-4 h-4 text-pink-400 flex-shrink-0" />
                       <div className="flex-1">
                         <div className="text-white font-medium">Search Mode Comparison</div>
                         <div className="text-gray-400 text-xs mt-1">Lexical vs Hybrid vs Agentic</div>
@@ -395,6 +386,21 @@ function App() {
                   </div>
                 )}
               </div>
+              {/* Cart Icon */}
+              {!focusMode && (
+                <button
+                  onClick={() => setCurrentView('cart')}
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all border ${
+                    currentView === 'cart'
+                      ? 'bg-primary/20 text-primary border-primary/30'
+                      : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border-white/10'
+                  }`}
+                  title="Cart"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                </button>
+              )}
+              {/* Search Icon */}
               <button
                 onClick={() => {
                   setCurrentView('settings')
