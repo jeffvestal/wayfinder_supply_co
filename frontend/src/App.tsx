@@ -88,10 +88,15 @@ function App() {
     imagen: 'not_configured',
   })
 
-  // Load personas and settings status on mount
+  // Load personas and settings status on mount; pre-warm Jina VLM if configured
   useEffect(() => {
     loadPersonas()
-    api.getSettingsStatus().then(setSettingsStatus).catch(() => {})
+    api.getSettingsStatus().then(status => {
+      setSettingsStatus(status)
+      if (status.jina_vlm === 'configured_ui' || status.jina_vlm === 'configured_env') {
+        api.warmVision().catch(() => {})
+      }
+    }).catch(() => {})
   }, [])
 
   // Update current persona when user changes

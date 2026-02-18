@@ -8,6 +8,7 @@ import base64
 import io
 import json
 import logging
+import time
 from typing import Optional, Dict, Any
 
 import httpx
@@ -41,6 +42,68 @@ PRODUCT_STRUCTURED_PROMPT = (
 
 # Max image payload size (4MB base64)
 MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
+
+# Minimal 1x1 red PNG for warm-up pings (44 bytes decoded)
+_WARMUP_IMAGE_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4"
+    "nGP4z8BQDwAEgAF/pooBPQAAAABJRU5ErkJggg=="
+)
+
+
+async def warm_model() -> str:
+    """
+    Send a minimal request to Jina VLM to wake the model from cold sleep.
+    Returns 'warm' if the model responded, 'warming' if the request timed out
+    (model is booting), or 'unavailable' if not configured.
+    """
+    cm = get_credential_manager()
+    api_key = cm.get("JINA_API_KEY")
+    if not api_key:
+        return "unavailable"
+
+    payload = {
+        "model": "jina-vlm",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "hi"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{_WARMUP_IMAGE_B64}"
+                        },
+                    },
+                ],
+            }
+        ],
+        "max_tokens": 1,
+    }
+
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                JINA_VLM_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            elapsed = time.time() - t0
+            if response.status_code == 200:
+                logger.info(f"Jina VLM warm-up complete ({elapsed:.1f}s)")
+                return "warm"
+            logger.warning(f"Jina VLM warm-up returned {response.status_code} ({elapsed:.1f}s)")
+            return "warming"
+    except (httpx.TimeoutException, httpx.ConnectError) as e:
+        elapsed = time.time() - t0
+        logger.info(f"Jina VLM warm-up timed out ({elapsed:.1f}s, {type(e).__name__}) — model is booting")
+        return "warming"
+    except Exception as e:
+        logger.warning(f"Jina VLM warm-up failed: {e}")
+        return "unavailable"
 
 
 def _validate_image(image_base64: str) -> str:
@@ -104,10 +167,12 @@ async def analyze_image(image_base64: str, prompt: Optional[str] = None) -> str:
     RETRYABLE_STATUS_CODES = {502, 503, 429}
     max_attempts = 3
     last_error: Optional[Exception] = None
+    t0_total = time.time()
 
     for attempt in range(1, max_attempts + 1):
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
+                t0 = time.time()
                 logger.info(f"Jina VLM attempt {attempt}/{max_attempts}")
                 response = await client.post(
                     JINA_VLM_URL,
@@ -117,10 +182,12 @@ async def analyze_image(image_base64: str, prompt: Optional[str] = None) -> str:
                     },
                     json=payload,
                 )
+                elapsed = time.time() - t0
 
                 if response.status_code in RETRYABLE_STATUS_CODES:
                     logger.warning(
                         f"Jina VLM attempt {attempt} returned {response.status_code} "
+                        f"after {elapsed:.1f}s "
                         f"({'retrying after delay...' if attempt < max_attempts else 'giving up'})"
                     )
                     last_error = ValueError(f"Jina VLM API error: {response.status_code}")
@@ -133,17 +200,19 @@ async def analyze_image(image_base64: str, prompt: Optional[str] = None) -> str:
                     raise last_error
 
                 if response.status_code != 200:
-                    logger.error(f"Jina VLM error: {response.status_code} - {response.text}")
+                    logger.error(f"Jina VLM error: {response.status_code} after {elapsed:.1f}s - {response.text}")
                     raise ValueError(f"Jina VLM API error: {response.status_code}")
 
                 data = response.json()
                 description = data["choices"][0]["message"]["content"]
-                logger.info(f"Jina VLM analysis complete ({len(description)} chars)")
+                total_elapsed = time.time() - t0_total
+                logger.info(f"Jina VLM analysis complete ({len(description)} chars, {elapsed:.1f}s request, {total_elapsed:.1f}s total)")
                 return description
 
         except (httpx.TimeoutException, httpx.ConnectError) as e:
+            elapsed = time.time() - t0 if 't0' in dir() else 0
             last_error = e
-            logger.warning(f"Jina VLM attempt {attempt} failed ({type(e).__name__}), {'retrying...' if attempt < max_attempts else 'giving up'}")
+            logger.warning(f"Jina VLM attempt {attempt} failed ({type(e).__name__}) after {elapsed:.1f}s, {'retrying...' if attempt < max_attempts else 'giving up'}")
             if attempt < max_attempts:
                 import asyncio
                 await asyncio.sleep(5)

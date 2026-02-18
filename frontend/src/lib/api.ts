@@ -631,4 +631,15 @@ export const api = {
     const data = await response.json();
     return { image_base64: data.image_base64, prompt: data.prompt || '' };
   },
+
+  async warmVision(): Promise<{ status: string }> {
+    const url = createApiUrl('/api/vision/warm');
+    try {
+      const response = await fetch(url.toString(), { method: 'POST', headers: authHeaders() });
+      if (!response.ok) return { status: 'unavailable' };
+      return response.json();
+    } catch {
+      return { status: 'unavailable' };
+    }
+  },
 };

@@ -116,7 +116,14 @@ export function SearchPanel({
     
     for (const step of steps) {
       if (step.type === 'tool_call' && step.results) {
+        // #region agent log
+        console.warn('[DBG:extractProductIds] step tool_id=', step.tool_id, 'results count=', step.results?.length, 'results=', JSON.stringify(step.results)?.substring(0, 500))
+        // #endregion
         for (const result of step.results) {
+          // #region agent log
+          console.warn('[DBG:extractProductIds] result type=', typeof result, 'keys=', result && typeof result === 'object' ? Object.keys(result) : 'N/A', 'sample=', JSON.stringify(result)?.substring(0, 300))
+          // #endregion
+
           // Check for Agent Builder "resource" format with data.reference.id
           if (result?.data?.reference?.id) {
             productIds.push(result.data.reference.id)
@@ -128,11 +135,9 @@ export function SearchPanel({
               const content = typeof result.content === 'string' ? JSON.parse(result.content) : result.content
               if (content.documents && Array.isArray(content.documents)) {
                 for (const doc of content.documents) {
-                  // Handle resource objects with id
                   if (doc.id) {
                     productIds.push(doc.id)
                   }
-                  // Handle nested _source format
                   if (doc._source?.id) {
                     productIds.push(doc._source.id)
                   }
@@ -150,10 +155,29 @@ export function SearchPanel({
               if (item?._source?.id) productIds.push(item._source.id)
             }
           }
+
+          // Agent Builder index_search: result has _id at top level
+          if (result?._id) {
+            productIds.push(result._id)
+          }
+          // Agent Builder index_search: result has _source with nested fields
+          if (result?._source) {
+            if (result._source.id) productIds.push(result._source.id)
+          }
+          // Agent Builder: result has reference._id
+          if (result?.reference?._id) {
+            productIds.push(result.reference._id)
+          }
+          if (result?.reference?.id) {
+            productIds.push(result.reference.id)
+          }
         }
       }
     }
     
+    // #region agent log
+    console.warn('[DBG:extractProductIds] final productIds=', productIds)
+    // #endregion
     return [...new Set(productIds)].slice(0, 3) // Unique, max 3
   }
   

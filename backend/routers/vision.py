@@ -50,6 +50,16 @@ class GroundRequest(BaseModel):
     activity: str
 
 
+@router.post("/vision/warm")
+async def warm_vision():
+    """
+    Send a lightweight ping to wake the Jina VLM model from cold sleep.
+    Returns immediately with the model status: warm, warming, or unavailable.
+    """
+    status = await vision_service.warm_model()
+    return {"status": status}
+
+
 @router.post("/vision/analyze", response_model=AnalyzeResponse)
 async def analyze_image(request: AnalyzeRequest):
     """

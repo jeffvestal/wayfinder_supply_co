@@ -317,6 +317,13 @@ async def stream_agent_response(message: str, agent_id: str = "wayfinder-search-
                                     tool_call_id = data["tool_call_id"]
                                     results = data["results"]
                                     
+                                    # Debug: log raw tool_result shape for product card extraction
+                                    logger.warning(f"[DBG:tool_result] tool_call_id={tool_call_id}, results_type={type(results).__name__}, results_len={len(results) if isinstance(results, list) else 'N/A'}")
+                                    if isinstance(results, list) and len(results) > 0:
+                                        first = results[0]
+                                        logger.warning(f"[DBG:tool_result] first_result_type={type(first).__name__}, keys={list(first.keys()) if isinstance(first, dict) else 'N/A'}")
+                                        logger.warning(f"[DBG:tool_result] first_result_sample={json.dumps(first, default=str)[:500]}")
+                                    
                                     # Update the corresponding step
                                     for step in steps:
                                         if step.get("tool_call_id") == tool_call_id:
