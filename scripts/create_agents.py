@@ -192,32 +192,40 @@ When a customer asks about a trip, you MUST use the ground_conditions tool to ge
 - Use the returned weather data to inform gear recommendations (e.g., cold-weather gear for snow, rain gear for wet conditions)
 - Include a weather/conditions summary section in every trip plan response
 
-## TRIP PLANNING STEPS
+## TRIP PLANNING STEPS — SPEED IS CRITICAL
 
-1. **Conditions Check**: Use ground_conditions workflow to get real-time weather, trail, and ground conditions via Google Search grounding. **This step is REQUIRED for every trip planning request.**
+Minimize tool calls. Use broad queries instead of many narrow ones.
 
-2. **Customer Profile**: Use get_customer_profile workflow to retrieve purchase history and loyalty tier.
+1. **Conditions Check**: Use ground_conditions workflow to get real-time weather and trail conditions. **REQUIRED for every trip planning request.**
 
-3. **Personalization**: Use get_user_affinity to understand gear preferences (ultralight, budget, expedition).
+2. **Customer Profile + Personalization**: Use get_customer_profile to retrieve purchase history and loyalty tier. Use get_user_affinity to understand gear preferences.
 
-4. **SEARCH CATALOG FIRST**: Before making ANY gear recommendations:
-   - Use product_search to find "sleeping bags" for the trip conditions
-   - Use product_search to find "tents" suitable for the season
-   - Use product_search to find "backpacks" matching user preferences
-   - Use product_search for any other needed categories
+3. **SEARCH CATALOG — ONE BROAD SEARCH**: Before making ANY gear recommendations:
+   - Use product_search ONCE with a broad query combining the trip needs (e.g., "winter camping gear sleeping bag tent backpack" rather than separate searches for each category)
+   - Do NOT make separate product_search calls for each gear category — this is too slow
+   - One broad search returns all relevant products across categories
    
-5. **Build Recommendations**: From the search results:
+4. **Build Recommendations**: From the search results:
    - Select products that match the trip requirements
    - Include the exact product name and price from the catalog
    - Note items the customer already owns (from purchase_history)
 
-6. **Synthesis**: Create a trip plan with:
+5. **Synthesis**: Create a trip plan with:
    - Trip overview with location and dates
    - **Weather & Conditions** — ALWAYS include a dedicated section with the real-time weather data returned by ground_conditions. Summarize temperature, precipitation, wind, and any alerts. This information is critical for the user's safety.
    - **Recommended Gear from Wayfinder Catalog** - ONLY products from search results:
      - Product Name - $XX.XX (include exact price)
      - Brief explanation why this product fits, referencing weather conditions where relevant
-   - Day-by-day itinerary
+   - **Day-by-day itinerary** — REQUIRED structure:
+     - Determine the trip duration from the user's request. Interpret vague phrases: "about a week" = 7 days, "a few days" = 3, "long weekend" = 3, "a weekend" = 2. Use the exact number when specified.
+     - You MUST create a separate section for EACH day using Markdown headers: "### Day 1: [Descriptive Title]", "### Day 2: [Descriptive Title]", etc.
+     - Under each day header, list 2-5 specific activities as Markdown bullet points (using - prefix). Each bullet should be a short, actionable item (one sentence). Do NOT write paragraphs.
+     - Example:
+       ### Day 3: Vall de Sorteny Nature Park
+       - Hike the lower-elevation botanical garden trail
+       - Picnic lunch at the river overlook
+       - Return to Ordino for dinner
+     - Do NOT collapse a multi-day trip into a single overview — every day gets its own section
    - Safety notes informed by the weather conditions
    - Loyalty perks (Platinum: free shipping, Business: bulk pricing)
 
@@ -249,25 +257,42 @@ The user message may be prefixed with context tags:
 - `[Vision Context: product_type - description]` — If present, contains an AI analysis of a product the user photographed.
 - `[Product Category: category]` — If present, the exact catalog category the product belongs to.
 
-1. Always look for the User ID tag. Use this `user_id` value for the `get_user_affinity` tool call if a `user_id` parameter is required.
-2. If no User ID is provided, assume `user_new`.
-3. If Vision Context and Product Category are present:
-   - Use product_search with the product type from the Vision Context (e.g., "hiking boots")
-   - The Product Category tag tells you the exact catalog category — only recommend products from that category
-   - Present the closest matches with prices
+## SPEED IS CRITICAL — MINIMIZE TOOL CALLS
+
+### When Vision Context IS present (image search):
+1. **SKIP get_user_affinity** — the Vision Context already tells you exactly what to search for.
+2. Call product_search ONCE. Include BOTH the product type AND the category in your query
+   (e.g., "hiking boots in Hiking category" or "ski jacket in Winter Sports category").
+   This ensures results are filtered to the correct category.
+3. Present the top 4 matches with prices immediately. Do NOT search again.
+4. Only recommend products from the category specified in [Product Category].
+
+### Follow-up queries (user asks about a DIFFERENT product):
+When the user's follow-up message asks for a different product type than the original search
+(e.g., first search was "hiking boots", follow-up asks for "low cut shoes"):
+1. Use the user's EXACT words for the product_search query — do NOT mix in terms from previous turns.
+2. Keep the [Product Category] filter if present.
+3. Example: If original search was "hiking boots" and user says "Do you have low cut shoes?",
+   search for "low cut shoes in Hiking category" — NOT "low cut hiking boots".
+
+### When Vision Context is NOT present (text search):
+1. If User ID is provided, call get_user_affinity ONCE to get preferences.
+2. Call product_search ONCE with the user's query.
+3. Present results with prices.
 
 ## YOUR ROLE
 - Search the product catalog to find gear that matches customer needs
 - Provide helpful product recommendations with prices
-- Answer questions about our products
 
 ## TOOLS
 - product_search: Search the Wayfinder product catalog
-- get_user_affinity: Get user preferences from browsing history
+- get_user_affinity: Get user preferences from browsing history (skip when Vision Context is present)
 
 ## IMPORTANT
 - ONLY recommend products from the Wayfinder Supply Co. catalog
 - Include product names and prices in your responses
+- Use AT MOST 2 tool calls total per request — speed matters for the user experience
+- Do NOT make multiple product_search calls with different terms — one broad search is better than many narrow ones
 - For trip planning questions, tell the user: "For full trip planning with weather and itinerary, check out our Trip Planner feature!"
 
 Keep responses concise and helpful."""
@@ -343,7 +368,7 @@ ONLY return the JSON object. No explanation, no markdown formatting, no code blo
         name="Trip Context Extractor",
         description="Extracts destination, dates, and activity from user trip queries. Returns structured JSON only.",
         instructions=instructions,
-        tool_ids=[]  # No tools needed - just parsing
+        tool_ids=[]
     )
 
 
@@ -381,7 +406,7 @@ Rules:
         name="Trip Response Parser",
         description="Extracts structured JSON from trip plan responses including products, itinerary, and safety info.",
         instructions=instructions,
-        tool_ids=[]  # No tools needed - just parsing
+        tool_ids=[]
     )
 
 
@@ -419,11 +444,12 @@ JSON Schema:
 }
 
 Rules:
-- Look for explicit day markers: "Day 1:", "Day 2:", "First day", "Second day", etc.
+- Look for explicit day markers: "Day 1:", "Day 2:", "### Day 1:", "First day", "Second day", etc.
 - Extract activities as individual items from bullet points, numbered lists, or sentences
-- Each activity should be a complete, actionable item
-- If the trip plan mentions a multi-day trip but doesn't break it down by days, infer logical day breaks based on the content
-- If no day-by-day breakdown exists, create a single day entry with all activities
+- Each activity in the activities array should be ONE specific action or event (one sentence). If the source text uses paragraphs instead of bullet points, split each paragraph into individual sentences and use each sentence as a separate activity.
+- Aim for 2-5 activities per day. Do not put an entire paragraph as a single activity.
+- IMPORTANT: Look for trip duration clues in the text (e.g., "a week", "7 days", "5-day trip", "3 days"). If the text describes a multi-day trip but lacks explicit day markers, you MUST infer logical day breaks to match the stated duration — do NOT collapse a week-long trip into a single day.
+- Only create a single day entry if the trip is genuinely a single-day outing (day hike, day trip, etc.)
 - ONLY return the JSON object. No explanation, no markdown code blocks, no extra text."""
     
     return create_agent(
@@ -431,7 +457,7 @@ Rules:
         name="Itinerary Extractor",
         description="Extracts structured day-by-day itinerary from trip plan responses. Returns JSON only.",
         instructions=instructions,
-        tool_ids=[]  # No tools needed - just parsing
+        tool_ids=[]
     )
 
 
@@ -536,7 +562,7 @@ def create_workflow_tool(name: str, workflow_id: str, description: str) -> Optio
         return None
 
 
-def create_index_search_tool(name: str, index: str, description: str) -> Optional[str]:
+def create_index_search_tool(name: str, index: str, description: str, custom_instructions: str = None) -> Optional[str]:
     """Create an index search tool and return its ID. Deletes existing tool first."""
     global FAILURES
     url = f"{KIBANA_URL}/api/agent_builder/tools"
@@ -547,13 +573,17 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
     # Delete existing tool first (script is source of truth)
     delete_tool(tool_id)
     
+    config = {
+        "pattern": index  # API expects 'pattern', not 'index'
+    }
+    if custom_instructions:
+        config["custom_instructions"] = custom_instructions
+    
     tool_config = {
         "id": tool_id,
         "type": "index_search",
         "description": description,
-        "configuration": {
-            "pattern": index  # API expects 'pattern', not 'index'
-        }
+        "configuration": config
     }
     
     response = request_with_retry("POST", url, headers=HEADERS, json=tool_config)
@@ -814,11 +844,24 @@ def main() -> int:
             tool_ids.append(tool_id)
         time.sleep(1)
     
-    # Create index search tool
+    # Create index search tool with category filtering guidance
+    product_search_instructions = (
+        "The product-catalog index has a 'category' field with these exact values: "
+        "Accessories, Apparel, Camping, Climbing, Cycling, Fishing, Hiking, "
+        "Tropical & Safari, Water Sports, Winter Sports. "
+        "When the agent's query mentions a specific category, ALWAYS filter results "
+        "to that category using WHERE category == '<category>'. For example, if the "
+        "query mentions 'Hiking', only return products where category == 'Hiking'. "
+        "This prevents returning unrelated products like ski boots for hiking queries. "
+        "When searching by product type (e.g. boots, shoes, jackets), prefer MATCH on "
+        "the 'title' field rather than 'description' to avoid matching accessories that "
+        "merely mention the activity. Use LIMIT 10 to keep results focused."
+    )
     index_tool_id = create_index_search_tool(
         name="product_search",
         index="product-catalog",
-        description="Search the product catalog for gear recommendations"
+        description="Search the product catalog for gear recommendations",
+        custom_instructions=product_search_instructions
     )
     if index_tool_id:
         tool_ids.append(index_tool_id)

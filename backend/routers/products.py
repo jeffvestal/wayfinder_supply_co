@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from typing import List, Optional
 from services.elastic_client import get_elastic_client
 from services import vision_service
+import asyncio
 import logging
+import time
 
 logger = logging.getLogger("wayfinder.backend")
 
@@ -222,9 +224,7 @@ async def lexical_search(
             size=limit
         )
         
-        user_prefs = None
-        if user_id:
-            user_prefs = get_user_preferences(user_id, es)
+        user_prefs = prefs if user_id else None
 
         products = []
         raw_hits = []
@@ -234,7 +234,6 @@ async def lexical_search(
             product["_score"] = hit["_score"]
             product["_highlight"] = hit.get("highlight", {})
             
-            # Add personalization explanation if applicable
             if user_prefs:
                 matching_tags = [t for t in product.get("tags", []) if t in user_prefs.get("tags", [])]
                 matching_cat = product.get("category") in user_prefs.get("categories", [])
@@ -279,6 +278,7 @@ class HybridSearchRequest(BaseModel):
     limit: int = 20
     user_id: Optional[str] = None
     image_base64: Optional[str] = None
+    vision_analysis: Optional[dict] = None
 
 
 @router.get("/products/search/hybrid")
@@ -299,6 +299,7 @@ async def hybrid_search_post(request: HybridSearchRequest):
         limit=request.limit,
         user_id=request.user_id,
         image_base64=request.image_base64,
+        preanalysis=request.vision_analysis,
     )
 
 
@@ -307,18 +308,29 @@ async def _hybrid_search_impl(
     limit: int = 20,
     user_id: Optional[str] = None,
     image_base64: Optional[str] = None,
+    preanalysis: Optional[dict] = None,
 ):
     """
     Core hybrid search combining semantic (ELSER) and lexical (BM25) using linear combination.
     When image_base64 is provided, uses structured Jina VLM analysis to build a more precise
     query with category filtering, key_terms for lexical, and description for semantic.
+    If preanalysis is provided (from frontend pre-analyze), skips the Jina VLM call entirely.
     """
+    t_start = time.time()
     es = get_elastic_client()
 
-    # --- Vision-enhanced search path ---
     vision_analysis = None
     vision_error = None
-    if image_base64:
+    user_prefs = None
+
+    if preanalysis and preanalysis.get("description"):
+        vision_analysis = preanalysis
+        logger.info(f"Using pre-analysis (skipping Jina): product_type={vision_analysis.get('product_type')}, category={vision_analysis.get('category')}")
+
+    async def _run_vision():
+        nonlocal vision_analysis, vision_error
+        if vision_analysis or not image_base64:
+            return
         try:
             vision_analysis = await vision_service.analyze_image_structured(image_base64)
             logger.info(f"Vision analysis: product_type={vision_analysis.get('product_type')}, category={vision_analysis.get('category')}")
@@ -329,12 +341,21 @@ async def _hybrid_search_impl(
                 vision_error = f"Image analysis unavailable: {type(e).__name__}"
             logger.warning(f"Vision analysis failed, falling back to text query: {e}")
 
+    async def _run_prefs():
+        nonlocal user_prefs
+        if user_id:
+            user_prefs = get_user_preferences(user_id, es)
+
+    await asyncio.gather(_run_vision(), _run_prefs())
+
+    t_parallel = time.time() - t_start
+    logger.warning(f"[PERF] hybrid_search parallel phase: {t_parallel:.1f}s (vision+prefs, preanalysis={'yes' if preanalysis else 'no'})")
+
     # Determine query strings based on whether vision analysis succeeded
     if vision_analysis and vision_analysis.get("description"):
         semantic_query = vision_analysis["description"]
         key_terms = vision_analysis.get("key_terms", [])
         lexical_text = " ".join(key_terms) if key_terms else vision_analysis.get("product_type", q)
-        # If user also typed text, prepend it to give their intent priority
         if q.strip():
             semantic_query = f"{q} {semantic_query}"
             lexical_text = f"{q} {lexical_text}"
@@ -356,31 +377,28 @@ async def _hybrid_search_impl(
         }
     }
 
-    # Add personalization if user_id provided
+    # Add personalization if user preferences were loaded
     personalized = False
-    if user_id:
-        prefs = get_user_preferences(user_id, es)
-        if prefs["tags"] or prefs["categories"]:
-            personalized = True
-            lexical_query = {
-                "function_score": {
-                    "query": lexical_query,
-                    "functions": [
-                        {
-                            "filter": {"terms": {"tags": prefs["tags"]}},
-                            "weight": 10.0
-                        },
-                        {
-                            "filter": {"terms": {"category": prefs["categories"]}},
-                            "weight": 5.0
-                        }
-                    ],
-                    "boost_mode": "multiply",
-                    "score_mode": "sum"
-                }
+    if user_prefs and (user_prefs["tags"] or user_prefs["categories"]):
+        personalized = True
+        lexical_query = {
+            "function_score": {
+                "query": lexical_query,
+                "functions": [
+                    {
+                        "filter": {"terms": {"tags": user_prefs["tags"]}},
+                        "weight": 10.0
+                    },
+                    {
+                        "filter": {"terms": {"category": user_prefs["categories"]}},
+                        "weight": 5.0
+                    }
+                ],
+                "boost_mode": "multiply",
+                "score_mode": "sum"
             }
+        }
 
-    # Build base retrievers
     semantic_retriever = {
         "retriever": {
             "standard": {
@@ -392,7 +410,7 @@ async def _hybrid_search_impl(
                 }
             }
         },
-        "weight": 0.7  # Semantic gets higher weight
+        "weight": 0.7
     }
 
     lexical_retriever = {
@@ -401,7 +419,7 @@ async def _hybrid_search_impl(
                 "query": lexical_query
             }
         },
-        "weight": 0.3  # Lexical for keyword boost
+        "weight": 0.3
     }
 
     retriever_config = {
@@ -410,7 +428,6 @@ async def _hybrid_search_impl(
         }
     }
 
-    # Apply category filter when vision analysis provides a category
     if vision_analysis and vision_analysis.get("category"):
         category_filter = vision_analysis["category"]
         retriever_config = {
@@ -423,18 +440,13 @@ async def _hybrid_search_impl(
         }
         logger.info(f"Vision category filter applied: {category_filter}")
 
-    # Build the es_query representation for display
     es_query_display = {
         "retriever": retriever_config,
         "highlight": {"fields": {"title": {}, "description": {}}}
     }
-    
-    user_prefs = None
-    if user_id:
-        user_prefs = get_user_preferences(user_id, es)
 
     try:
-        # Use retriever as top-level parameter (correct syntax for ES Python client)
+        t_search_start = time.time()
         response = es.search(
             index="product-catalog",
             retriever=retriever_config,
@@ -446,6 +458,7 @@ async def _hybrid_search_impl(
             },
             size=limit
         )
+        t_search = time.time() - t_search_start
         
         products = []
         raw_hits = []
@@ -456,7 +469,6 @@ async def _hybrid_search_impl(
             product["_score"] = hit.get("_score")
             product["_highlight"] = hit.get("highlight", {})
             
-            # Add personalization explanation if applicable
             if user_prefs:
                 matching_tags = [t for t in product.get("tags", []) if t in user_prefs.get("tags", [])]
                 matching_cat = product.get("category") in user_prefs.get("categories", [])
@@ -472,7 +484,6 @@ async def _hybrid_search_impl(
                     product["explanation"] = "This item " + " and ".join(reasons)
             
             products.append(product)
-            # Store raw hit for query viewer (top 3 only)
             if len(raw_hits) < 3:
                 raw_hits.append({
                     "_id": hit["_id"],
@@ -480,6 +491,9 @@ async def _hybrid_search_impl(
                     "_source": hit["_source"],
                     "highlight": hit.get("highlight", {})
                 })
+
+        t_total = time.time() - t_start
+        logger.warning(f"[PERF] hybrid_search DONE: total={t_total:.1f}s, parallel={t_parallel:.1f}s, es_search={t_search:.1f}s")
         
         result = {
             "products": products,

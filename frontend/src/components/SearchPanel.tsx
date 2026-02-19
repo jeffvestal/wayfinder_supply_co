@@ -101,6 +101,10 @@ export function SearchPanel({
   // Image upload state (vision search in chat mode)
   const [pendingImage, setPendingImage] = useState<string | null>(null)
   const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null)
+  const [preanalysisResult, setPreanalysisResult] = useState<any>(null)
+  const [preanalysisLoading, setPreanalysisLoading] = useState(false)
+  const [searchProgress, setSearchProgress] = useState<'analyzing' | 'searching' | null>(null)
+  const [sessionVisionContext, setSessionVisionContext] = useState<any>(null)
   const visionEnabled = settingsStatus?.jina_vlm === 'configured_ui' || settingsStatus?.jina_vlm === 'configured_env'
 
   // Refs
@@ -127,6 +131,15 @@ export function SearchPanel({
           // Check for Agent Builder "resource" format with data.reference.id
           if (result?.data?.reference?.id) {
             productIds.push(result.data.reference.id)
+          }
+
+          // Agent Builder "resource_list" format with resources array
+          if (result?.data?.resources && Array.isArray(result.data.resources)) {
+            for (const resource of result.data.resources) {
+              if (resource?.reference?.id) {
+                productIds.push(resource.reference.id)
+              }
+            }
           }
           
           // Check for Agent Builder "resource" format with documents array
@@ -171,6 +184,20 @@ export function SearchPanel({
           if (result?.reference?.id) {
             productIds.push(result.reference.id)
           }
+
+          // ES|QL results: {type: "esql_results", data: {columns: [{name, type}...], values: [[...]]}}
+          if (result?.type === 'esql_results' && result?.data?.columns && result?.data?.values) {
+            const cols = result.data.columns as Array<{name: string; type: string}>
+            let idIdx = cols.findIndex((c: {name: string}) => c.name === 'id')
+            if (idIdx < 0) idIdx = cols.findIndex((c: {name: string}) => c.name === '_id')
+            if (idIdx >= 0) {
+              for (const row of result.data.values) {
+                if (Array.isArray(row) && row[idIdx]) {
+                  productIds.push(String(row[idIdx]))
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -178,7 +205,7 @@ export function SearchPanel({
     // #region agent log
     console.warn('[DBG:extractProductIds] final productIds=', productIds)
     // #endregion
-    return [...new Set(productIds)].slice(0, 3) // Unique, max 3
+    return [...new Set(productIds)].slice(0, 4) // Unique, max 4 for 2x2 grid
   }
   
   // Fetch product details from IDs
@@ -346,6 +373,22 @@ export function SearchPanel({
       const base64 = await resizeImage(file)
       setPendingImage(base64)
       setPendingImagePreview(`data:image/jpeg;base64,${base64}`)
+      setPreanalysisResult(null)
+
+      // Fire pre-analysis immediately so Jina processes while user types
+      if (visionEnabled) {
+        setPreanalysisLoading(true)
+        api.preanalyzeImage(base64)
+          .then((result) => {
+            setPreanalysisResult(result)
+            setSessionVisionContext({ category: result?.category })
+            setPreanalysisLoading(false)
+          })
+          .catch((err) => {
+            console.warn('Pre-analysis failed (will retry at submit):', err)
+            setPreanalysisLoading(false)
+          })
+      }
     } catch (err) {
       console.error('Failed to process image:', err)
     }
@@ -354,6 +397,8 @@ export function SearchPanel({
   const clearPendingImage = () => {
     setPendingImage(null)
     setPendingImagePreview(null)
+    setPreanalysisResult(null)
+    setPreanalysisLoading(false)
   }
 
   const sendMessage = async (messageText: string) => {
@@ -363,12 +408,10 @@ export function SearchPanel({
     // Allow sending if there's text OR a pending image
     if ((!messageText.trim() && !pendingImage) || isLoading) return
 
-    // Capture and clear pending image before async work
     const imageToSend = pendingImage
     const imagePreviewToSend = pendingImagePreview
-    // #region agent log
-    console.warn('[DBG:sendMessage] captured image', { hasImageToSend: !!imageToSend, imageToSendLen: imageToSend?.length || 0 })
-    // #endregion
+    const cachedVisionAnalysis = preanalysisResult || sessionVisionContext
+    console.warn('[DBG:sendMessage] captured image', { hasImageToSend: !!imageToSend, imageToSendLen: imageToSend?.length || 0, hasPreanalysis: !!cachedVisionAnalysis?.description, fromSession: !preanalysisResult && !!sessionVisionContext })
     clearPendingImage()
 
     if (messageText.trim()) {
@@ -409,6 +452,19 @@ export function SearchPanel({
         // #endregion
 
         switch (type) {
+          case 'vision_analyzing': {
+            currentSteps = [...currentSteps, {
+              type: 'reasoning',
+              reasoning: `Analyzing image with Jina VLM...`
+            }]
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, steps: currentSteps, status: 'thinking' }
+                : msg
+            ))
+            break
+          }
+
           case 'vision_analysis': {
             // Add vision analysis as a reasoning step in the collapsible thought trace
             const visionDesc = data.description || (typeof data === 'string' ? data : '')
@@ -424,6 +480,7 @@ export function SearchPanel({
               type: 'reasoning',
               reasoning: `Raw Jina VLM Response:\n${JSON.stringify(data, null, 2)}`
             }]
+            setSessionVisionContext({ category: data?.category })
             setMessages(prev => prev.map(msg =>
               msg.id === assistantMessageId
                 ? { ...msg, steps: currentSteps, status: 'thinking', vision_analysis: data }
@@ -459,12 +516,12 @@ export function SearchPanel({
           case 'tool_call':
             if (!data.tool_id) break
             const existingToolCall = currentSteps.find(s => s.tool_call_id === data.tool_call_id)
-            if (!existingToolCall && data.params && Object.keys(data.params).length > 0) {
+            if (!existingToolCall) {
               currentSteps = [...currentSteps, {
                 type: 'tool_call',
                 tool_call_id: data.tool_call_id,
                 tool_id: data.tool_id,
-                params: data.params,
+                params: data.params || {},
                 results: []
               }]
               setMessages(prev => prev.map(msg => 
@@ -475,19 +532,31 @@ export function SearchPanel({
             }
             break
 
-          case 'tool_result':
+          case 'tool_result': {
             const toolCallId = data.tool_call_id
-            currentSteps = currentSteps.map(step => 
-              step.tool_call_id === toolCallId 
-                ? { ...step, results: data.results }
-                : step
-            )
+            const hasStep = currentSteps.some(s => s.tool_call_id === toolCallId)
+            if (!hasStep) {
+              currentSteps = [...currentSteps, {
+                type: 'tool_call',
+                tool_call_id: toolCallId,
+                tool_id: 'unknown',
+                params: {},
+                results: data.results || []
+              }]
+            } else {
+              currentSteps = currentSteps.map(step => 
+                step.tool_call_id === toolCallId 
+                  ? { ...step, results: data.results }
+                  : step
+              )
+            }
             setMessages(prev => prev.map(msg => 
               msg.id === assistantMessageId 
                 ? { ...msg, content: currentContent, steps: currentSteps, status: 'working' }
                 : msg
             ))
             break
+          }
 
           case 'message_chunk':
             currentContent += data.text_chunk || ''
@@ -530,7 +599,7 @@ export function SearchPanel({
             ))
             break
         }
-      }, undefined, imageToSend || undefined)
+      }, undefined, imageToSend || undefined, cachedVisionAnalysis || undefined)
     } catch (error) {
       console.error('Chat error:', error)
       setMessages(prev => prev.map(msg => 
@@ -548,19 +617,18 @@ export function SearchPanel({
     if (mode === 'chat') {
       sendMessage(input)
     } else if (mode === 'hybrid' && pendingImage) {
-      // Hybrid search with image — pass pending image for vision analysis
       const imageToSend = pendingImage
       const imagePreview = pendingImagePreview
-      clearPendingImage()
+      const cachedAnalysis = preanalysisResult
       setVisionSourceImage(imagePreview)
-      handleSearch(input, undefined, imageToSend)
+      handleSearch(input, undefined, imageToSend, cachedAnalysis)
     } else {
       handleSearch(input)
     }
   }
 
-  const handleSearch = async (query: string, targetMode?: 'hybrid' | 'lexical', imageBase64?: string) => {
-    if ((!query.trim() && !imageBase64) || isLoading) return
+  const handleSearch = async (query: string, targetMode?: 'hybrid' | 'lexical', imageBase64?: string, cachedAnalysis?: any) => {
+    if ((!query.trim() && !imageBase64 && !cachedAnalysis) || isLoading) return
 
     const searchMode = targetMode || mode
     
@@ -568,10 +636,14 @@ export function SearchPanel({
     setIsLoading(true)
     setInput('')
     setVisionAnalysis(null)
-    if (!imageBase64) setVisionSourceImage(null)
+    if (!imageBase64 && !cachedAnalysis) setVisionSourceImage(null)
     const personalizedUserId = personalizationEnabled ? userId : undefined
 
-    // Show narration banner
+    const isVisionSearch = !!(imageBase64 || cachedAnalysis)
+    if (isVisionSearch) {
+      setSearchProgress(cachedAnalysis ? 'searching' : 'analyzing')
+    }
+
     if (narrationMode) {
       const narrationKey = searchMode === 'hybrid' ? 'hybrid_search' : 'lexical_search'
       setCurrentNarration(narrationKey)
@@ -579,37 +651,38 @@ export function SearchPanel({
     }
 
     try {
-      const results = searchMode === 'hybrid' 
-        ? await api.hybridSearch(query, 10, personalizedUserId, imageBase64)
-        : await api.lexicalSearch(query, 10, personalizedUserId)
+      let results
+      if (searchMode === 'hybrid') {
+        results = await api.hybridSearch(query, 10, personalizedUserId, imageBase64, cachedAnalysis)
+      } else {
+        results = await api.lexicalSearch(query, 10, personalizedUserId)
+      }
       setSearchResults(results.products)
 
-      // Store vision analysis if present (from image-enhanced hybrid search)
       if (results.vision_analysis) {
         setVisionAnalysis(results.vision_analysis)
         setVisionCardExpanded(true)
       }
 
-      // Show vision error if image analysis failed (e.g. Jina cold start)
       if (results.vision_error) {
         setVisionAnalysis({ error: results.vision_error })
         setVisionCardExpanded(true)
       }
       
-      // Show personalized narration if applicable
       if (narrationMode && personalizationEnabled) {
         setCurrentNarration('personalized')
         setTimeout(() => setCurrentNarration(null), 3000)
       }
     } catch (error: any) {
       console.error('Search error:', error)
-      // If the error is a 503 from vision service warming up, show a helpful message
       if (imageBase64 && error?.message?.includes('503')) {
         setVisionAnalysis({ error: 'Image analysis service is warming up — please try again in 30-60 seconds' })
         setVisionCardExpanded(true)
       }
     } finally {
       setIsLoading(false)
+      setSearchProgress(null)
+      clearPendingImage()
     }
   }
 
@@ -717,28 +790,40 @@ export function SearchPanel({
 
             case 'tool_call':
               if (!data.tool_id) break
-              const existingToolCall = currentSteps.find(s => s.tool_call_id === data.tool_call_id)
-              if (!existingToolCall && data.params && Object.keys(data.params).length > 0) {
+              const existingDemoToolCall = currentSteps.find(s => s.tool_call_id === data.tool_call_id)
+              if (!existingDemoToolCall) {
                 currentSteps = [...currentSteps, {
                   type: 'tool_call',
                   tool_call_id: data.tool_call_id,
                   tool_id: data.tool_id,
-                  params: data.params,
+                  params: data.params || {},
                   results: []
                 }]
                 setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'working' } : null)
               }
               break
 
-            case 'tool_result':
-              const toolCallId = data.tool_call_id
-              currentSteps = currentSteps.map(step => 
-                step.tool_call_id === toolCallId 
-                  ? { ...step, results: data.results }
-                  : step
-              )
+            case 'tool_result': {
+              const demoToolCallId = data.tool_call_id
+              const hasDemoStep = currentSteps.some(s => s.tool_call_id === demoToolCallId)
+              if (!hasDemoStep) {
+                currentSteps = [...currentSteps, {
+                  type: 'tool_call',
+                  tool_call_id: demoToolCallId,
+                  tool_id: 'unknown',
+                  params: {},
+                  results: data.results || []
+                }]
+              } else {
+                currentSteps = currentSteps.map(step => 
+                  step.tool_call_id === demoToolCallId 
+                    ? { ...step, results: data.results }
+                    : step
+                )
+              }
               setDemoAgenticMessage(prev => prev ? { ...prev, content: currentContent, steps: currentSteps, status: 'working' } : null)
               break
+            }
 
             case 'message_chunk':
               currentContent += data.text_chunk || ''
@@ -799,13 +884,13 @@ export function SearchPanel({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed inset-y-0 right-0 z-50 flex"
+            className="fixed inset-y-0 right-0 z-50 flex max-md:!w-screen bg-slate-900"
             style={{ width: `${panelWidth}vw` }}
           >
             {/* Draggable Resizer */}
             <div
               onMouseDown={handleDragStart}
-              className="w-2 bg-slate-700/50 hover:bg-primary/50 cursor-ew-resize absolute left-0 top-0 bottom-0 z-10 transition-colors"
+              className="w-2 bg-slate-700/50 hover:bg-primary/50 cursor-ew-resize absolute left-0 top-0 bottom-0 z-10 transition-colors hidden md:block"
             />
 
             {/* Panel Content */}
@@ -831,6 +916,7 @@ export function SearchPanel({
                         setInput('')
                         setLastQuery('')
                         setIsLoading(false)
+                        setSessionVisionContext(null)
                       }}
                       className="px-3 py-1.5 text-sm bg-pink-600/20 hover:bg-pink-600/30 text-pink-400 border border-pink-600/30 rounded-lg transition-all flex items-center gap-1.5"
                     >
@@ -1065,6 +1151,11 @@ export function SearchPanel({
                           results={searchResults}
                           isLoading={isLoading}
                           onProductClick={handleProductClick}
+                          onAddToCart={handleAddToCart}
+                          addingToCart={addingToCart}
+                          justAddedToCart={justAddedToCart}
+                          searchProgress={searchProgress}
+                          progressImage={visionSourceImage}
                         />
                       </>
                     )}
@@ -1086,20 +1177,36 @@ export function SearchPanel({
 
                   {/* Image preview bar */}
                   {pendingImagePreview && (
-                    <div className="flex items-center gap-2 mb-2 p-2 bg-slate-800/50 border border-slate-700 rounded-lg">
+                    <div className={`flex items-center gap-2 mb-2 p-2 rounded-lg ${
+                      searchProgress
+                        ? 'bg-cyan-900/20 border border-cyan-700/30'
+                        : 'bg-slate-800/50 border border-slate-700'
+                    }`}>
                       <img
                         src={pendingImagePreview}
                         alt="Upload preview"
                         className="w-12 h-12 object-cover rounded"
                       />
-                      <span className="text-xs text-gray-400 flex-1">Image attached</span>
-                      <button
-                        type="button"
-                        onClick={clearPendingImage}
-                        className="p-1 hover:bg-white/10 rounded transition-colors"
-                      >
-                        <X className="w-4 h-4 text-gray-400" />
-                      </button>
+                      <span className="text-xs text-gray-400 flex-1">
+                        {searchProgress === 'analyzing'
+                          ? <span className="flex items-center gap-1.5 text-cyan-300"><Loader2 className="w-3 h-3 animate-spin" /> Analyzing image...</span>
+                          : searchProgress === 'searching'
+                            ? <span className="flex items-center gap-1.5 text-cyan-300"><Loader2 className="w-3 h-3 animate-spin" /> Searching catalog...</span>
+                            : preanalysisLoading
+                              ? <span className="flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Analyzing image...</span>
+                              : preanalysisResult?.product_type
+                                ? <span className="text-purple-300">Detected: {preanalysisResult.product_type}</span>
+                                : 'Image attached'}
+                      </span>
+                      {!searchProgress && (
+                        <button
+                          type="button"
+                          onClick={clearPendingImage}
+                          className="p-1 hover:bg-white/10 rounded transition-colors"
+                        >
+                          <X className="w-4 h-4 text-gray-400" />
+                        </button>
+                      )}
                     </div>
                   )}
 

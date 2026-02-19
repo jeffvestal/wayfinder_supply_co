@@ -53,7 +53,7 @@ export function ProductCard({ product, userId, onClick }: ProductCardProps) {
       onClick={(e) => handleCardClick(e)}
       className="bg-slate-800/50 backdrop-blur-sm rounded-2xl overflow-hidden border border-slate-700 hover:border-primary/50 shadow-lg hover:shadow-primary/10 transition-all duration-300 group cursor-pointer"
     >
-      <div className="aspect-square bg-slate-800 overflow-hidden relative">
+      <div className="h-48 bg-slate-800 overflow-hidden relative">
         {product.image_url ? (
           <>
             <img

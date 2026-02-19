@@ -121,8 +121,10 @@ The vision pipeline is the primary new feature on this branch. It has three phas
 **1A: Trip Planner (Terrain Analysis)** — User uploads terrain photo → `POST /api/chat` with `image_base64` → `vision_service.analyze_image()` → terrain description injected as `[Vision Context: {description}]`
 
 **1B: Search Panel (Product Analysis)** — User uploads product photo in Chat or Hybrid mode → `analyze_image_structured()` returns JSON with `product_type`, `category`, `subcategory`, `key_terms`, `description`
-- **Chat mode**: Context injected as `[Vision Context: {product_type} - {description}] [Product Category: {category}]` → Agent Builder
-- **Hybrid mode**: `POST /api/products/search/hybrid` with `image_base64` → category filter + semantic desc + lexical key_terms → ES product-catalog
+- **Pre-analysis**: Image is analyzed via `POST /api/vision/preanalyze` immediately on upload (before user sends). Result is cached in frontend state and passed as `vision_analysis` in subsequent requests, eliminating duplicate Jina VLM calls.
+- **Chat mode**: If `vision_analysis` is in the request, it's used directly (no second Jina call). Context injected as `[Vision Context: {product_type} - {description}] [Product Category: {category}]` → Agent Builder
+- **Hybrid mode**: If `vision_analysis` is in the request, it's used directly. Otherwise `POST /api/products/search/hybrid` with `image_base64` → category filter + semantic desc + lexical key_terms → ES product-catalog
+- **Session context**: After the first image analysis, only `{ category }` is persisted in `sessionVisionContext`. Follow-up messages send this category-only context so the agent maintains category awareness without leaking the original product type into new queries.
 
 **Note:** Jina VLM retries on 502/503/429 with progressive backoff (15s, 30s). Max 3 attempts. A `vision_analysis` SSE event is emitted on success; `vision_error` SSE event on failure.
 
@@ -130,7 +132,7 @@ The vision pipeline is the primary new feature on this branch. It has three phas
 
 1. Agent Builder invokes the `ground_conditions` workflow with `location` and `activity`
 2. Workflow calls `POST /api/vision/ground` on the backend
-3. Backend uses Vertex AI Gemini 2.0 Flash with `Tool(google_search=GoogleSearch())` for live search grounding
+3. Backend uses Vertex AI Gemini 2.5 Flash with `Tool(google_search=GoogleSearch())` for live search grounding
 4. Returns structured JSON: `temperature_f`, `conditions`, `wind_mph`, `trail_status`, `safety_notes`
 
 ### Phase 3: Product Visualization (Imagen 3)
@@ -147,14 +149,16 @@ The vision pipeline is the primary new feature on this branch. It has three phas
 | File | Role |
 |------|------|
 | `backend/services/vision_service.py` | All vision logic: `analyze_image()`, `analyze_image_structured()`, `ground_conditions()`, `generate_preview()` |
-| `backend/routers/vision.py` | Vision endpoints: `/api/vision/ground`, `/api/vision/preview`, `/api/vision/status` |
-| `backend/routers/chat.py` | Integrates vision into chat flow: image handling, context injection |
-| `backend/routers/products.py` | Hybrid search with `image_base64`; uses `analyze_image_structured()` for category filtering |
+| `backend/routers/vision.py` | Vision endpoints: `/api/vision/ground`, `/api/vision/preview`, `/api/vision/preanalyze`, `/api/vision/status` |
+| `backend/routers/chat.py` | Integrates vision into chat flow: pre-analysis passthrough, context injection, connector routing |
+| `backend/routers/products.py` | Hybrid search with `image_base64` or pre-analyzed `vision_analysis`; category filtering |
 | `frontend/src/components/TripPlanner.tsx` | Image upload UI, handles `vision_analysis` SSE events, insight cards |
 | `frontend/src/components/SearchPanel.tsx` | Image upload in Chat + Hybrid modes; Vision Analysis/Error cards |
 | `frontend/src/components/VisionPreview.tsx` | Visualize button on products, Imagen preview modal, "Show Prompt" |
 | `frontend/src/lib/imageUtils.ts` | Shared image resize/validation used by TripPlanner and SearchPanel |
-| `frontend/src/components/search/ChatMode.tsx` | Chat mode with Vision Analysis card (structured data + source image thumbnail) |
+| `frontend/src/components/search/ChatMode.tsx` | Chat mode with 2x2 compact product cards, click-to-detail modal, Vision Analysis card |
+| `frontend/src/components/search/SearchMode.tsx` | Hybrid/Lexical search with multi-step progress UI (analyzing → searching) |
+| `frontend/src/components/ProductDetailModal.tsx` | Full product detail with sticky Add to Cart on mobile |
 
 ---
 
@@ -232,9 +236,9 @@ The credential manager provides a **three-tier priority system**:
 
 | Router | Primary Endpoints | Purpose |
 |--------|-------------------|---------|
-| `chat.py` | `/api/chat`, `/api/parse-trip-context` | Agent Builder streaming, vision context injection |
-| `products.py` | `/api/products`, `/api/products/search`, `POST /api/products/search/hybrid` (accepts `image_base64`) | Product CRUD, semantic/hybrid/lexical search |
-| `vision.py` | `/api/vision/ground`, `/api/vision/preview`, `/api/vision/status` | Weather grounding, Imagen 3 previews |
+| `chat.py` | `/api/chat`, `/api/parse-trip-context` | Agent Builder streaming, connector routing, pre-analysis passthrough, session context |
+| `products.py` | `/api/products`, `/api/products/search`, `POST /api/products/search/hybrid` (accepts `image_base64` or `vision_analysis`) | Product CRUD, semantic/hybrid/lexical search |
+| `vision.py` | `/api/vision/ground`, `/api/vision/preview`, `/api/vision/preanalyze`, `/api/vision/status` | Weather grounding, Imagen 3 previews, early image analysis |
 | `settings.py` | `/api/settings`, `/api/settings/status`, `/api/settings/test/*` | Credential management UI |
 | `cart.py` | `/api/cart` | Shopping cart management |
 | `clickstream.py` | `/api/clickstream` | User behavior tracking |
@@ -268,17 +272,33 @@ headers = {
 }
 ```
 
+**LLM Connector Routing:**
+
+The `connector_id` is passed at **converse time** (not agent creation). Each agent maps to a connector:
+
+```python
+CONNECTOR_FLASH = "Google-Gemini-2-5-Flash"
+CONNECTOR_MINI  = "OpenAI-GPT-4-1-Mini"
+
+AGENT_CONNECTOR_MAP = {
+    "trip-planner-agent":       CONNECTOR_FLASH,
+    "wayfinder-search-agent":   CONNECTOR_FLASH,
+    "context-extractor-agent":  CONNECTOR_MINI,
+    "response-parser-agent":    CONNECTOR_MINI,
+    "itinerary-extractor-agent": CONNECTOR_MINI,
+}
+```
+
 **Vision integration in chat flow:**
 ```python
+# Priority: pre-analyzed vision_analysis > raw image_base64
+# If vision_analysis dict is in the request (from frontend pre-analysis):
+#   Use it directly — no Jina VLM call needed
+# If only category is present (session context follow-up):
+#   Inject "[Product Category: {category}]" only
 # If image_base64 is present and Jina is configured:
-# wayfinder-search-agent:
-#   1. Call vision_service.analyze_image_structured(image_base64)
-#   2. vision_context = "[Vision Context: {product_type} - {desc}] [Product Category: {cat}]"
-#   3. Emit vision_analysis SSE event with structured JSON
-# trip-planner-agent:
-#   1. Call vision_service.analyze_image(image_base64)
-#   2. vision_context = "[Vision Context: {terrain_description}]"
-#   3. Emit vision_analysis SSE event with description
+#   wayfinder-search-agent: analyze_image_structured() → full vision context
+#   trip-planner-agent: analyze_image() → terrain context
 # On failure: emit vision_error SSE event, proceed without vision context
 ```
 
@@ -321,12 +341,14 @@ ES_URL = os.getenv("STANDALONE_ELASTICSEARCH_URL",
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | `TripPlanner.tsx` | `frontend/src/components/` | Main trip planning interface with streaming chat + image upload |
-| `SearchPanel.tsx` | `frontend/src/components/` | Slide-out search panel (Chat/Hybrid/Lexical); image upload in Chat + Hybrid; Vision Analysis/Error cards |
-| `ProductCard.tsx` | `frontend/src/components/` | Reusable product display card |
+| `SearchPanel.tsx` | `frontend/src/components/` | Slide-out search panel (Chat/Hybrid/Lexical); pre-analysis pipeline; session vision context; Vision Analysis/Error cards |
+| `ProductCard.tsx` | `frontend/src/components/` | Reusable product display card (storefront) |
+| `ProductDetailModal.tsx` | `frontend/src/components/` | Full product detail modal; sticky Add to Cart on mobile |
 | `VisionPreview.tsx` | `frontend/src/components/` | Imagen 3 product-in-scene preview with modal |
 | `SettingsPage.tsx` | `frontend/src/components/` | Vision credential management (Jina key, GCP SA JSON) |
 | `StepRenderer.tsx` | `frontend/src/components/search/` | Renders agent reasoning steps |
-| `ChatMode.tsx` | `frontend/src/components/search/` | Chat mode with product cards; Vision Analysis card with structured data and source image |
+| `ChatMode.tsx` | `frontend/src/components/search/` | Chat mode with 2x2 compact product card grid; click opens ProductDetailModal; Vision Analysis card |
+| `SearchMode.tsx` | `frontend/src/components/search/` | Hybrid/Lexical modes with multi-step progress UI (analyzing image → searching catalog) |
 | `imageUtils.ts` | `frontend/src/lib/` | Shared image resize/validation for TripPlanner and SearchPanel |
 
 ### Frontend Types (`frontend/src/types/index.ts`)
@@ -360,17 +382,26 @@ while (true) {
 
 ### Product Extraction from Agent Responses
 
-Products are extracted from agent responses in two ways:
+Products are extracted from agent responses in three ways:
 
-1. **From `tool_result` events** (primary):
+1. **From `tool_result` events — `resource_list` format** (primary):
    ```typescript
-   // When product_search tool returns results
+   // When product_search returns index_search results
    if (toolName === 'product_search' && result?.hits) {
      const products = result.hits.map(hit => hit._source);
    }
    ```
 
-2. **From response text** (fallback regex):
+2. **From `tool_result` events — `esql_results` format** (follow-up queries):
+   ```typescript
+   // When product_search returns ES|QL tabular data
+   if (result?.type === 'esql_results' && result?.data?.columns) {
+     const idIdx = columns.findIndex(c => c.name === 'id');
+     productIds = data.values.map(row => row[idIdx]);
+   }
+   ```
+
+3. **From response text** (fallback regex):
    ```typescript
    // Pattern: **Product Name** - $123.45
    const productPattern = /\*\*([^*]+)\*\*\s*[-–]\s*\$?([\d,.]+)/g;
@@ -382,25 +413,27 @@ Products are extracted from agent responses in two ways:
 
 ### Agents
 
-| Agent ID | Purpose | Tools |
-|----------|---------|-------|
-| `trip-planner-agent` | Main orchestrator for trip planning (vision-aware) | All tools |
-| `wayfinder-search-agent` | Product search assistant | `product_search`, `get_user_affinity` |
-| `context-extractor-agent` | Extracts trip entities from text | None (parsing only) |
-| `response-parser-agent` | Extracts structured JSON from responses | None (parsing only) |
-| `itinerary-extractor-agent` | Extracts day-by-day itinerary | None (parsing only) |
+| Agent ID | Purpose | Tools | Connector (at converse time) |
+|----------|---------|-------|------------------------------|
+| `trip-planner-agent` | Main orchestrator for trip planning (vision-aware) | All tools | Gemini 2.5 Flash |
+| `wayfinder-search-agent` | Product search assistant | `product_search`, `get_user_affinity` | Gemini 2.5 Flash |
+| `context-extractor-agent` | Extracts trip entities from text | None (parsing only) | GPT-4.1 Mini |
+| `response-parser-agent` | Extracts structured JSON from responses | None (parsing only) | GPT-4.1 Mini |
+| `itinerary-extractor-agent` | Extracts day-by-day itinerary | None (parsing only) | GPT-4.1 Mini |
 
-The trip planner agent instructions reference `[Vision Context: ...]` and will use `ground_conditions` for live weather when available.
+**Note:** `connector_id` is passed at **converse time** via `stream_agent_response()`, not at agent creation. The mapping is defined in `AGENT_CONNECTOR_MAP` in `backend/routers/chat.py`. The trip planner agent instructions reference `[Vision Context: ...]` and will use `ground_conditions` for live weather when available.
 
 ### Tools
 
 | Tool ID | Type | Purpose |
 |---------|------|---------|
-| `tool-search-product-search` | `index_search` | Semantic search on `product-catalog` |
+| `tool-search-product-search` | `index_search` | Semantic search on `product-catalog` with `custom_instructions` for category filtering |
 | `tool-esql-get-user-affinity` | `esql` | Query clickstream for user preferences |
 | `tool-workflow-check-trip-safety` | `workflow` | Get weather conditions (MCP mock) |
 | `tool-workflow-get-customer-profile` | `workflow` | Get CRM data |
 | `tool-workflow-ground-conditions` | `workflow` | Real-time weather/trail via Gemini + Google Search |
+
+**Index search `custom_instructions`:** The `product_search` tool includes instructions guiding ES|QL query generation: prefer `MATCH` on `title` for product type, filter by category when provided, and `LIMIT 10`. This ensures category-aware results when the agent switches from NL search to ES|QL.
 
 ### Workflows (`config/workflows/`)
 
@@ -460,7 +493,7 @@ Personalization uses **query-time boosting** based on clickstream data:
 
 | Service | Model | Purpose |
 |---------|-------|---------|
-| **Gemini** | `gemini-2.0-flash` | Weather/trail grounding with Google Search |
+| **Gemini** | `gemini-2.5-flash` | Weather/trail grounding with Google Search |
 | **Imagen 3** | `imagen-3.0-generate-002` / `imagen-3.0-capability-001` | Product-in-scene image generation |
 | **Auth** | Service account JSON or ADC | Via `google-genai` Python SDK |
 
@@ -672,6 +705,9 @@ docker-compose up -d
 - **Grounding prompt**: `backend/services/vision_service.py` → `ground_conditions()`
 - **Imagen generation**: `backend/services/vision_service.py` → `generate_preview()`
 - **Context injection format**: `backend/routers/chat.py` → look for `[Vision Context:`
+- **Category-only session context**: `backend/routers/chat.py` → look for `category-only session context`
+- **Connector/LLM routing**: `backend/routers/chat.py` → `AGENT_CONNECTOR_MAP`
+- **Index search custom_instructions**: `scripts/create_agents.py` → `create_index_search_tool()`
 - **Grounding workflow**: `config/workflows/ground_conditions.yaml`
 
 ### Updating Architecture Diagrams
@@ -712,6 +748,16 @@ curl -X POST "http://localhost:8000/api/chat" \
 curl -X POST "http://localhost:8000/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message": "What gear do I need?", "user_id": "user_new", "image_base64": "data:image/jpeg;base64,..."}'
+
+# With pre-analyzed vision result (skips Jina VLM call)
+curl -X POST "http://localhost:8000/api/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What gear do I need?", "user_id": "user_new", "vision_analysis": {"product_type": "Hiking Boots", "category": "Hiking", "description": "..."}}'
+
+# Follow-up with category-only session context
+curl -X POST "http://localhost:8000/api/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Show me trail shoes", "user_id": "user_new", "vision_analysis": {"category": "Hiking"}}'
 ```
 
 ### Vision Endpoints
@@ -728,6 +774,11 @@ curl -X POST "http://localhost:8000/api/vision/preview" \
 
 # Vision status
 curl "http://localhost:8000/api/vision/status"
+
+# Pre-analyze image (returns structured analysis for caching)
+curl -X POST "http://localhost:8000/api/vision/preanalyze" \
+  -H "Content-Type: application/json" \
+  -d '{"image_base64": "data:image/jpeg;base64,..."}'
 ```
 
 ### Settings / Credentials
@@ -753,6 +804,11 @@ curl "http://localhost:8000/api/products/search/hybrid?q=camping+tent&user_id=us
 curl -X POST "http://localhost:8000/api/products/search/hybrid" \
   -H "Content-Type: application/json" \
   -d '{"q": "", "image_base64": "...", "user_id": "user_new"}'
+
+# Hybrid search with pre-analyzed vision result (skips Jina VLM call)
+curl -X POST "http://localhost:8000/api/products/search/hybrid" \
+  -H "Content-Type: application/json" \
+  -d '{"q": "", "vision_analysis": {"product_type": "Hiking Boots", "category": "Hiking", "key_terms": ["boots"]}, "user_id": "user_new"}'
 
 # Lexical search
 curl "http://localhost:8000/api/products/search/lexical?q=camping+tent"
@@ -792,7 +848,9 @@ curl -X POST "http://localhost:8000/api/clickstream" \
 6. **Jina AI is NOT in GCP** — It's an external service at jina.ai; always color-code yellow, not orange
 7. **Vision features are progressively gated** — No keys = no vision UI; Jina only = image analysis; Jina + Vertex = full pipeline
 8. **Credential Manager is in-memory** — UI-set credentials are lost on restart; env vars are persistent
+9. **Connector routing is at converse time** — `connector_id` is passed in the `converse/async` payload, not set at agent creation. See `AGENT_CONNECTOR_MAP` in `chat.py`.
+10. **Session vision context is category-only** — Only the `category` is persisted for follow-ups, not `product_type` or `description`, to prevent leaking terms into unrelated queries.
 
 ---
 
-*Last updated: 2026-02-13*
+*Last updated: 2026-02-19*

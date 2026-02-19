@@ -12,6 +12,7 @@ import httpx
 import os
 import json
 import logging
+import time
 from typing import Optional
 from services.json_parser import extract_json_from_response
 from services.credential_manager import get_credential_manager
@@ -24,6 +25,18 @@ router = APIRouter()
 KIBANA_URL = os.getenv("STANDALONE_KIBANA_URL", os.getenv("KIBANA_URL", "http://kubernetes-vm:30001"))
 ELASTICSEARCH_APIKEY = os.getenv("STANDALONE_ELASTICSEARCH_APIKEY", os.getenv("ELASTICSEARCH_APIKEY", ""))
 
+CONNECTOR_FLASH = "Google-Gemini-2-5-Flash"
+CONNECTOR_MINI = "OpenAI-GPT-4-1-Mini"
+
+AGENT_CONNECTOR_MAP = {
+    "wayfinder-search-agent": CONNECTOR_FLASH,
+    "trip-planner-agent": CONNECTOR_FLASH,
+    "trip-itinerary-agent": CONNECTOR_FLASH,
+    "context-extractor-agent": CONNECTOR_MINI,
+    "response-parser-agent": CONNECTOR_MINI,
+    "itinerary-extractor-agent": CONNECTOR_MINI,
+}
+
 
 class ChatRequest(BaseModel):
     """Chat request body - supports text and optional image."""
@@ -31,6 +44,7 @@ class ChatRequest(BaseModel):
     user_id: str = "user_new"
     agent_id: str = "wayfinder-search-agent"
     image_base64: Optional[str] = None
+    vision_analysis: Optional[dict] = None
 
 
 @router.post("/parse-trip-context")
@@ -52,6 +66,7 @@ async def parse_trip_context_endpoint(
     payload = {
         "input": message,
         "agent_id": "context-extractor-agent",
+        "connector_id": AGENT_CONNECTOR_MAP.get("context-extractor-agent", CONNECTOR_MINI),
     }
     
     try:
@@ -123,81 +138,92 @@ async def chat_endpoint(
     - JSON body: {"message": "...", "user_id": "...", "agent_id": "...", "image_base64": "..."}
     - Query params: ?message=...&user_id=...&agent_id=... (backward compatible)
     """
-    # Resolve parameters from JSON body or query params
     if request and (request.message or request.image_base64):
         msg = request.message
         uid = request.user_id
         aid = request.agent_id
         image = request.image_base64
+        preanalysis = request.vision_analysis
     elif message:
         msg = message
         uid = user_id or "user_new"
         aid = agent_id or "wayfinder-search-agent"
         image = None
+        preanalysis = None
     else:
         raise HTTPException(status_code=400, detail="Message or image is required")
 
-    # If image provided, try to analyze with Jina VLM
-    vision_context = ""
-    vision_description = ""
-    vision_structured_data = None
-    vision_error = None  # Set if vision analysis fails (e.g. Jina cold start 503)
-    # #region agent log
-    logger.warning(f"[DBG] chat_endpoint: has_image={bool(image)}, image_len={len(image) if image else 0}, aid={aid}, msg_preview={(msg or '')[:50]}")
-    # #endregion
-    if image:
-        cm = get_credential_manager()
-        vision_ready = cm.is_vision_ready()
-        # #region agent log
-        logger.warning(f"[DBG] vision_ready={vision_ready}, aid={aid}")
-        # #endregion
-        if vision_ready:
-            try:
-                if aid == "wayfinder-search-agent":
-                    # Search agent: use structured analysis for precise product matching
-                    # #region agent log
-                    logger.warning("[DBG] calling analyze_image_structured...")
-                    # #endregion
-                    vision_structured_data = await vision_service.analyze_image_structured(image)
-                    vision_description = vision_structured_data.get("description", "")
-                    product_type = vision_structured_data.get("product_type", "")
-                    category = vision_structured_data.get("category", "")
-                    vision_context = (
-                        f"[Vision Context: {product_type} - {vision_description}] "
-                        f"[Product Category: {category}] "
-                    )
-                    # #region agent log
-                    logger.warning(f"[DBG] structured_analysis SUCCESS: product_type={product_type}, category={category}, desc_len={len(vision_description)}")
-                    # #endregion
-                    logger.info(f"Structured vision context: product_type={product_type}, category={category}")
-                else:
-                    # Trip planner: use terrain-focused analysis (default prompt)
-                    vision_description = await vision_service.analyze_image(image)
-                    vision_context = f"[Vision Context: {vision_description}] "
-                    logger.info(f"Vision context added ({len(vision_description)} chars)")
-            except Exception as e:
-                # #region agent log
-                logger.warning(f"[DBG] vision_analysis FAILED: {type(e).__name__}: {e}")
-                # #endregion
-                vision_error = f"Image analysis unavailable: {type(e).__name__}"
-                if "503" in str(e):
-                    vision_error = "Image analysis service is warming up — please try again in 30-60 seconds"
-                logger.warning(f"Vision analysis failed, proceeding without: {type(e).__name__}: {e}")
-        else:
-            # #region agent log
-            logger.warning(f"[DBG] vision NOT ready - is_vision_ready returned False")
-            # #endregion
-            logger.info("Image provided but Jina VLM not configured, ignoring image")
+    t_start = time.time()
+    logger.warning(f"[PERF] chat_endpoint START: has_image={bool(image)}, has_preanalysis={bool(preanalysis)}, aid={aid}, msg_preview={(msg or '')[:50]}")
 
-    # Handle image-only submissions (no user text)
-    if not msg.strip() and image:
+    if not msg.strip() and (image or preanalysis):
         msg = "Find products similar to what's shown in this image"
 
-    # Build contextual message
-    contextual_message = f"{vision_context}[User ID: {uid}] {msg}"
-
     async def chat_stream():
-        """Wrapper generator: emits vision_analysis event first, then agent stream."""
+        """
+        SSE generator that streams events immediately.
+        Vision analysis runs INSIDE the stream so the first byte reaches
+        the frontend in <100ms (with a vision_analyzing progress event).
+        """
+        vision_context = ""
+        vision_description = ""
+        vision_structured_data = None
+        vision_error = None
+
+        # --- Phase 1: Vision analysis (use pre-analysis if available) ---
+        if preanalysis and preanalysis.get("description"):
+            vision_structured_data = preanalysis
+            vision_description = preanalysis.get("description", "")
+            if aid == "wayfinder-search-agent":
+                product_type = preanalysis.get("product_type", "")
+                category = preanalysis.get("category", "")
+                vision_context = (
+                    f"[Vision Context: {product_type} - {vision_description}] "
+                    f"[Product Category: {category}] "
+                )
+            else:
+                vision_context = f"[Vision Context: {vision_description}] "
+            logger.warning("[PERF] vision_analysis: 0.0s (using pre-analysis from frontend)")
+        elif preanalysis and preanalysis.get("category"):
+            category = preanalysis["category"]
+            vision_context = f"[Product Category: {category}] "
+            logger.warning("[PERF] vision_analysis: 0.0s (category-only session context)")
+        elif image:
+            cm = get_credential_manager()
+            vision_ready = cm.is_vision_ready()
+            if vision_ready:
+                yield format_sse_event("vision_analyzing", {
+                    "message": "Analyzing your image...",
+                    "agent_id": aid,
+                })
+
+                t_vision_start = time.time()
+                try:
+                    if aid == "wayfinder-search-agent":
+                        vision_structured_data = await vision_service.analyze_image_structured(image)
+                        vision_description = vision_structured_data.get("description", "")
+                        product_type = vision_structured_data.get("product_type", "")
+                        category = vision_structured_data.get("category", "")
+                        vision_context = (
+                            f"[Vision Context: {product_type} - {vision_description}] "
+                            f"[Product Category: {category}] "
+                        )
+                        logger.info(f"Structured vision context: product_type={product_type}, category={category}")
+                    else:
+                        vision_description = await vision_service.analyze_image(image)
+                        vision_context = f"[Vision Context: {vision_description}] "
+                except Exception as e:
+                    vision_error = f"Image analysis unavailable: {type(e).__name__}"
+                    if "503" in str(e):
+                        vision_error = "Image analysis service is warming up — please try again in 30-60 seconds"
+                    logger.warning(f"Vision analysis failed, proceeding without: {type(e).__name__}: {e}")
+
+                t_vision_elapsed = time.time() - t_vision_start
+                logger.warning(f"[PERF] vision_analysis: {t_vision_elapsed:.1f}s")
+            else:
+                logger.info("Image provided but Jina VLM not configured, ignoring image")
+
+        # Emit vision result events
         if vision_description:
             vision_event_data = {"description": vision_description}
             if vision_structured_data:
@@ -210,8 +236,15 @@ async def chat_endpoint(
             yield format_sse_event("vision_analysis", vision_event_data)
         elif vision_error:
             yield format_sse_event("vision_error", {"error": vision_error})
+
+        # --- Phase 2: Agent Builder streaming ---
+        contextual_message = f"{vision_context}[User ID: {uid}] {msg}"
+        t_agent_start = time.time()
         async for chunk in stream_agent_response(contextual_message, aid):
             yield chunk
+        t_agent_elapsed = time.time() - t_agent_start
+        t_total = time.time() - t_start
+        logger.warning(f"[PERF] chat_endpoint DONE: total={t_total:.1f}s, agent={t_agent_elapsed:.1f}s")
 
     return StreamingResponse(
         chat_stream(),
@@ -237,10 +270,13 @@ async def stream_agent_response(message: str, agent_id: str = "wayfinder-search-
         "kbn-xsrf": "true",
     }
     
+    connector_id = AGENT_CONNECTOR_MAP.get(agent_id, CONNECTOR_FLASH)
     payload = {
         "input": message,
         "agent_id": agent_id,
+        "connector_id": connector_id,
     }
+    logger.info(f"Agent {agent_id} using connector {connector_id}")
     
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
@@ -317,12 +353,13 @@ async def stream_agent_response(message: str, agent_id: str = "wayfinder-search-
                                     tool_call_id = data["tool_call_id"]
                                     results = data["results"]
                                     
-                                    # Debug: log raw tool_result shape for product card extraction
                                     logger.warning(f"[DBG:tool_result] tool_call_id={tool_call_id}, results_type={type(results).__name__}, results_len={len(results) if isinstance(results, list) else 'N/A'}")
-                                    if isinstance(results, list) and len(results) > 0:
-                                        first = results[0]
-                                        logger.warning(f"[DBG:tool_result] first_result_type={type(first).__name__}, keys={list(first.keys()) if isinstance(first, dict) else 'N/A'}")
-                                        logger.warning(f"[DBG:tool_result] first_result_sample={json.dumps(first, default=str)[:500]}")
+                                    if isinstance(results, list):
+                                        for idx, item in enumerate(results):
+                                            if isinstance(item, dict):
+                                                logger.warning(f"[DBG:tool_result] result[{idx}] type={item.get('type')}, keys={list(item.keys())}, sample={json.dumps(item, default=str)[:400]}")
+                                            else:
+                                                logger.warning(f"[DBG:tool_result] result[{idx}] raw_type={type(item).__name__}")
                                     
                                     # Update the corresponding step
                                     for step in steps:
@@ -335,15 +372,15 @@ async def stream_agent_response(message: str, agent_id: str = "wayfinder-search-
                                         "results": results
                                     })
                                 
-                                # Handle tool calls (no results field - just the call initiation)
                                 elif "tool_call_id" in data:
                                     tool_call_id = data.get("tool_call_id")
                                     tool_id = data.get("tool_id")
                                     params = data.get("params", {})
                                     
-                                    # Skip events with null tool_id (progress updates)
                                     if not tool_id:
                                         continue
+                                    
+                                    logger.warning(f"[DBG:tool_call] id={tool_call_id}, tool={tool_id}, has_params={bool(params)}")
                                     
                                     # Check if we already have this tool call
                                     existing_step = None
@@ -353,25 +390,22 @@ async def stream_agent_response(message: str, agent_id: str = "wayfinder-search-
                                             break
                                     
                                     if existing_step:
-                                        # Update existing step (don't emit duplicate event)
-                                        if params:  # Only update params if not empty
+                                        if params:
                                             existing_step["params"] = params
                                     else:
-                                        # Create new step only if we have actual params
-                                        if params:
-                                            tool_step = {
-                                                "type": "tool_call",
-                                                "tool_call_id": tool_call_id,
-                                                "tool_id": tool_id,
-                                                "params": params,
-                                                "results": []
-                                            }
-                                            steps.append(tool_step)
-                                            yield format_sse_event("tool_call", {
-                                                "tool_call_id": tool_call_id,
-                                                "tool_id": tool_id,
-                                                "params": params
-                                            })
+                                        tool_step = {
+                                            "type": "tool_call",
+                                            "tool_call_id": tool_call_id,
+                                            "tool_id": tool_id,
+                                            "params": params,
+                                            "results": []
+                                        }
+                                        steps.append(tool_step)
+                                        yield format_sse_event("tool_call", {
+                                            "tool_call_id": tool_call_id,
+                                            "tool_id": tool_id,
+                                            "params": params
+                                        })
                                 
                                 # Handle text chunks (message content)
                                 elif "text_chunk" in data:
@@ -450,6 +484,7 @@ async def extract_itinerary_endpoint(
     payload = {
         "input": trip_plan,
         "agent_id": "itinerary-extractor-agent",
+        "connector_id": AGENT_CONNECTOR_MAP.get("itinerary-extractor-agent", CONNECTOR_MINI),
     }
     
     try:
@@ -549,6 +584,7 @@ async def extract_trip_entities_endpoint(
             agent_payload = {
                 "input": trip_plan,
                 "agent_id": "response-parser-agent",
+                "connector_id": AGENT_CONNECTOR_MAP.get("response-parser-agent", CONNECTOR_MINI),
             }
             
             async with client.stream("POST", agent_url, headers=agent_headers, json=agent_payload) as response:

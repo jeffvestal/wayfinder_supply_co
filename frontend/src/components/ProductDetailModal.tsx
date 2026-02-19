@@ -95,7 +95,7 @@ export function ProductDetailModal({ product, userId, onClose, onTagClick }: Pro
           <div className="flex flex-col md:flex-row">
             {/* Image Section */}
             <div className="md:w-1/2 bg-slate-800">
-              <div className="aspect-square">
+              <div className="h-48 md:aspect-square md:h-auto">
                 {product.image_url ? (
                   <img
                     src={product.image_url}
@@ -114,7 +114,8 @@ export function ProductDetailModal({ product, userId, onClose, onTagClick }: Pro
             </div>
 
             {/* Details Section */}
-            <div className="md:w-1/2 p-8 overflow-y-auto max-h-[60vh] md:max-h-[90vh]">
+            <div className="md:w-1/2 flex flex-col max-h-[60vh] md:max-h-[90vh]">
+            <div className="flex-1 overflow-y-auto p-8 pb-4">
               {/* Brand & Category */}
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-primary font-medium">{product.brand}</span>
@@ -246,8 +247,10 @@ export function ProductDetailModal({ product, userId, onClose, onTagClick }: Pro
                 )}
               </AnimatePresence>
 
-              {/* Quantity & Add to Cart */}
-              <div className="flex items-center gap-4">
+            </div>
+
+              {/* Quantity & Add to Cart -- pinned at bottom */}
+              <div className="flex items-center gap-4 p-4 md:px-8 border-t border-slate-700 bg-slate-900 shrink-0">
                 <div className="flex items-center bg-slate-800 rounded-xl border border-slate-700">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}

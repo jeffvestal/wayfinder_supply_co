@@ -31,6 +31,12 @@ An **Elastic + Google Better Together** demo showcasing **Elastic Agentic Search
 - ✅ **NEW** — UI Settings page for runtime credential configuration
 - ✅ **NEW** — Google Cloud Run deployment with IAP authentication
 - ✅ **NEW** — Insight cards showing Jina VLM and Weather grounding data
+- ✅ **NEW** — Performance: Gemini 2.5 Flash for all agents (3-4x faster), GPT-4.1 Mini for utility agents
+- ✅ **NEW** — Pre-analysis passthrough eliminates duplicate Jina VLM calls (hybrid search: 25s → <1s)
+- ✅ **NEW** — Compact 2x2 product card grid in chat mode with click-to-detail modal
+- ✅ **NEW** — Multi-step progress UI for hybrid search (analyzing → searching)
+- ✅ **NEW** — Category-aware follow-ups via session context and index_search custom_instructions
+- ✅ **NEW** — Mobile-optimized product detail modal with sticky Add to Cart
 
 ## Overview
 
@@ -388,6 +394,10 @@ Full catalog covers 10 categories with ~150 products:
 - **Credential Manager** — UI-set credentials take precedence over `.env` file; status indicators show what's configured
 
 - **Vision Product Search** — Upload product photos in the Search & Chat panel to find similar items. Works in both Chat mode (agent-guided with category awareness) and Hybrid mode (direct ES search with category filtering). Jina VLM returns structured JSON (`product_type`, `category`, `key_terms`) for precise matching. Vision Analysis card displays analysis results; amber error card shown on Jina cold-start failures.
+- **Pre-analysis Pipeline** — Images are analyzed by Jina VLM as soon as they're uploaded (before the user hits send). Results are passed to both chat and hybrid backends, eliminating duplicate analysis calls.
+- **Compact Product Cards** — Chat mode shows a 2x2 grid of compact product cards (thumbnail + title + price). Click any card to open the full detail modal with description, reviews, and Add to Cart.
+- **Session Vision Context** — After an image search, the product category is persisted across follow-up messages so the agent maintains category awareness without leaking the original product type into new queries.
+- **Hybrid Search Progress** — Multi-step progress indicators (Analyzing image → Searching catalog) replace the generic spinner during hybrid vision search.
 
 ### User Personalization
 
@@ -1179,7 +1189,8 @@ Separating these allows you to load data on a dev cluster and run demos on a pro
 - **Backend**: Python 3.11+, FastAPI, httpx, SSE (Server-Sent Events)
 - **MCP Server**: FastMCP, Pydantic
 - **Search & AI**: Elasticsearch 9.x, ELSER (semantic search), Agent Builder, Workflows
-- **Vision AI**: Jina VLM (image analysis), Vertex AI Gemini 2.0 Flash (grounding), Imagen 3 (generation)
+- **Vision AI**: Jina VLM (image analysis), Vertex AI Gemini 2.5 Flash (grounding), Imagen 3 (generation)
+- **Agent LLMs**: Gemini 2.5 Flash (search, trip planning), GPT-4.1 Mini (utility JSON extraction)
 - **Data Generation**: Google Gemini 2.5 Flash (products, reviews), Vertex AI Imagen 3 (images)
 - **Personalization**: Elasticsearch clickstream analytics, user affinity scoring
 - **Deployment**: Docker Compose (local), Google Cloud Run, Artifact Registry, IAP

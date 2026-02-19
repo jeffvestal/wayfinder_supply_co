@@ -349,6 +349,7 @@ export function TripPlanner({
 }: TripPlannerProps) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isExtractingItinerary, setIsExtractingItinerary] = useState(false)
   const [thoughtTrace, setThoughtTrace] = useState<ThoughtTraceEvent[]>([])
   const [expandedThinking, setExpandedThinking] = useState<Record<string, boolean>>({})
   const [isItineraryOpen, setIsItineraryOpen] = useState(false)
@@ -570,7 +571,15 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
       await api.streamChat(messageText, userId, (event) => {
         const data = event.data
 
-        if (event.type === 'vision_analysis') {
+        if (event.type === 'vision_analyzing') {
+          const traceEvent: ThoughtTraceEvent = {
+            event: 'reasoning',
+            data: 'Analyzing image with Jina VLM...',
+            timestamp: new Date(),
+          }
+          localTraceEvents.push(traceEvent)
+          setThoughtTrace((prev) => [...prev, traceEvent])
+        } else if (event.type === 'vision_analysis') {
           const description = data.description || (typeof data === 'string' ? data : '')
           localVisionAnalysis = description
           const traceEvent: ThoughtTraceEvent = {
@@ -706,8 +715,12 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
             )
           }
           
-          // Extract itinerary using agent
-          extractItineraryFromResponse(messageContent)
+          // Fast client-side extraction first, then refine with agent
+          const quickDays = extractItineraryClientSide(messageContent)
+          if (quickDays.length > 0) {
+            setItinerary(quickDays)
+          }
+          extractItineraryFromResponse(messageContent, quickDays.length > 0)
           
           // Use fallback regex extraction as backup
           extractProductsFromResponseFallback(messageContent)
@@ -754,7 +767,51 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
     }
   }
 
-  const extractItineraryFromResponse = async (content: string) => {
+  const extractItineraryClientSide = (content: string): ItineraryDay[] => {
+    const dayPattern = /(?:^|\n)#{1,4}\s*Day\s+(\d+)[:\s—–-]+\s*(.+)/gim
+    const days: ItineraryDay[] = []
+    let match: RegExpExecArray | null
+
+    const matches: { dayNum: number; title: string; startIdx: number }[] = []
+    while ((match = dayPattern.exec(content)) !== null) {
+      matches.push({
+        dayNum: parseInt(match[1], 10),
+        title: match[2].trim(),
+        startIdx: match.index + match[0].length,
+      })
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+      const endIdx = i + 1 < matches.length ? content.lastIndexOf('\n', content.indexOf(matches[i + 1].title, matches[i].startIdx)) : content.length
+      const section = content.slice(matches[i].startIdx, endIdx)
+      let activities = section
+        .split(/\n/)
+        .map(line => line.replace(/^[\s]*[-•*]\s*/, '').trim())
+        .filter(line => line.length > 10 && line.length < 300 && !line.startsWith('#'))
+        .slice(0, 8)
+
+      if (activities.length <= 1 && section.length > 80) {
+        const sentences = section
+          .split(/(?<=[.!])\s+/)
+          .map(s => s.replace(/^[\s]*[-•*]\s*/, '').trim())
+          .filter(s => s.length > 15 && s.length < 300 && !s.startsWith('#'))
+          .slice(0, 6)
+        if (sentences.length > 1) {
+          activities = sentences
+        }
+      }
+
+      days.push({
+        day: matches[i].dayNum,
+        title: matches[i].title,
+        activities: activities.length > 0 ? activities : ['See details in the plan above'],
+      })
+    }
+    return days
+  }
+
+  const extractItineraryFromResponse = async (content: string, hasClientSideResult: boolean) => {
+    setIsExtractingItinerary(!hasClientSideResult)
     try {
       const result = await api.extractItinerary(content)
       if (result.days && result.days.length > 0) {
@@ -767,8 +824,7 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
       }
     } catch (error) {
       console.error('Failed to extract itinerary:', error)
-      // Fallback: create simple overview if extraction fails
-      if (content.length > 100) {
+      if (!hasClientSideResult && content.length > 100) {
         const bulletPoints = content
           .split(/[•\-\n]/)
           .map(a => a.trim())
@@ -783,6 +839,8 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
           }])
         }
       }
+    } finally {
+      setIsExtractingItinerary(false)
     }
   }
 
@@ -1001,6 +1059,11 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                   <Map className="w-4 h-4" />
                   View Itinerary
                 </button>
+              ) : isExtractingItinerary ? (
+                <div className="w-full px-4 py-2 bg-white/5 text-gray-400 rounded-lg text-sm text-center border border-white/10 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Preparing itinerary...
+                </div>
               ) : (
                 <div className="w-full px-4 py-2 bg-white/5 text-gray-500 rounded-lg text-sm text-center border border-white/10">
                   Start planning below

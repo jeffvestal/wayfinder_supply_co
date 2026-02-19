@@ -5,7 +5,6 @@ import ReactMarkdown from 'react-markdown'
 import { ExtendedChatMessage, AgentStep } from './types'
 import { StepRenderer } from './StepRenderer'
 import { getToolStatusMessage } from '../../lib/constants'
-import { ProductCard } from '../ProductCard'
 import { Product, UserId } from '../../types'
 
 interface ChatModeProps {
@@ -68,7 +67,7 @@ export function ChatMode({
   onToggleStepsExpanded,
   onToggleStep,
   messagesEndRef,
-  userId,
+  userId: _userId,
   onProductClick
 }: ChatModeProps) {
   // Vision analysis card expand state (keyed by message ID)
@@ -269,18 +268,37 @@ export function ChatMode({
             </p>
           </div>
           
-          {/* Product Cards - display below assistant messages */}
+          {/* Product Cards - compact 2x2 grid, click for detail modal */}
           {message.role === 'assistant' && message.products && message.products.length > 0 && (
-            <div className="mt-3 ml-4 space-y-2 w-full max-w-[85%]">
+            <div className="mt-3 ml-4 w-full max-w-[85%]">
               <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Recommended Gear</p>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {message.products.map((product) => (
-                  <ProductCard 
-                    key={product.id} 
-                    product={product} 
-                    userId={userId}
+                  <motion.div
+                    key={product.id}
+                    whileHover={{ scale: 1.02 }}
                     onClick={() => onProductClick(product)}
-                  />
+                    className="bg-slate-800/60 rounded-xl overflow-hidden border border-slate-700 hover:border-primary/50 cursor-pointer transition-colors"
+                  >
+                    <div className="aspect-square bg-slate-800 overflow-hidden">
+                      {product.image_url ? (
+                        <img
+                          src={product.image_url}
+                          alt={product.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%231e293b" width="200" height="200"/><text fill="%2364748b" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dy=".3em">No Image</text></svg>'
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No Image</div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <h4 className="text-xs font-semibold text-white line-clamp-1">{product.title}</h4>
+                      <p className="text-sm font-bold text-primary">${product.price.toFixed(2)}</p>
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             </div>

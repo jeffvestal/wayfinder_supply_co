@@ -116,19 +116,24 @@ export const api = {
     userId: string,
     onEvent: (event: StreamEvent) => void,
     agentId?: string,
-    imageBase64?: string
+    imageBase64?: string,
+    visionAnalysis?: Record<string, any>
   ): Promise<void> {
     const url = createApiUrl('/api/chat');
 
-    const body: Record<string, string> = {
+    const body: Record<string, any> = {
       message,
       user_id: userId,
     };
     if (agentId) body.agent_id = agentId;
-    if (imageBase64) body.image_base64 = imageBase64;
-    // #region agent log
-    console.warn('[DBG:streamChat] sending request', { url: url.toString(), hasImage: !!imageBase64, imageLen: imageBase64?.length || 0, agentId: agentId || '(default)', message: message.substring(0, 50) })
-    // #endregion
+    if (visionAnalysis?.description) {
+      body.vision_analysis = visionAnalysis;
+    } else if (visionAnalysis?.category) {
+      body.vision_analysis = visionAnalysis;
+    } else if (imageBase64) {
+      body.image_base64 = imageBase64;
+    }
+    console.warn('[DBG:streamChat] sending request', { url: url.toString(), hasImage: !!imageBase64, hasPreanalysis: !!(visionAnalysis?.description || visionAnalysis?.category), agentId: agentId || '(default)', message: message.substring(0, 50) })
 
     const response = await fetch(url.toString(), {
       method: 'POST',
@@ -475,16 +480,19 @@ export const api = {
     return response.json();
   },
 
-  async hybridSearch(query: string, limit = 10, userId?: string, imageBase64?: string): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[]; vision_analysis?: any; vision_error?: string }> {
+  async hybridSearch(query: string, limit = 10, userId?: string, imageBase64?: string, preanalysisResult?: any): Promise<{ products: any[]; total: number; personalized?: boolean; es_query?: any; raw_hits?: any[]; vision_analysis?: any; vision_error?: string }> {
     const url = createApiUrl('/api/products/search/hybrid');
 
-    if (imageBase64) {
-      // POST variant — supports image_base64 in body
+    if (imageBase64 || preanalysisResult) {
       const body: Record<string, any> = {
         q: query,
         limit,
-        image_base64: imageBase64,
       };
+      if (preanalysisResult?.description) {
+        body.vision_analysis = preanalysisResult;
+      } else if (imageBase64) {
+        body.image_base64 = imageBase64;
+      }
       if (userId) body.user_id = userId;
 
       const response = await fetch(url.toString(), {
@@ -630,6 +638,26 @@ export const api = {
     }
     const data = await response.json();
     return { image_base64: data.image_base64, prompt: data.prompt || '' };
+  },
+
+  async preanalyzeImage(imageBase64: string): Promise<{
+    success: boolean;
+    product_type?: string;
+    category?: string;
+    subcategory?: string;
+    key_terms?: string[];
+    description?: string;
+  }> {
+    const url = createApiUrl('/api/vision/preanalyze');
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ image_base64: imageBase64 }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
   },
 
   async warmVision(): Promise<{ status: string }> {

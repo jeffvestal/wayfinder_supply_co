@@ -60,6 +60,28 @@ async def warm_vision():
     return {"status": status}
 
 
+@router.post("/vision/preanalyze")
+async def preanalyze_image(request: AnalyzeRequest):
+    """
+    Pre-analyze an image for structured product data at upload time.
+    Called by the frontend when the user selects an image (before submitting).
+    Returns structured JSON with product_type, category, key_terms, description.
+    """
+    cm = get_credential_manager()
+    if not cm.is_vision_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Vision analysis not configured.",
+        )
+
+    try:
+        result = await vision_service.analyze_image_structured(request.image_base64)
+        return {"success": True, **result}
+    except Exception as e:
+        logger.warning(f"Pre-analysis failed: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.post("/vision/analyze", response_model=AnalyzeResponse)
 async def analyze_image(request: AnalyzeRequest):
     """

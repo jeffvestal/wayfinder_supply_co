@@ -4,6 +4,7 @@ Vision service layer for Jina VLM, Vertex AI Grounding, and Imagen 3.
 Each function is isolated so individual services can be swapped independently.
 """
 
+import asyncio
 import base64
 import io
 import json
@@ -19,6 +20,17 @@ logger = logging.getLogger("wayfinder.vision")
 
 # Jina VLM endpoint (OpenAI-compatible)
 JINA_VLM_URL = "https://api-beta-vlm.jina.ai/v1/chat/completions"
+
+# Shared httpx client for Jina VLM — reuses TCP/TLS connections across requests
+_jina_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_jina_client() -> httpx.AsyncClient:
+    """Return a shared httpx.AsyncClient for Jina VLM (connection pooling)."""
+    global _jina_client
+    if _jina_client is None or _jina_client.is_closed:
+        _jina_client = httpx.AsyncClient(timeout=120.0)
+    return _jina_client
 
 # Default terrain analysis prompt (used by Trip Planner)
 DEFAULT_TERRAIN_PROMPT = (
@@ -169,56 +181,55 @@ async def analyze_image(image_base64: str, prompt: Optional[str] = None) -> str:
     last_error: Optional[Exception] = None
     t0_total = time.time()
 
+    client = _get_jina_client()
+
     for attempt in range(1, max_attempts + 1):
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                t0 = time.time()
-                logger.info(f"Jina VLM attempt {attempt}/{max_attempts}")
-                response = await client.post(
-                    JINA_VLM_URL,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
+            t0 = time.time()
+            logger.info(f"Jina VLM attempt {attempt}/{max_attempts}")
+            response = await client.post(
+                JINA_VLM_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            elapsed = time.time() - t0
+
+            if response.status_code in RETRYABLE_STATUS_CODES:
+                logger.warning(
+                    f"Jina VLM attempt {attempt} returned {response.status_code} "
+                    f"after {elapsed:.1f}s "
+                    f"({'retrying after delay...' if attempt < max_attempts else 'giving up'})"
                 )
-                elapsed = time.time() - t0
+                last_error = ValueError(f"Jina VLM API error: {response.status_code}")
+                if attempt < max_attempts:
+                    delay = 15 * attempt
+                    logger.info(f"Waiting {delay}s before retry (cold start backoff)...")
+                    await asyncio.sleep(delay)
+                    continue
+                raise last_error
 
-                if response.status_code in RETRYABLE_STATUS_CODES:
-                    logger.warning(
-                        f"Jina VLM attempt {attempt} returned {response.status_code} "
-                        f"after {elapsed:.1f}s "
-                        f"({'retrying after delay...' if attempt < max_attempts else 'giving up'})"
-                    )
-                    last_error = ValueError(f"Jina VLM API error: {response.status_code}")
-                    if attempt < max_attempts:
-                        import asyncio
-                        delay = 15 * attempt  # 15s, 30s — gives cold model time to load
-                        logger.info(f"Waiting {delay}s before retry (cold start backoff)...")
-                        await asyncio.sleep(delay)
-                        continue
-                    raise last_error
+            if response.status_code != 200:
+                logger.error(f"Jina VLM error: {response.status_code} after {elapsed:.1f}s - {response.text}")
+                raise ValueError(f"Jina VLM API error: {response.status_code}")
 
-                if response.status_code != 200:
-                    logger.error(f"Jina VLM error: {response.status_code} after {elapsed:.1f}s - {response.text}")
-                    raise ValueError(f"Jina VLM API error: {response.status_code}")
-
-                data = response.json()
-                description = data["choices"][0]["message"]["content"]
-                total_elapsed = time.time() - t0_total
-                logger.info(f"Jina VLM analysis complete ({len(description)} chars, {elapsed:.1f}s request, {total_elapsed:.1f}s total)")
-                return description
+            data = response.json()
+            description = data["choices"][0]["message"]["content"]
+            total_elapsed = time.time() - t0_total
+            logger.info(f"Jina VLM analysis complete ({len(description)} chars, {elapsed:.1f}s request, {total_elapsed:.1f}s total)")
+            return description
 
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             elapsed = time.time() - t0 if 't0' in dir() else 0
             last_error = e
             logger.warning(f"Jina VLM attempt {attempt} failed ({type(e).__name__}) after {elapsed:.1f}s, {'retrying...' if attempt < max_attempts else 'giving up'}")
             if attempt < max_attempts:
-                import asyncio
                 await asyncio.sleep(5)
                 continue
         except Exception:
-            raise  # Don't retry non-transient errors
+            raise
 
     raise last_error or ValueError("Jina VLM failed after retries")
 
