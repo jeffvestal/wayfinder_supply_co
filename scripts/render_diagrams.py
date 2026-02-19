@@ -294,7 +294,7 @@ def build_integration():
     # GCP zone
     els.append(rect("z_gcp", 810, 50, 250, 245, bg=ORANGE_F, stroke=ORANGE_S, sw=1, opacity=30))
     els.append(standalone_text("z_gcp_t", 850, 57, "Google Cloud (Vertex AI)", 18, ORANGE_S))
-    els.extend(labeled_rect("g1", 835, 90, 200, 50, "Gemini 2.0 Flash\n+ Google Search",
+    els.extend(labeled_rect("g1", 835, 90, 200, 50, "Gemini 2.5 Flash\n+ Google Search",
                             bg=ORANGE_F, stroke=ORANGE_S, font_size=14))
     els.append(standalone_text("g1_note", 840, 148, "Real-time weather,\ntrail conditions", 13, MUTED))
     els.extend(labeled_rect("g2", 835, 190, 200, 50, "Imagen 3\nProduct Visualization",
@@ -328,14 +328,15 @@ def build_integration():
     els.append(standalone_text("flow_t", 10, 395, "Data Flow Summary", 18, TEXT))
     for i, line in enumerate([
         "1. Trip Planner: photo -> Jina VLM terrain analysis -> description injected into Agent context",
-        "2. Search Panel: photo -> Jina VLM structured JSON -> category filter + semantic/lexical search",
-        "3. Agent Builder orchestrates trip -> ground_conditions workflow -> Gemini + Google Search for live weather",
-        "4. Agent searches product catalog (ELSER semantic) -> recommends gear from Wayfinder catalog only",
-        "5. User clicks Visualize -> Imagen 3 generates product-in-scene preview with style reference",
+        "2. Search Panel: photo pre-analyzed on upload -> cached result passed to chat/hybrid (no duplicate Jina call)",
+        "3. Agent Builder orchestrates trip -> ground_conditions workflow -> Gemini 2.5 Flash + Google Search for live weather",
+        "4. Agent searches product catalog (ELSER semantic + custom_instructions for category) -> top 4 results in 2x2 grid",
+        "5. Follow-ups use category-only session context -> agent uses exact user words for new product type",
+        "6. User clicks Visualize -> Imagen 3 generates product-in-scene preview with style reference",
     ]):
         els.append(standalone_text(f"flow{i}", 10, 425 + i * 22, line, 14, MUTED))
 
-    els.extend(legend_row("lg2", 555, [
+    els.extend(legend_row("lg2", 575, [
         ("Jina AI", YELLOW_F, YELLOW_S),
         ("Google Cloud", ORANGE_F, ORANGE_S),
         ("Elastic", GREEN_F, GREEN_S),
@@ -343,7 +344,7 @@ def build_integration():
         ("User", BLUE_F, BLUE_S),
     ]))
 
-    return dark_scene(els, 1090, 595)
+    return dark_scene(els, 1090, 615)
 
 
 # =====================================================================
@@ -373,13 +374,13 @@ def build_vision_pipeline():
     els.append(arrow_el("va3", 550, 105, [[0, 0], [60, 0]], stroke=YELLOW_S))
     els.append(arrow_el("va4", 770, 105, [[0, 0], [60, 0]], stroke=GREEN_S))
 
-    # Phase 1b — Product Search path (structured analysis)
+    # Phase 1b — Product Search path (pre-analysis + structured analysis)
     els.append(standalone_text("p1b", 10, 152,
-        "Phase 1b: Product Search -- Search Panel (Jina VLM Structured)", 18, YELLOW_S))
+        "Phase 1b: Product Search -- Pre-Analysis Pipeline", 18, YELLOW_S))
     boxes1b = [
         ("vs_usr", 10, 185, 130, 50, "User Uploads\nProduct Photo", BLUE_F, BLUE_S),
         ("vs_rsz", 195, 185, 140, 50, "Frontend Resize\n+ base64 encode", BLUE_F, BLUE_S),
-        ("vs_be", 390, 180, 160, 60, "Chat or Hybrid\nanalyze_image\n_structured()", PURPLE_F, PURPLE_S),
+        ("vs_pre", 390, 180, 160, 60, "POST /vision/\npreanalyze\n(on upload)", PURPLE_F, PURPLE_S),
         ("vs_jina", 610, 185, 160, 50, "Jina VLM API\nStructured JSON", YELLOW_F, YELLOW_S),
         ("vs_out", 830, 178, 185, 64, "product_type, category\nsubcategory, key_terms\ndescription", YELLOW_F, YELLOW_S),
     ]
@@ -393,66 +394,89 @@ def build_vision_pipeline():
     els.append(standalone_text("retry_n", 610, 240,
         "Retries 502/503/429 (15s, 30s backoff)", 12, MUTED))
 
+    # Pre-analysis cache note
+    els.append(standalone_text("preana_n", 390, 245,
+        "Result cached in frontend; passed as vision_analysis to chat/hybrid (no 2nd Jina call)", 12, MUTED))
+
+    # Session Context for follow-ups
+    els.append(standalone_text("sc_t", 10, 270,
+        "Session Context (Follow-ups)", 18, BLUE_S))
+    boxes_sc = [
+        ("sc_1st", 10, 303, 175, 50, "1st message:\nFull vision_analysis", PURPLE_F, PURPLE_S),
+        ("sc_save", 240, 303, 175, 50, "Save to session:\n{ category } only", BLUE_F, BLUE_S),
+        ("sc_fup", 470, 303, 175, 50, "Follow-up sends:\n[Product Category: X]", PURPLE_F, PURPLE_S),
+        ("sc_agent", 700, 303, 180, 50, "Agent searches\nnew product type\nin same category", GREEN_F, GREEN_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes_sc:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
+    els.append(arrow_el("sca1", 185, 328, [[0, 0], [55, 0]], stroke=TEXT))
+    els.append(arrow_el("sca2", 415, 328, [[0, 0], [55, 0]], stroke=TEXT))
+    els.append(arrow_el("sca3", 645, 328, [[0, 0], [55, 0]], stroke=GREEN_S))
+    els.append(standalone_text("sc_note", 240, 358,
+        "Only category persisted -- product_type/description NOT carried to follow-ups", 12, MUTED))
+
     # Phase 2
-    els.append(standalone_text("p2", 10, 265,
+    els.append(standalone_text("p2", 10, 385,
         "Phase 2: Weather Grounding (Google Gemini + Search)", 18, GREEN_S))
     boxes2 = [
-        ("v_ag", 10, 300, 155, 50, "Agent Builder\ncalls tool", GREEN_F, GREEN_S),
-        ("v_wf", 225, 300, 175, 50, "ground_conditions\nWorkflow", GREEN_F, GREEN_S),
-        ("v_gep", 470, 300, 155, 50, "Backend\n/vision/ground", PURPLE_F, PURPLE_S),
-        ("v_gem", 695, 295, 175, 60, "Gemini 2.0 Flash\n+ Google Search\nGrounding", ORANGE_F, ORANGE_S),
-        ("v_wout", 940, 300, 110, 50, "Weather\nCard in UI", GREEN_F, GREEN_S),
+        ("v_ag", 10, 420, 155, 50, "Agent Builder\ncalls tool", GREEN_F, GREEN_S),
+        ("v_wf", 225, 420, 175, 50, "ground_conditions\nWorkflow", GREEN_F, GREEN_S),
+        ("v_gep", 470, 420, 155, 50, "Backend\n/vision/ground", PURPLE_F, PURPLE_S),
+        ("v_gem", 695, 415, 175, 60, "Gemini 2.5 Flash\n+ Google Search\nGrounding", ORANGE_F, ORANGE_S),
+        ("v_wout", 940, 420, 110, 50, "Weather\nCard in UI", GREEN_F, GREEN_S),
     ]
     for id, x, y, w, h, lbl, bg, stroke in boxes2:
         els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=14))
-    els.append(arrow_el("va5", 165, 325, [[0, 0], [60, 0]], stroke=TEXT))
-    els.extend(labeled_arrow("va6", 400, 325, [[0, 0], [70, 0]], "HTTP",
+    els.append(arrow_el("va5", 165, 445, [[0, 0], [60, 0]], stroke=TEXT))
+    els.extend(labeled_arrow("va6", 400, 445, [[0, 0], [70, 0]], "HTTP",
                              stroke=TEXT, font_color=MUTED))
-    els.append(arrow_el("va7", 625, 325, [[0, 0], [70, 0]], stroke=ORANGE_S))
-    els.append(arrow_el("va8", 870, 325, [[0, 0], [70, 0]], stroke=GREEN_S))
+    els.append(arrow_el("va7", 625, 445, [[0, 0], [70, 0]], stroke=ORANGE_S))
+    els.append(arrow_el("va8", 870, 445, [[0, 0], [70, 0]], stroke=GREEN_S))
 
     # Phase 3
-    els.append(standalone_text("p3", 10, 378,
+    els.append(standalone_text("p3", 10, 498,
         "Phase 3: Product Visualization (Imagen 3)", 18, PURPLE_S))
-    els.extend(labeled_rect("v_btn", 10, 415, 130, 50, "User Clicks\n\"Visualize\"",
+    els.extend(labeled_rect("v_btn", 10, 535, 130, 50, "User Clicks\n\"Visualize\"",
                             bg=BLUE_F, stroke=BLUE_S, font_size=14))
-    els.extend(labeled_rect("v_pep", 200, 415, 155, 50, "Backend\n/vision/preview",
+    els.extend(labeled_rect("v_pep", 200, 535, 155, 50, "Backend\n/vision/preview",
                             bg=PURPLE_F, stroke=PURPLE_S, font_size=14))
-    els.append(arrow_el("va9", 140, 440, [[0, 0], [60, 0]], stroke=TEXT))
+    els.append(arrow_el("va9", 140, 560, [[0, 0], [60, 0]], stroke=TEXT))
 
-    els.extend(labeled_rect("v_p1", 440, 405, 200, 55,
+    els.extend(labeled_rect("v_p1", 440, 525, 200, 55,
         "Pass 1: Scene Generation\nImagen text-to-image\nfrom Jina description",
         bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
-    els.append(arrow_el("va10", 355, 430, [[0, 0], [85, -15]], stroke=ORANGE_S))
+    els.append(arrow_el("va10", 355, 550, [[0, 0], [85, -15]], stroke=ORANGE_S))
 
-    els.extend(labeled_rect("v_p2", 710, 400, 220, 65,
+    els.extend(labeled_rect("v_p2", 710, 520, 220, 65,
         "Pass 2: Product Composite\n+ Enhanced Prompting\n+ Style Reference (catalog img)\n+ Wearable Detection",
         bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
-    els.append(arrow_el("va11", 640, 432, [[0, 0], [70, 0]], stroke=ORANGE_S))
+    els.append(arrow_el("va11", 640, 552, [[0, 0], [70, 0]], stroke=ORANGE_S))
 
-    els.extend(labeled_rect("v_fb", 440, 480, 200, 45,
+    els.extend(labeled_rect("v_fb", 440, 600, 200, 45,
         "Fallback: Single-pass\ncomposite generation",
         bg=RED_F, stroke=RED_S, font_size=13))
-    els.append(arrow_el("va_fb", 355, 450, [[0, 0], [85, 40]],
+    els.append(arrow_el("va_fb", 355, 570, [[0, 0], [85, 40]],
                         stroke=RED_S, sw=2, style="dashed"))
 
-    els.extend(labeled_rect("v_out", 1000, 410, 120, 50,
+    els.extend(labeled_rect("v_out", 1000, 530, 120, 50,
         "Preview Image\nin UI + lightbox",
         bg=BLUE_F, stroke=BLUE_S, font_size=14))
-    els.append(arrow_el("va12", 930, 432, [[0, 0], [70, 0]], stroke=TEXT))
+    els.append(arrow_el("va12", 930, 552, [[0, 0], [70, 0]], stroke=TEXT))
 
     # Insight cards
-    els.append(standalone_text("p4", 10, 550, "UI Cards", 18, TEXT))
-    els.extend(labeled_rect("ic1", 10, 580, 175, 45, "Vision Analysis\n(structured data)",
+    els.append(standalone_text("p4", 10, 670, "UI Cards", 18, TEXT))
+    els.extend(labeled_rect("ic1", 10, 700, 175, 45, "Vision Analysis\n(structured data)",
                             bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
-    els.extend(labeled_rect("ic2", 205, 580, 175, 45, "Weather Grounding\nFormatted card",
+    els.extend(labeled_rect("ic2", 205, 700, 175, 45, "Weather Grounding\nFormatted card",
                             bg=ORANGE_F, stroke=ORANGE_S, font_size=13))
-    els.extend(labeled_rect("ic3", 400, 580, 165, 45, "Imagen Prompt\nShow Prompt btn",
+    els.extend(labeled_rect("ic3", 400, 700, 165, 45, "Imagen Prompt\nShow Prompt btn",
                             bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
-    els.extend(labeled_rect("ic4", 585, 580, 175, 45, "Vision Error\n(cold start / 503)",
+    els.extend(labeled_rect("ic4", 585, 700, 175, 45, "Vision Error\n(cold start / 503)",
                             bg=RED_F, stroke=RED_S, font_size=13))
+    els.extend(labeled_rect("ic5", 780, 700, 175, 45, "2x2 Product Grid\nClick-to-Detail",
+                            bg=BLUE_F, stroke=BLUE_S, font_size=13))
 
-    els.extend(legend_row("lg3", 650, [
+    els.extend(legend_row("lg3", 770, [
         ("Frontend", BLUE_F, BLUE_S),
         ("Backend", PURPLE_F, PURPLE_S),
         ("Jina AI", YELLOW_F, YELLOW_S),
@@ -461,7 +485,7 @@ def build_vision_pipeline():
         ("Fallback / Error", RED_F, RED_S),
     ]))
 
-    return dark_scene(els, 1150, 695)
+    return dark_scene(els, 1150, 815)
 
 
 # =====================================================================
@@ -666,71 +690,103 @@ def build_vision_search():
     els.append(standalone_text("title", 220, 8,
         "Vision Product Search -- Chat and Hybrid Modes", 24, TEXT))
 
-    # --- Chat Mode path (top) ---
-    els.append(standalone_text("cm_t", 10, 50, "Chat Mode (Agent-Based)", 18, PURPLE_S))
+    # --- Pre-Analysis (shared by both modes) ---
+    els.append(standalone_text("pa_t", 10, 50, "Pre-Analysis (On Upload, Before Send)", 18, YELLOW_S))
+
+    boxes_pre = [
+        ("pa_usr", 10, 82, 135, 50, "User Uploads\nProduct Photo", BLUE_F, BLUE_S),
+        ("pa_rsz", 195, 82, 130, 50, "imageUtils.ts\nResize + b64", BLUE_F, BLUE_S),
+        ("pa_api", 375, 77, 170, 60, "POST /vision/\npreanalyze\n(immediate)", PURPLE_F, PURPLE_S),
+        ("pa_jina", 600, 82, 150, 50, "Jina VLM\nStructured JSON", YELLOW_F, YELLOW_S),
+        ("pa_cache", 805, 77, 195, 60, "Cached in frontend\npreanalysisResult\n(reused on send)", BLUE_F, BLUE_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes_pre:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
+    els.append(arrow_el("pa1", 145, 107, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("pa2", 325, 107, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("pa3", 545, 107, [[0, 0], [55, 0]], stroke=YELLOW_S))
+    els.append(arrow_el("pa4", 750, 107, [[0, 0], [55, 0]], stroke=BLUE_S))
+    els.append(standalone_text("pa_note", 375, 142,
+        "No duplicate Jina call when user sends -- pre-analyzed result passed as vision_analysis", 12, MUTED))
+
+    # --- Chat Mode path ---
+    els.append(standalone_text("cm_t", 10, 168, "Chat Mode (Agent-Based)", 18, PURPLE_S))
 
     boxes_chat = [
-        ("cs_usr", 10, 82, 135, 50, "User Uploads\nProduct Photo", BLUE_F, BLUE_S),
-        ("cs_rsz", 195, 82, 130, 50, "imageUtils.ts\nResize + b64", BLUE_F, BLUE_S),
-        ("cs_api", 375, 77, 170, 60, "POST /api/chat\nanalyze_image\n_structured()", PURPLE_F, PURPLE_S),
-        ("cs_jina", 600, 82, 150, 50, "Jina VLM\nStructured JSON", YELLOW_F, YELLOW_S),
-        ("cs_ctx", 805, 77, 195, 60, "[Vision Context: type]\n[Product Category: cat]\n-> Agent Builder", GREEN_F, GREEN_S),
+        ("cs_send", 10, 200, 135, 50, "User Sends\nMessage", BLUE_F, BLUE_S),
+        ("cs_api", 195, 195, 170, 60, "POST /api/chat\nvision_analysis\n(from cache)", PURPLE_F, PURPLE_S),
+        ("cs_ctx", 420, 195, 195, 60, "[Vision Context: type]\n[Product Category: cat]\n-> Agent Builder", GREEN_F, GREEN_S),
+        ("cs_tool", 670, 195, 195, 60, "product_search tool\ncustom_instructions\ncategory-aware ES|QL", GREEN_F, GREEN_S),
+        ("cs_cards", 920, 200, 140, 50, "2x2 Compact\nProduct Grid", BLUE_F, BLUE_S),
     ]
     for id, x, y, w, h, lbl, bg, stroke in boxes_chat:
         els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
-    els.append(arrow_el("ca1", 145, 107, [[0, 0], [50, 0]], stroke=TEXT))
-    els.append(arrow_el("ca2", 325, 107, [[0, 0], [50, 0]], stroke=TEXT))
-    els.append(arrow_el("ca3", 545, 107, [[0, 0], [55, 0]], stroke=YELLOW_S))
-    els.append(arrow_el("ca4", 750, 107, [[0, 0], [55, 0]], stroke=GREEN_S))
+    els.append(arrow_el("ca1", 145, 225, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("ca2", 365, 225, [[0, 0], [55, 0]], stroke=GREEN_S))
+    els.append(arrow_el("ca3", 615, 225, [[0, 0], [55, 0]], stroke=GREEN_S))
+    els.append(arrow_el("ca4", 865, 225, [[0, 0], [55, 0]], stroke=BLUE_S))
 
-    # Agent tool call
-    els.extend(labeled_rect("cs_tool", 805, 150, 195, 40, "product_search tool\ncategory-aware results",
-                            bg=GREEN_F, stroke=GREEN_S, font_size=13))
-    els.append(arrow_el("ca5", 902, 137, [[0, 0], [0, 13]], stroke=GREEN_S))
+    # LLM connector note
+    els.append(standalone_text("llm_note", 420, 260,
+        "Gemini 2.5 Flash via connector_id at converse time", 12, MUTED))
 
-    # --- Hybrid Mode path (bottom) ---
-    els.append(standalone_text("hm_t", 10, 210, "Hybrid Mode (Direct ES Search)", 18, BLUE_S))
+    # --- Session Context (follow-ups) ---
+    els.append(standalone_text("sc_t2", 10, 283, "Follow-up (Session Context)", 18, BLUE_S))
+    boxes_fup = [
+        ("fup_msg", 10, 315, 135, 50, "Follow-up Msg\n(no image)", BLUE_F, BLUE_S),
+        ("fup_ctx", 195, 310, 170, 60, "sessionVisionContext\n{ category } only\n-> backend", BLUE_F, BLUE_S),
+        ("fup_inject", 420, 310, 195, 60, "[Product Category: X]\nAgent uses EXACT\nuser words for type", GREEN_F, GREEN_S),
+        ("fup_results", 670, 315, 195, 50, "New product type\nwithin same category", GREEN_F, GREEN_S),
+    ]
+    for id, x, y, w, h, lbl, bg, stroke in boxes_fup:
+        els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
+    els.append(arrow_el("fa1", 145, 340, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("fa2", 365, 340, [[0, 0], [55, 0]], stroke=GREEN_S))
+    els.append(arrow_el("fa3", 615, 340, [[0, 0], [55, 0]], stroke=GREEN_S))
+
+    # --- Hybrid Mode path ---
+    els.append(standalone_text("hm_t", 10, 388, "Hybrid Mode (Direct ES Search)", 18, BLUE_S))
 
     boxes_hybrid = [
-        ("hs_usr", 10, 245, 135, 50, "User Uploads\nProduct Photo", BLUE_F, BLUE_S),
-        ("hs_rsz", 195, 245, 130, 50, "imageUtils.ts\nResize + b64", BLUE_F, BLUE_S),
-        ("hs_api", 375, 240, 170, 60, "POST /api/products\n/search/hybrid\nimage_base64", PURPLE_F, PURPLE_S),
-        ("hs_jina", 600, 245, 150, 50, "Jina VLM\nStructured JSON", YELLOW_F, YELLOW_S),
+        ("hs_send", 10, 420, 135, 50, "User Sends\nQuery", BLUE_F, BLUE_S),
+        ("hs_prog1", 195, 415, 130, 55, "Progress Step 1\nAnalyzing Image", BLUE_F, BLUE_S),
+        ("hs_api", 375, 415, 170, 55, "POST /search/hybrid\nvision_analysis\n(from cache)", PURPLE_F, PURPLE_S),
+        ("hs_prog2", 595, 415, 130, 55, "Progress Step 2\nSearching Catalog", BLUE_F, BLUE_S),
     ]
     for id, x, y, w, h, lbl, bg, stroke in boxes_hybrid:
         els.extend(labeled_rect(id, x, y, w, h, lbl, bg=bg, stroke=stroke, font_size=13))
-    els.append(arrow_el("ha1", 145, 270, [[0, 0], [50, 0]], stroke=TEXT))
-    els.append(arrow_el("ha2", 325, 270, [[0, 0], [50, 0]], stroke=TEXT))
-    els.append(arrow_el("ha3", 545, 270, [[0, 0], [55, 0]], stroke=YELLOW_S))
+    els.append(arrow_el("ha1", 145, 445, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("ha2", 325, 442, [[0, 0], [50, 0]], stroke=TEXT))
+    els.append(arrow_el("ha3", 545, 442, [[0, 0], [50, 0]], stroke=PURPLE_S))
 
-    # Three ES query branches from structured output
-    els.extend(labeled_rect("hs_sem", 810, 225, 195, 38, "ELSER Semantic\ndescription field",
+    # Three ES query branches
+    els.extend(labeled_rect("hs_sem", 790, 400, 195, 38, "ELSER Semantic\ndescription field",
                             bg=GREEN_F, stroke=GREEN_S, font_size=13))
-    els.extend(labeled_rect("hs_lex", 810, 270, 195, 38, "BM25 Lexical\nkey_terms field",
+    els.extend(labeled_rect("hs_lex", 790, 445, 195, 38, "BM25 Lexical\nkey_terms field",
                             bg=GREEN_F, stroke=GREEN_S, font_size=13))
-    els.extend(labeled_rect("hs_flt", 810, 315, 195, 38, "Category Filter\ncategory -> term filter",
+    els.extend(labeled_rect("hs_flt", 790, 490, 195, 38, "Category Filter\ncategory -> term filter",
                             bg=GREEN_F, stroke=GREEN_S, font_size=13))
 
-    els.append(arrow_el("ha4a", 750, 255, [[0, 0], [60, -12]], stroke=GREEN_S))
-    els.append(arrow_el("ha4b", 750, 270, [[0, 0], [60, 0]], stroke=GREEN_S))
-    els.append(arrow_el("ha4c", 750, 285, [[0, 0], [60, 12]], stroke=GREEN_S, style="dashed"))
+    els.append(arrow_el("ha4a", 725, 430, [[0, 0], [65, -12]], stroke=GREEN_S))
+    els.append(arrow_el("ha4b", 725, 445, [[0, 0], [65, 12]], stroke=GREEN_S))
+    els.append(arrow_el("ha4c", 725, 460, [[0, 0], [65, 40]], stroke=GREEN_S, style="dashed"))
 
     # --- Error handling ---
-    els.append(standalone_text("err_t", 10, 375, "Error Handling", 18, RED_S))
-    els.extend(labeled_rect("err_503", 10, 410, 175, 50, "Jina 503\nCold Start",
+    els.append(standalone_text("err_t", 10, 548, "Error Handling", 18, RED_S))
+    els.extend(labeled_rect("err_503", 10, 580, 175, 50, "Jina 503\nCold Start",
                             bg=RED_F, stroke=RED_S, font_size=13))
-    els.extend(labeled_rect("err_retry", 245, 410, 175, 50, "Retry w/ Backoff\n15s, 30s (3 attempts)",
+    els.extend(labeled_rect("err_retry", 245, 580, 175, 50, "Retry w/ Backoff\n15s, 30s (3 attempts)",
                             bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
-    els.extend(labeled_rect("err_evt", 480, 410, 175, 50, "vision_error SSE\nor JSON response",
+    els.extend(labeled_rect("err_evt", 480, 580, 175, 50, "vision_error SSE\nor JSON response",
                             bg=PURPLE_F, stroke=PURPLE_S, font_size=13))
-    els.extend(labeled_rect("err_card", 720, 410, 175, 50, "Amber Error Card\nin Search Panel UI",
+    els.extend(labeled_rect("err_card", 720, 580, 175, 50, "Amber Error Card\nin Search Panel UI",
                             bg=RED_F, stroke=RED_S, font_size=13))
-    els.append(arrow_el("ea1", 185, 435, [[0, 0], [60, 0]], stroke=RED_S))
-    els.extend(labeled_arrow("ea2", 420, 435, [[0, 0], [60, 0]], "still fails",
+    els.append(arrow_el("ea1", 185, 605, [[0, 0], [60, 0]], stroke=RED_S))
+    els.extend(labeled_arrow("ea2", 420, 605, [[0, 0], [60, 0]], "still fails",
                              stroke=RED_S, font_color=MUTED))
-    els.append(arrow_el("ea3", 655, 435, [[0, 0], [65, 0]], stroke=RED_S))
+    els.append(arrow_el("ea3", 655, 605, [[0, 0], [65, 0]], stroke=RED_S))
 
-    els.extend(legend_row("lg6", 485, [
+    els.extend(legend_row("lg6", 655, [
         ("Frontend", BLUE_F, BLUE_S),
         ("Backend", PURPLE_F, PURPLE_S),
         ("Jina AI", YELLOW_F, YELLOW_S),
@@ -738,7 +794,7 @@ def build_vision_search():
         ("Error", RED_F, RED_S),
     ]))
 
-    return dark_scene(els, 1040, 525)
+    return dark_scene(els, 1020, 700)
 
 
 # ── Render & Save ────────────────────────────────────────────────────
