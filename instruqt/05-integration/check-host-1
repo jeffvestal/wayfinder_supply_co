@@ -66,7 +66,7 @@ if echo "$AGENT_RESPONSE" | jq -e '.results[] | select(.id=="trip-planner-agent"
     TOOL_COUNT=$(echo "$AGENT_DATA" | jq '.configuration.tools[0].tool_ids | length')
     
     # Check if agent has the customer profile tool
-    HAS_TOOL=$(echo "$AGENT_DATA" | jq '.configuration.tools[0].tool_ids[] | contains("get-customer-profile")')
+    HAS_TOOL=$(echo "$AGENT_DATA" | jq '[.configuration.tools[0].tool_ids[] | contains("get-customer-profile")] | any')
     
     if [ "$HAS_TOOL" = "true" ]; then
         echo "   ✓ Agent 'trip-planner-agent' exists and has customer profile tool"

@@ -18,19 +18,29 @@ description: |
   CRM systems, and external APIs to create personalized, intelligent recommendations.
 icon: ""
 tags:
+- co.elastic.workshops.production
 - search
 - ai
 - workflows
+- co.elastic.workshops.production.wayfinder
 - elasticsearch
 - agents
+- co.elastic.workshops
 owner: elastic
 developers:
 - jeff.vestal@elastic.co
+instructors:
+- eric.lehman@elastic.co
+- tatjana.frank@elastic.co
+- lasse.byrnak@elastic.co
+- maurizio.romani@elastic.co
+- ryan.lewis@elastic.co
+- craig.angulo@elastic.co
 show_timer: true
-idle_timeout: 10800
+idle_timeout: 3600
 timelimit: 10800
 lab_config:
-  extend_ttl: 10800
+  extend_ttl: 3600
   sidebar_enabled: true
   feedback_recap_enabled: true
   feedback_tab_enabled: false
@@ -39,5 +49,5 @@ lab_config:
     name: modern-dark
   override_challenge_layout: false
   hideStopButton: false
-checksum: "2821816558479833363"
+checksum: "11362285319565772727"
 enhanced_loading: false
