@@ -97,6 +97,7 @@ def delete_tool(tool_id: str) -> bool:
         return True
     elif response.status_code == 404:
         return True  # Doesn't exist, that's fine
+    print(f"  ⚠ Unexpected delete response for {tool_id}: {response.status_code} - {response.text[:200]}")
     return False
 
 
@@ -674,6 +675,14 @@ def main() -> int:
         print(f"Searched: {possible_paths}")
         return
     
+    # Step 0: Delete main agents upfront so tools can be deleted
+    # (tools referenced by agents return 409 on DELETE)
+    print("\n0. Cleaning up existing agents...")
+    for agent_id in ["trip-planner-agent", "wayfinder-search-agent", "trip-itinerary-agent",
+                      "context-extractor-agent", "response-parser-agent", "itinerary-extractor-agent"]:
+        delete_agent(agent_id)
+    time.sleep(1)
+
     # Step 1: Create agents first (so workflows can reference them)
     print("\n1. Creating Agents...")
     context_extractor_id = create_context_extractor_agent()

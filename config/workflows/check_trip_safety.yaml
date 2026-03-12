@@ -23,15 +23,19 @@ steps:
       method: POST
       headers:
         Content-Type: application/json
-      body:
-        jsonrpc: "2.0"
-        method: "tools/call"
-        params:
-          name: "get_trip_conditions_tool"
-          arguments:
-            location: "{{ inputs.location }}"
-            dates: "{{ inputs.dates }}"
-        id: "{{ execution.id }}"
+      body: |
+        {
+          "jsonrpc": "2.0",
+          "method": "tools/call",
+          "params": {
+            "name": "get_trip_conditions_tool",
+            "arguments": {
+              "location": "{{ inputs.location }}",
+              "dates": "{{ inputs.dates }}"
+            }
+          },
+          "id": "{{ execution.id }}"
+        }
     on-failure:
       retry:
         max-attempts: 2
