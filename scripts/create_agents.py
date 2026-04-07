@@ -103,10 +103,12 @@ def delete_tool(tool_id: str) -> bool:
 
 def delete_workflow(workflow_id: str) -> bool:
     """Delete a workflow if it exists."""
-    url = f"{KIBANA_URL}/api/workflows/{workflow_id}"
-    response = request_with_retry("DELETE", url, headers=HEADERS)
+    url = f"{KIBANA_URL}/api/workflows"
+    response = request_with_retry("DELETE", url, headers=HEADERS, json={"ids": [workflow_id]})
     if response.status_code in [200, 204]:
-        print(f"  ↻ Deleted existing workflow: {workflow_id}")
+        data = response.json()
+        if data.get("deleted", 0) > 0:
+            print(f"  ↻ Deleted existing workflow: {workflow_id}")
         return True
     elif response.status_code == 404:
         return True  # Doesn't exist, that's fine
@@ -602,8 +604,8 @@ def create_index_search_tool(name: str, index: str, description: str, custom_ins
 
 def delete_existing_workflows_by_name(workflow_name: str):
     """Delete all workflows with the given name."""
-    url = f"{KIBANA_URL}/api/workflows/search"
-    list_response = request_with_retry("POST", url, headers=HEADERS, json={"limit": 100, "page": 1, "query": ""})
+    url = f"{KIBANA_URL}/api/workflows"
+    list_response = request_with_retry("GET", url, headers=HEADERS)
     if list_response.status_code == 200:
         data = list_response.json()
         workflows = data.get("results", []) or data.get("data", [])
@@ -663,14 +665,21 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None, back
     
     url = f"{KIBANA_URL}/api/workflows"
     
-    # API expects {"yaml": "<yaml_string>"}
-    response = request_with_retry("POST", url, headers=HEADERS, json={"yaml": yaml_content})
-    
+    # API expects {"workflows": [{"yaml": "<yaml_string>"}]}
+    response = request_with_retry("POST", url, headers=HEADERS, json={"workflows": [{"yaml": yaml_content}]})
+
     if response.status_code in [200, 201]:
         data = response.json()
-        workflow_id = data.get("id") or data.get("workflow_id")
-        print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
-        return workflow_id
+        created = data.get("created", [])
+        if created:
+            workflow_id = created[0].get("id")
+            print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
+            return workflow_id
+        failed = data.get("failed", [])
+        if failed:
+            print(f"✗ Failed to deploy workflow '{workflow_name}': {failed}")
+            FAILURES += 1
+            return None
     else:
         print(f"✗ Failed to deploy workflow '{workflow_name}': {response.status_code}")
         print(f"  Response: {response.text}")

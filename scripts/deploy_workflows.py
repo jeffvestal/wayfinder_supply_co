@@ -32,10 +32,12 @@ HEADERS = {
 
 def delete_workflow(workflow_id: str, workflow_name: str) -> bool:
     """Delete a workflow if it exists."""
-    url = f"{KIBANA_URL}/api/workflows/{workflow_id}"
-    response = requests.delete(url, headers=HEADERS)
+    url = f"{KIBANA_URL}/api/workflows"
+    response = requests.delete(url, headers=HEADERS, json={"ids": [workflow_id]})
     if response.status_code in [200, 204]:
-        print(f"  ↻ Deleted existing workflow: {workflow_name}")
+        data = response.json()
+        if data.get("deleted", 0) > 0:
+            print(f"  ↻ Deleted existing workflow: {workflow_name}")
         return True
     elif response.status_code == 404:
         return True  # Doesn't exist, that's fine
@@ -100,10 +102,9 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None, back
     workflow_name = workflow_data.get("name", workflow_path.stem)
     
     url = f"{KIBANA_URL}/api/workflows"
-    search_url = f"{url}/search"
-    
+
     # Delete existing workflow first (script is source of truth)
-    list_response = requests.post(search_url, headers=HEADERS, json={"limit": 100, "page": 1, "query": ""})
+    list_response = requests.get(url, headers=HEADERS)
     if list_response.status_code == 200:
         data = list_response.json()
         workflows = data.get("results", []) or data.get("data", [])
@@ -111,15 +112,21 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None, back
             if wf.get("name") == workflow_name:
                 existing_id = wf.get("id")
                 delete_workflow(existing_id, workflow_name)
-    
-    # Create new workflow - API expects {"yaml": "<yaml_string>"}
-    response = requests.post(url, headers=HEADERS, json={"yaml": yaml_content})
-    
+
+    # Create new workflow - API expects {"workflows": [{"yaml": "<yaml_string>"}]}
+    response = requests.post(url, headers=HEADERS, json={"workflows": [{"yaml": yaml_content}]})
+
     if response.status_code in [200, 201]:
         data = response.json()
-        workflow_id = data.get("id") or data.get("workflow_id")
-        print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
-        return workflow_id
+        created = data.get("created", [])
+        if created:
+            workflow_id = created[0].get("id")
+            print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
+            return workflow_id
+        failed = data.get("failed", [])
+        if failed:
+            print(f"✗ Failed to deploy workflow '{workflow_name}': {failed}")
+            return None
     else:
         print(f"✗ Failed to deploy workflow '{workflow_name}': {response.status_code}")
         print(f"  Response: {response.text}")
