@@ -73,24 +73,44 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> O
     workflow_name = workflow_data.get("name", workflow_path.stem)
     
     url = f"{KIBANA_URL}/api/workflows"
-    search_url = f"{url}/search"
-    
-    # Delete existing workflow first (script is source of truth)
-    list_response = requests.post(search_url, headers=HEADERS, json={"limit": 100, "page": 1, "query": ""})
+
+    # Find existing workflow by name (GET /api/workflows, not the defunct /search endpoint)
+    existing_id = None
+    list_response = requests.get(url, headers=HEADERS)
     if list_response.status_code == 200:
         data = list_response.json()
-        workflows = data.get("results", []) or data.get("data", [])
+        workflows = data.get("results", [])
         for wf in workflows:
-            if wf.get("name") == workflow_name:
+            # Match on name embedded in YAML (API stores as "Untitled workflow" if name wasn't set)
+            wf_yaml = wf.get("yaml", "")
+            wf_name_in_yaml = ""
+            for line in wf_yaml.split("\n"):
+                if line.startswith("name:"):
+                    wf_name_in_yaml = line.split("name:", 1)[1].strip()
+                    break
+            if wf_name_in_yaml == workflow_name or wf.get("name") == workflow_name:
                 existing_id = wf.get("id")
-                delete_workflow(existing_id, workflow_name)
-    
-    # Create new workflow - API expects {"yaml": "<yaml_string>"}
-    response = requests.post(url, headers=HEADERS, json={"yaml": yaml_content})
-    
+                print(f"  ↻ Found existing workflow: {workflow_name} (ID: {existing_id})")
+                break
+
+    # API expects {"workflows": [{"yaml": "..."}]} for create
+    # or {"workflows": [{"id": "...", "yaml": "..."}]} for update
+    payload_entry = {"yaml": yaml_content}
+    if existing_id:
+        payload_entry["id"] = existing_id
+
+    response = requests.post(url, headers=HEADERS, json={"workflows": [payload_entry]})
+
     if response.status_code in [200, 201]:
         data = response.json()
-        workflow_id = data.get("id") or data.get("workflow_id")
+        # Response format: {"created": [...]} or {"updated": [...]}
+        entries = data.get("created") or data.get("updated") or []
+        if isinstance(entries, list) and entries:
+            workflow_id = entries[0].get("id")
+        elif isinstance(data, list) and data:
+            workflow_id = data[0].get("id")
+        else:
+            workflow_id = data.get("id") or data.get("workflow_id")
         print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
         return workflow_id
     else:

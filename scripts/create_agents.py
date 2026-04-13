@@ -560,13 +560,20 @@ def create_index_search_tool(name: str, index: str, description: str) -> Optiona
 
 def delete_existing_workflows_by_name(workflow_name: str):
     """Delete all workflows with the given name."""
-    url = f"{KIBANA_URL}/api/workflows/search"
-    list_response = request_with_retry("POST", url, headers=HEADERS, json={"limit": 100, "page": 1, "query": ""})
+    url = f"{KIBANA_URL}/api/workflows"
+    list_response = request_with_retry("GET", url, headers=HEADERS)
     if list_response.status_code == 200:
         data = list_response.json()
-        workflows = data.get("results", []) or data.get("data", [])
+        workflows = data.get("results", [])
         for wf in workflows:
-            if wf.get("name") == workflow_name:
+            # Match on name embedded in YAML (API may store display name separately)
+            wf_yaml = wf.get("yaml", "")
+            wf_name_in_yaml = ""
+            for line in wf_yaml.split("\n"):
+                if line.startswith("name:"):
+                    wf_name_in_yaml = line.split("name:", 1)[1].strip()
+                    break
+            if wf_name_in_yaml == workflow_name or wf.get("name") == workflow_name:
                 delete_workflow(wf.get("id"))
 
 def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> Optional[str]:
@@ -596,13 +603,20 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None) -> O
     delete_existing_workflows_by_name(workflow_name)
     
     url = f"{KIBANA_URL}/api/workflows"
-    
-    # API expects {"yaml": "<yaml_string>"}
-    response = request_with_retry("POST", url, headers=HEADERS, json={"yaml": yaml_content})
-    
+
+    # API expects {"workflows": [{"yaml": "<yaml_string>"}]}
+    response = request_with_retry("POST", url, headers=HEADERS, json={"workflows": [{"yaml": yaml_content}]})
+
     if response.status_code in [200, 201]:
         data = response.json()
-        workflow_id = data.get("id") or data.get("workflow_id")
+        # Response format: {"created": [...]} or {"updated": [...]}
+        entries = data.get("created") or data.get("updated") or []
+        if isinstance(entries, list) and entries:
+            workflow_id = entries[0].get("id")
+        elif isinstance(data, list) and data:
+            workflow_id = data[0].get("id")
+        else:
+            workflow_id = data.get("id") or data.get("workflow_id")
         print(f"✓ Deployed workflow: {workflow_name} (ID: {workflow_id})")
         return workflow_id
     else:
