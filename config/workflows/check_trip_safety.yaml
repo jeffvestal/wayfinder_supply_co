@@ -19,14 +19,12 @@ steps:
   - name: call_grounding_api
     type: http
     with:
-      url: "http://host-1:8002/api/vision/ground"
+      url: "https://wayfinder-demo-backend-2t3s3mceqa-uc.a.run.app/api/vision/ground"
       method: POST
       headers:
         Content-Type: application/json
-      body:
-        location: "{{ inputs.location }}"
-        activity: "outdoor trip on {{ inputs.dates }}"
-      timeout: 30s
+        X-Api-Key: "WAYFINDER_API_KEY"
+      body: '{"location": "{{ inputs.location }}", "activity": "outdoor trip on {{ inputs.dates }}"}'
     on-failure:
       retry:
         max-attempts: 2

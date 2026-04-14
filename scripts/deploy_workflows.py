@@ -79,23 +79,12 @@ def deploy_workflow(workflow_yaml_path: str, mcp_url: Optional[str] = None, back
         yaml_content = yaml_content.replace(INSTRUQT_BACKEND_URL, backend_url)
         print(f"  → Using backend URL: {backend_url}")
     
-    # Inject API key into consts and HTTP step headers if provided
-    if api_key:
-        workflow_data_tmp = yaml.safe_load(yaml_content)
-        # Add consts section with api_key
-        if "consts" not in workflow_data_tmp:
-            workflow_data_tmp["consts"] = {}
-        workflow_data_tmp["consts"]["api_key"] = api_key
-        # Add X-Api-Key header to all HTTP steps
-        for step in workflow_data_tmp.get("steps", []):
-            if step.get("type") == "http":
-                with_block = step.get("with", {})
-                if "headers" not in with_block:
-                    with_block["headers"] = {}
-                with_block["headers"]["X-Api-Key"] = "{{consts.api_key}}"
-                step["with"] = with_block
-        yaml_content = yaml.dump(workflow_data_tmp, default_flow_style=False, sort_keys=False)
-        print(f"  → Injected API key into consts and HTTP headers")
+    # Inject API key via string replacement (preserves YAML formatting)
+    # Workflow files use "WAYFINDER_API_KEY" as a placeholder in X-Api-Key headers
+    INSTRUQT_API_KEY_PLACEHOLDER = "WAYFINDER_API_KEY"
+    if api_key and INSTRUQT_API_KEY_PLACEHOLDER in yaml_content:
+        yaml_content = yaml_content.replace(INSTRUQT_API_KEY_PLACEHOLDER, api_key)
+        print(f"  → Injected API key into HTTP headers")
     
     # Also parse it to get the name for logging
     workflow_data = yaml.safe_load(yaml_content)
