@@ -16,22 +16,17 @@ triggers:
   - type: manual
 
 steps:
-  - name: call_weather_mcp
+  - name: call_grounding_api
     type: http
     with:
-      url: "http://host-1:8002/mcp"
+      url: "http://host-1:8002/api/vision/ground"
       method: POST
       headers:
         Content-Type: application/json
       body:
-        jsonrpc: "2.0"
-        method: "tools/call"
-        params:
-          name: "get_trip_conditions_tool"
-          arguments:
-            location: "{{ inputs.location }}"
-            dates: "{{ inputs.dates }}"
-        id: "{{ execution.id }}"
+        location: "{{ inputs.location }}"
+        activity: "outdoor trip on {{ inputs.dates }}"
+      timeout: 30s
     on-failure:
       retry:
         max-attempts: 2
@@ -41,13 +36,17 @@ steps:
     type: console
     with:
       message: |
-        Trip Conditions for {{ inputs.location }}:
-        Weather: {{ steps.call_weather_mcp.output.data.result.weather }}
-        Temperature: {{ steps.call_weather_mcp.output.data.result.min_temp_f }}°F - {{ steps.call_weather_mcp.output.data.result.max_temp_f }}°F
-        Road Alert: {{ steps.call_weather_mcp.output.data.result.road_alert }}
-        Recommendations:
-        {% for rec in steps.call_weather_mcp.output.data.result.recommendations %}
-        - {{ rec }}
-        {% endfor %}
+        Trip Conditions for {{ inputs.location }} ({{ inputs.dates }}):
+        {% if steps.call_grounding_api.output.data.conditions.conditions_text %}
+        {{ steps.call_grounding_api.output.data.conditions.conditions_text }}
+        {% elsif steps.call_grounding_api.output.data.conditions.temperature_f %}
+        Temperature: {{ steps.call_grounding_api.output.data.conditions.temperature_f }}°F
+        Conditions: {{ steps.call_grounding_api.output.data.conditions.conditions }}
+        Wind: {{ steps.call_grounding_api.output.data.conditions.wind_mph }} mph
+        Trail Status: {{ steps.call_grounding_api.output.data.conditions.trail_status }}
+        Safety Notes: {{ steps.call_grounding_api.output.data.conditions.safety_notes }}
+        {% else %}
+        {{ steps.call_grounding_api.output.data }}
+        {% endif %}
 
 
