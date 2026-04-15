@@ -19,7 +19,6 @@ steps:
       method: POST
       headers:
         Content-Type: application/json
-        X-Api-Key: bob-belcher-makes-tasty-burgers
       body: |
         {
           "jsonrpc": "2.0",
