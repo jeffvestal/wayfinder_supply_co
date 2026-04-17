@@ -13,10 +13,6 @@ INDEX_NAME = "otel-traces-wayfinder"
 BATCH_SIZE = 500
 
 INDEX_CONFIG = {
-    "settings": {
-        "number_of_shards": 1,
-        "number_of_replicas": 1,
-    },
     "mappings": {
         "dynamic": False,
         "properties": {
