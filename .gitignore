@@ -67,5 +67,6 @@ instrqut-run.log
 
 # Build output (generated at runtime)
 backend/static/
+generated_traces/*.jsonl
 
 .cursor/
