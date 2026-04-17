@@ -18,10 +18,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from routers import chat, products, cart, reviews, orders, users, clickstream, reports, workshop, settings, vision
+from routers import chat, products, cart, reviews, orders, users, clickstream, reports, workshop, settings, vision, inventory
 from middleware.logging import LoggingMiddleware
 from middleware.auth import ApiKeyMiddleware
 from services.error_handler import global_exception_handler, http_exception_handler
+from services.telemetry import setup_telemetry
 import logging
 
 # Configure logging
@@ -31,11 +32,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("wayfinder.backend")
 
+setup_telemetry()
+
 app = FastAPI(
     title="Wayfinder Supply Co. Backend API",
     version="1.0.0",
     description="Backend API for Wayfinder Supply Co. workshop"
 )
+
+# OTel FastAPI auto-instrumentation (adds root HTTP span wrapping each request)
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+FastAPIInstrumentor.instrument_app(app)
 
 # Exception handlers
 app.add_exception_handler(Exception, global_exception_handler)
@@ -71,6 +78,7 @@ app.include_router(reports.router, prefix="/api", tags=["reports"])
 app.include_router(workshop.router, prefix="/api", tags=["workshop"])
 app.include_router(settings.router, prefix="/api", tags=["settings"])
 app.include_router(vision.router, prefix="/api", tags=["vision"])
+app.include_router(inventory.router, prefix="/api", tags=["inventory"])
 
 # --- Static UI serving (Instruqt unified mode) ---
 # In Cloud Run / standalone deployments the frontend is a separate service,

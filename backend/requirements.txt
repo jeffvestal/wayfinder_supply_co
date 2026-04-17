@@ -11,4 +11,9 @@ reportlab>=4.0.0
 # Vision features (optional - only imported when credentials are configured)
 google-cloud-aiplatform>=1.38.0
 google-genai>=1.0.0
+# OpenTelemetry — manual spans + OTLP export to Elastic Observability
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+opentelemetry-instrumentation-fastapi>=0.41b0
 
