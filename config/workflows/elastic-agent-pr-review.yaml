@@ -1,0 +1,50 @@
+version: "1"
+name: elastic-agent-pr-review
+enabled: true
+description: "Triggered by GitHub Action on PR open/sync. Calls the MS Build PR-review agent; the agent posts the PR comment via its own GitHub MCP tool."
+
+inputs:
+  - name: pr_number
+    type: string
+    required: true
+  - name: pr_title
+    type: string
+    required: true
+  - name: repo
+    type: string
+    required: true
+    description: "owner/repo"
+  - name: diff_url
+    type: string
+    required: true
+  - name: head_sha
+    type: string
+    required: true
+
+triggers:
+  - type: http
+
+steps:
+  - name: invoke_agent
+    type: http
+    with:
+      url: "KIBANA_URL_PLACEHOLDER/api/agent_builder/agents/MSBUILD_AGENT_ID_PLACEHOLDER/converse"
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: "ApiKey WAYFINDER_API_KEY"
+        kbn-xsrf: "true"
+        x-elastic-internal-origin: "kibana"
+      body: '{"input": "Review PR #{{ inputs.pr_number }} in {{ inputs.repo }}. Title: {{ inputs.pr_title }}. Diff URL: {{ inputs.diff_url }}. Head SHA: {{ inputs.head_sha }}. Fetch the diff, correlate against OTel traces and historical incident postmortems, and post a PR comment with evidence if a known pattern matches."}'
+    on-failure:
+      retry:
+        max-attempts: 2
+        delay: 5s
+
+  - name: log_outcome
+    type: console
+    with:
+      message: |
+        PR review agent invoked for {{ inputs.repo }}#{{ inputs.pr_number }}.
+        Agent response status: {{ steps.invoke_agent.output.status }}
+        Agent comment posting happens inside the agent via GitHub MCP tool.
