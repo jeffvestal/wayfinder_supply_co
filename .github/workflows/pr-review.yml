@@ -34,7 +34,6 @@ jobs:
             --arg input "$input_msg" \
             '{agent_id: $agent_id, input: $input}')
 
-          # Call agent, stream SSE, extract final message_delta chunks
           raw_response=$(curl -fsS --no-buffer \
             -H "Authorization: ApiKey ${ELASTIC_API_KEY}" \
             -H "Content-Type: application/json" \
@@ -42,43 +41,38 @@ jobs:
             -d "$payload" \
             "${ELASTIC_KIBANA_URL}/api/agent_builder/converse/async" 2>&1)
 
-          # Extract agent text from message_delta events and concatenate
-          agent_comment=$(echo "$raw_response" | \
-            grep '^data:' | \
-            sed 's/^data: //' | \
-            python3 -c "
-import sys, json
-parts = []
-for line in sys.stdin:
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        d = json.loads(line)
-        delta = d.get('data', {})
-        if delta.get('type') == 'message_delta':
-            parts.append(delta.get('text', ''))
-        elif isinstance(delta.get('content'), list):
-            for c in delta['content']:
-                if c.get('type') == 'text':
-                    parts.append(c.get('text', ''))
-    except:
-        pass
-result = ''.join(parts).strip()
-if result:
-    print(result)
-")
+          agent_comment=$(echo "$raw_response" | grep '^data:' | sed 's/^data: //' | python3 -c "
+          import sys, json
+          parts = []
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  d = json.loads(line)
+                  delta = d.get('data', {})
+                  if delta.get('type') == 'message_delta':
+                      parts.append(delta.get('text', ''))
+                  elif isinstance(delta.get('content'), list):
+                      for c in delta['content']:
+                          if c.get('type') == 'text':
+                              parts.append(c.get('text', ''))
+              except:
+                  pass
+          result = ''.join(parts).strip()
+          if result:
+              print(result)
+          ")
 
           if [ -z "$agent_comment" ]; then
             echo "Agent returned no analysis — skipping PR comment"
             exit 0
           fi
 
-          # Post the agent analysis as a PR comment
           gh pr comment "$PR_NUMBER" --repo "$REPO" \
             --body "## Elastic Agent Builder — PR Review
 
-$agent_comment
+          $agent_comment
 
----
-*Analysis powered by [Elastic Agent Builder](https://elastic.co/agent-builder) + OTel traces*"
+          ---
+          *Analysis powered by [Elastic Agent Builder](https://elastic.co/agent-builder) + OTel traces*"
