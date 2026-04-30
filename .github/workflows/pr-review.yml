@@ -44,6 +44,7 @@ jobs:
           agent_comment=$(echo "$raw_response" | grep '^data:' | sed 's/^data: //' | python3 -c "
           import sys, json
           parts = []
+          final = ''
           for line in sys.stdin:
               line = line.strip()
               if not line:
@@ -51,15 +52,13 @@ jobs:
               try:
                   d = json.loads(line)
                   delta = d.get('data', {})
-                  if delta.get('type') == 'message_delta':
-                      parts.append(delta.get('text', ''))
-                  elif isinstance(delta.get('content'), list):
-                      for c in delta['content']:
-                          if c.get('type') == 'text':
-                              parts.append(c.get('text', ''))
+                  if 'message_content' in delta:
+                      final = delta['message_content']
+                  elif 'text_chunk' in delta:
+                      parts.append(delta['text_chunk'])
               except:
                   pass
-          result = ''.join(parts).strip()
+          result = (final or ''.join(parts)).strip()
           if result:
               print(result)
           ")
