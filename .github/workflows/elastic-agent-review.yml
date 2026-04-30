@@ -7,27 +7,70 @@ jobs:
   trigger-elastic-review:
     runs-on: ubuntu-latest
     if: ${{ secrets.ELASTIC_KIBANA_URL != '' && secrets.ELASTIC_API_KEY != '' }}
+    permissions:
+      pull-requests: write
     steps:
-      - name: Trigger Elastic Agent Builder PR Review
+      - name: Call Elastic Agent Builder + Post PR Comment
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           REPO: ${{ github.repository }}
           DIFF_URL: ${{ github.event.pull_request.diff_url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          input_msg="Review PR #${PR_NUMBER} in ${REPO}. Title: ${PR_TITLE}. Diff URL: ${DIFF_URL}. Head SHA: ${HEAD_SHA}. Fetch the diff, correlate against OTel traces and historical incident postmortems, and post a PR comment with evidence if a known failure pattern matches."
+          input_msg="Review PR #${PR_NUMBER} in ${REPO}. Title: ${PR_TITLE}. Diff URL: ${DIFF_URL}. Head SHA: ${HEAD_SHA}. Fetch the diff, correlate against OTel traces and historical incident postmortems, and summarize your findings (do NOT call any GitHub tools — just return your analysis as text)."
 
           payload=$(jq -n \
             --arg agent_id "msbuild-pr-review-agent" \
             --arg input "$input_msg" \
             '{agent_id: $agent_id, input: $input}')
 
-          # SSE streaming response — read until server closes (agent posts PR comment itself)
-          curl -fsS --no-buffer \
+          # Call agent, stream SSE, extract final message_delta chunks
+          raw_response=$(curl -fsS --no-buffer \
             -H "Authorization: ApiKey ${{ secrets.ELASTIC_API_KEY }}" \
             -H "Content-Type: application/json" \
             -H "kbn-xsrf: true" \
             -d "$payload" \
-            "${{ secrets.ELASTIC_KIBANA_URL }}/api/agent_builder/converse/async" \
-            > /dev/null
+            "${{ secrets.ELASTIC_KIBANA_URL }}/api/agent_builder/converse/async" 2>&1)
+
+          # Extract agent text from message_delta events and concatenate
+          agent_comment=$(echo "$raw_response" | \
+            grep '^data:' | \
+            sed 's/^data: //' | \
+            python3 -c "
+import sys, json
+parts = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        d = json.loads(line)
+        delta = d.get('data', {})
+        if delta.get('type') == 'message_delta':
+            parts.append(delta.get('text', ''))
+        elif isinstance(delta.get('content'), list):
+            for c in delta['content']:
+                if c.get('type') == 'text':
+                    parts.append(c.get('text', ''))
+    except:
+        pass
+result = ''.join(parts).strip()
+if result:
+    print(result)
+")
+
+          if [ -z "$agent_comment" ]; then
+            echo "Agent returned no analysis — skipping PR comment"
+            exit 0
+          fi
+
+          # Post the agent analysis as a PR comment
+          gh pr comment "$PR_NUMBER" --repo "$REPO" \
+            --body "## Elastic Agent Builder — PR Review
+
+$agent_comment
+
+---
+*Analysis powered by [Elastic Agent Builder](https://elastic.co/agent-builder) + OTel traces*"

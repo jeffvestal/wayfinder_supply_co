@@ -104,7 +104,9 @@ def _load_dotenv() -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        # Strip inline comments and quotes
+        v = v.split(" #")[0].split("\t#")[0].strip().strip('"').strip("'")
+        os.environ.setdefault(k.strip(), v)
 
 
 # ─── preflight ─────────────────────────────────────────────────────────────────
@@ -232,10 +234,13 @@ def preflight(level: str = "all") -> LevelResult:
 # ─── L1 ────────────────────────────────────────────────────────────────────────
 
 def _reserve(product_id: str, quantity: int, user_id: str) -> tuple[int, dict | None]:
+    api_key = os.environ.get("WAYFINDER_API_KEY", "")
+    headers = {"X-Api-Key": api_key} if api_key else {}
     try:
         r = requests.post(
             f"{BACKEND_URL}{RESERVE_PATH}",
             json={"product_id": product_id, "quantity": quantity, "user_id": user_id},
+            headers=headers,
             timeout=10,
         )
         return r.status_code, (r.json() if r.headers.get("content-type", "").startswith("application/json") else None)
