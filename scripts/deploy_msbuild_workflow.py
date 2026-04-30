@@ -63,33 +63,43 @@ def main() -> int:
         return 3
 
     raw = WORKFLOW_YAML.read_text()
-    yaml_content = raw.replace("KIBANA_URL_PLACEHOLDER", args.kibana_url.rstrip("/"))
+    # Remove the 'id:' line from the YAML — the API treats it as a uniqueness key
+    # and a prior failed deploy can poison the registry, blocking future creates.
+    # The server will assign a system UUID; we use that as the canonical workflow id.
+    yaml_content = "\n".join(line for line in raw.splitlines() if not line.startswith("id:"))
+    yaml_content = yaml_content.replace("KIBANA_URL_PLACEHOLDER", args.kibana_url.rstrip("/"))
     yaml_content = yaml_content.replace("MSBUILD_AGENT_ID_PLACEHOLDER", args.agent_id)
+    yaml_content = yaml_content.replace("WAYFINDER_API_KEY", args.api_key)
 
     # Upload
     url = f"{args.kibana_url.rstrip('/')}/api/workflows"
-    # Delete existing by name first
-    r = requests.get(url, headers=_headers(args.api_key), timeout=15)
-    if r.status_code == 200:
-        for wf in r.json().get("results", []) or r.json().get("data", []):
-            if wf.get("name") == "elastic-agent-pr-review":
-                wf_id = wf.get("id")
-                d = requests.delete(url, headers=_headers(args.api_key), json={"ids": [wf_id]})
-                if d.status_code in (200, 204):
-                    print(f"  ↻ removed existing workflow {wf_id}")
 
-    r = requests.post(url, headers=_headers(args.api_key), json={"workflows": [{"yaml": yaml_content}]}, timeout=30)
+    # Delete existing workflow by name (same approach as deploy_workflows.py)
+    list_r = requests.get(url, headers=_headers(args.api_key), timeout=15)
+    if list_r.status_code == 200:
+        for wf in list_r.json().get("results", []):
+            if wf.get("name") == "elastic-agent-pr-review":
+                existing_id = wf["id"]
+                d = requests.delete(url, headers=_headers(args.api_key), json={"ids": [existing_id]}, timeout=15)
+                if d.status_code in (200, 204):
+                    print(f"  ↻ removed existing workflow (system id: {existing_id})")
+
+    r = requests.post(url, headers=_headers(args.api_key), json={"yaml": yaml_content}, timeout=30)
     if r.status_code not in (200, 201):
         print(f"✗ deploy failed: HTTP {r.status_code}")
         print(f"  body: {r.text[:1000]}")
         return 4
 
     data = r.json()
-    created = data.get("created", [])
-    if not created:
-        print(f"✗ no workflow created: {json.dumps(data)[:500]}")
-        return 5
-    wf_id = created[0].get("id")
+    # Single-workflow POST returns the workflow object directly (not a "created" list)
+    if isinstance(data, dict) and data.get("id"):
+        wf_id = data["id"]
+    else:
+        created = data.get("created", [])
+        if not created:
+            print(f"✗ no workflow created: {json.dumps(data)[:500]}")
+            return 5
+        wf_id = created[0].get("id")
     print(f"✓ deployed workflow: id={wf_id}")
 
     # Print HTTP trigger URL — exact path varies by Elastic version; the Kibana UI shows it.

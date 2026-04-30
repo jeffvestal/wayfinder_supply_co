@@ -28,22 +28,6 @@ class AnalyzeResponse(BaseModel):
     success: bool = True
 
 
-class PreviewRequest(BaseModel):
-    """Request body for product-in-scene preview generation."""
-    image_base64: str
-    product_name: str
-    scene_description: str
-    product_description: Optional[str] = None
-    product_image_url: Optional[str] = None
-
-
-class PreviewResponse(BaseModel):
-    """Response from preview generation."""
-    image_base64: str
-    prompt: str = ""
-    success: bool = True
-
-
 class GroundRequest(BaseModel):
     """Request body for real-time conditions grounding."""
     location: str
@@ -106,35 +90,6 @@ async def analyze_image(request: AnalyzeRequest):
     except Exception as e:
         logger.error(f"Vision analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
-
-
-@router.post("/vision/preview", response_model=PreviewResponse)
-async def generate_preview(request: PreviewRequest):
-    """
-    Generate a product-in-scene preview image using Imagen 3.
-    Requires Vertex AI credentials to be configured.
-    """
-    cm = get_credential_manager()
-    if not cm.is_imagen_ready():
-        raise HTTPException(
-            status_code=503,
-            detail="Image generation not configured. Add Vertex AI credentials in Settings.",
-        )
-
-    try:
-        generated_image, prompt_used = await vision_service.generate_preview(
-            original_image_base64=request.image_base64,
-            product_name=request.product_name,
-            scene_description=request.scene_description,
-            product_description=request.product_description,
-            product_image_url=request.product_image_url,
-        )
-        return PreviewResponse(image_base64=generated_image, prompt=prompt_used)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Preview generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
 
 
 @router.post("/vision/ground")

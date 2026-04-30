@@ -24,5 +24,3 @@ def get_elastic_client():
         )
     
     return _es_client
-
-

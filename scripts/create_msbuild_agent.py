@@ -164,7 +164,7 @@ def main() -> int:
         ),
         params={
             "endpoint": {"type": "string", "description": "HTTP route to match"},
-            "threshold_us": {"type": "long", "description": "Microsecond threshold; 3000000 = 3 seconds"},
+            "threshold_us": {"type": "integer", "description": "Microsecond threshold; 3000000 = 3 seconds"},
         },
     )
     if tid:

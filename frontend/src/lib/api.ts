@@ -580,11 +580,11 @@ export const api = {
     try {
       const response = await fetch(url.toString(), { headers: authHeaders() });
       if (!response.ok) {
-        return { jina_vlm: 'not_configured', vertex_ai: 'not_configured', imagen: 'not_configured' };
+        return { jina_vlm: 'not_configured', vertex_ai: 'not_configured' };
       }
       return response.json();
     } catch {
-      return { jina_vlm: 'not_configured', vertex_ai: 'not_configured', imagen: 'not_configured' };
+      return { jina_vlm: 'not_configured', vertex_ai: 'not_configured' };
     }
   },
 
@@ -611,33 +611,6 @@ export const api = {
     const url = createApiUrl('/api/settings/test/vertex');
     const response = await fetch(url.toString(), { method: 'POST', headers: authHeaders() });
     return response.json();
-  },
-
-  async generatePreview(
-    imageBase64: string,
-    productName: string,
-    sceneDescription: string,
-    productDescription?: string,
-    productImageUrl?: string
-  ): Promise<{ image_base64: string; prompt: string }> {
-    const url = createApiUrl('/api/vision/preview');
-    const body: Record<string, string> = {
-      image_base64: imageBase64,
-      product_name: productName,
-      scene_description: sceneDescription,
-    };
-    if (productDescription) body.product_description = productDescription;
-    if (productImageUrl) body.product_image_url = productImageUrl;
-    const response = await fetch(url.toString(), {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-    return { image_base64: data.image_base64, prompt: data.prompt || '' };
   },
 
   async preanalyzeImage(imageBase64: string): Promise<{
