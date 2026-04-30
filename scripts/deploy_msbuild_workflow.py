@@ -84,7 +84,7 @@ def main() -> int:
                 if d.status_code in (200, 204):
                     print(f"  ↻ removed existing workflow (system id: {existing_id})")
 
-    r = requests.post(url, headers=_headers(args.api_key), json={"yaml": yaml_content}, timeout=30)
+    r = requests.post(url, headers=_headers(args.api_key), json={"workflows": [{"yaml": yaml_content}]}, timeout=30)
     if r.status_code not in (200, 201):
         print(f"✗ deploy failed: HTTP {r.status_code}")
         print(f"  body: {r.text[:1000]}")

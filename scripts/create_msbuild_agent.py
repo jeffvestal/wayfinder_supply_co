@@ -52,9 +52,13 @@ TRACES_INDEX = os.getenv("MSBUILD_TRACES_INDEX", "traces-apm.wayfinder-default")
 
 
 def _delete(path: str) -> None:
-    r = requests.delete(f"{KIBANA_URL}{path}", headers=HEADERS, timeout=30)
+    # Use ?force=true to ensure deletion even if tool is in use
+    url = f"{KIBANA_URL}{path}" if "?" in path else f"{KIBANA_URL}{path}?force=true"
+    r = requests.delete(url, headers=HEADERS, timeout=30)
     if r.status_code in (200, 204):
         print(f"  ↻ deleted {path}")
+    elif r.status_code != 404:
+        print(f"  ⚠ delete {path}: {r.status_code} {r.text[:100]}")
 
 
 def _create_esql_tool(tool_id: str, description: str, query: str, params: dict) -> Optional[str]:
