@@ -1,7 +1,9 @@
 name: Elastic Agent PR Review
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
+    branches:
+      - "**"
 
 jobs:
   trigger-elastic-review:
