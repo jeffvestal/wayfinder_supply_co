@@ -22,7 +22,7 @@ inputs:
     required: true
 
 triggers:
-  - type: http
+  - type: manual
 
 steps:
   - name: invoke_agent

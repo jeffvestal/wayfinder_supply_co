@@ -6,9 +6,9 @@ on:
 jobs:
   trigger-elastic-review:
     runs-on: ubuntu-latest
-    if: ${{ secrets.ELASTIC_WORKFLOW_URL != '' }}
+    if: ${{ secrets.ELASTIC_KIBANA_URL != '' && secrets.ELASTIC_API_KEY != '' }}
     steps:
-      - name: Trigger Elastic Workflow
+      - name: Trigger Elastic Agent Builder PR Review
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -16,16 +16,18 @@ jobs:
           DIFF_URL: ${{ github.event.pull_request.diff_url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          payload=$(jq -n \
-            --arg pr_number "$PR_NUMBER" \
-            --arg pr_title "$PR_TITLE" \
-            --arg repo "$REPO" \
-            --arg diff_url "$DIFF_URL" \
-            --arg head_sha "$HEAD_SHA" \
-            '{pr_number: $pr_number, pr_title: $pr_title, repo: $repo, diff_url: $diff_url, head_sha: $head_sha}')
+          input_msg="Review PR #${PR_NUMBER} in ${REPO}. Title: ${PR_TITLE}. Diff URL: ${DIFF_URL}. Head SHA: ${HEAD_SHA}. Fetch the diff, correlate against OTel traces and historical incident postmortems, and post a PR comment with evidence if a known failure pattern matches."
 
-          curl -fsS --fail-with-body \
-            -H "Authorization: ApiKey ${{ secrets.ELASTIC_WORKFLOW_KEY }}" \
+          payload=$(jq -n \
+            --arg agent_id "msbuild-pr-review-agent" \
+            --arg input "$input_msg" \
+            '{agent_id: $agent_id, input: $input}')
+
+          # SSE streaming response — read until server closes (agent posts PR comment itself)
+          curl -fsS --no-buffer \
+            -H "Authorization: ApiKey ${{ secrets.ELASTIC_API_KEY }}" \
             -H "Content-Type: application/json" \
+            -H "kbn-xsrf: true" \
             -d "$payload" \
-            "${{ secrets.ELASTIC_WORKFLOW_URL }}"
+            "${{ secrets.ELASTIC_KIBANA_URL }}/api/agent_builder/converse/async" \
+            > /dev/null
