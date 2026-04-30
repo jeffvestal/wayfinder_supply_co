@@ -27,7 +27,11 @@ jobs:
             exit 0
           fi
 
-          input_msg="Review PR #${PR_NUMBER} in ${REPO}. Title: ${PR_TITLE}. Diff URL: ${DIFF_URL}. Head SHA: ${HEAD_SHA}. Fetch the diff, correlate against OTel traces and historical incident postmortems, and summarize your findings (do NOT call any GitHub tools — just return your analysis as text)."
+          # Download the diff content to pass directly to the agent
+          diff_content=$(curl -sL "${DIFF_URL}" | head -c 8000 || echo "(diff unavailable)")
+
+          input_msg=$(printf "Review PR #%s in %s. Title: %s. Head SHA: %s.\n\nDiff (first 8KB):\n%s\n\nUsing your tools, search OTel traces for the /api/v1/checkout/reserve endpoint and search historical incident postmortems for patterns related to this change. Correlate findings and summarize risk. Return analysis as text." \
+            "$PR_NUMBER" "$REPO" "$PR_TITLE" "$HEAD_SHA" "$diff_content")
 
           payload=$(jq -n \
             --arg agent_id "msbuild-pr-review-agent" \

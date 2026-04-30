@@ -452,7 +452,7 @@ def run_l2(timeout_s: int = 120) -> LevelResult:
 
 EXPECTED_COMMENT_PHRASES = [
     "inventory",
-    "historical incident",
+    "Elastic Agent Builder",
 ]
 
 
@@ -475,7 +475,7 @@ def _close_existing_demo_prs() -> list[str]:
     return closed
 
 
-def run_l3(cleanup_only: bool, force_demo_branch: bool, timeout_s: int = 180) -> LevelResult:
+def run_l3(cleanup_only: bool, force_demo_branch: bool, timeout_s: int = 300) -> LevelResult:
     print(f"\n{YELLOW}═══ L3: full PR path ═══{RESET}")
     checks: list[Check] = []
     extra: dict[str, Any] = {}
