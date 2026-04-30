@@ -1,5 +1,4 @@
 version: "1"
-id: elastic-agent-pr-review
 name: elastic-agent-pr-review
 enabled: true
 description: "Triggered by GitHub Action on PR open/sync. Calls the MS Build PR-review agent; the agent posts the PR comment via its own GitHub MCP tool."
