@@ -68,3 +68,8 @@ backend/gcp-credentials.json
 backend/static/
 
 .cursor/
+
+# MS Build 2026 — generated / local only
+generated_traces/
+harness-reports/
+.claude/

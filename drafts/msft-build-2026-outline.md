@@ -1,13 +1,26 @@
-# MS Build 2026 — Session Outline Draft
-_As of: 2026-04-30_
-
----
+# MS Build 2026 — Session Outline
 
 ## Session ID
-_(MS Build assigns — leave blank or enter TBD)_
+_(assigned by MS Build portal)_
 
 ## Title
 Give Your AI Reviewer a Memory: Production-Aware PRs with Copilot, Elastic, and Azure AI
+
+## Submission Fields
+
+| Field | Value |
+|---|---|
+| **Abstract** | See below |
+| **Audience level** | 300 (Developer / Platform Engineer / SRE) |
+| **Track/Topic** | AI + GitHub Copilot |
+| **Speaker** | Jeff Vestal, Staff Developer Advocate, Elastic |
+| **Prerequisites** | Basic GitHub and VS Code familiarity; no Elastic experience required |
+| **Session format** | Breakout |
+| **Co-presenters** | None (solo) |
+
+## Abstract
+
+Your AI code reviewer reads every diff — but it has no memory of what took down production at 2am three months ago. In this session, you'll see how to fix that. We'll build a production-aware PR review pipeline using GitHub Copilot, Elastic Agent Builder, and Azure AI Foundry. A GitHub Action triggers an Elastic Workflow that invokes an AI agent with access to two sources of memory: OpenTelemetry traces and historical incident postmortems — both stored in Elasticsearch. The agent reads the diff, matches against known failure patterns, and posts a code review comment before a human ever opens the PR. Then we switch to VS Code Copilot Agent Mode, connected to the same Elastic MCP server, to investigate and fix the issue. One MCP server. Two entry points. A reviewer that remembers.
 
 ---
 
@@ -17,7 +30,7 @@ Give Your AI Reviewer a Memory: Production-Aware PRs with Copilot, Elastic, and 
 3. Walk away with a working pattern for catching concurrency/race regressions at PR time using semantic pattern matching against real trace data
 
 ## Leave Behind Resources
-1. GitHub repo: Wayfinder Supply Co — full demo code, MCP server, harness scripts, `.vscode/mcp.json` template (link TBD — confirm public before submission)
+1. GitHub repo: Wayfinder Supply Co — full demo code, MCP server, harness scripts, `.vscode/mcp.json` template
 2. Elastic Agent Builder + Workflows quickstart docs — elastic.co/agent-builder
 3. Architecture diagram (4-box: GitHub → Elastic Workflow → Agent Builder → Azure AI Foundry) — available in session slide deck
 
@@ -58,23 +71,3 @@ Positions Copilot Agent Mode + MCP as the developer-facing entry point for Elast
 | Audience Q&A through chat | Q&A | 4 | Jeff Vestal |
 
 **Timing check: 5 + 13 + 3 = 21 min scripted + 4 min Q&A = 25 min**
-
----
-
-## Fields Requiring Jeff's Input Before Submission
-
-These are typically required by conference portals but were not visible in the outline template screenshot:
-
-| Field | Value |
-|---|---|
-| **Abstract/Description** | _(~150 words — draft below)_ |
-| **Audience level** | 300 (Developer / Platform Engineer / SRE) |
-| **Track/Topic** | AI + GitHub Copilot (confirm with MS contact) |
-| **Speaker bio** | Jeff Vestal, Staff Developer Advocate, Elastic |
-| **Prerequisites** | Basic GitHub and VS Code familiarity; no Elastic experience required |
-| **Session format** | Breakout (confirm: theater vs. breakout) |
-| **Recording consent** | Jeff to confirm |
-| **Co-presenters** | None (solo) |
-
-### Abstract Draft
-Your AI code reviewer reads every diff — but it has no memory of what took down production at 2am three months ago. In this session, you'll see how to fix that. We'll build a production-aware PR review pipeline using GitHub Copilot, Elastic Agent Builder, and Azure AI Foundry. A GitHub Action triggers an Elastic Workflow that invokes an AI agent with access to two sources of memory: OpenTelemetry traces and historical incident postmortems — both stored in Elasticsearch. The agent reads the diff, matches against known failure patterns, and posts a code review comment before a human ever opens the PR. Then we switch to VS Code Copilot Agent Mode, connected to the same Elastic MCP server, to investigate and fix the issue. One MCP server. Two entry points. A reviewer that remembers.
