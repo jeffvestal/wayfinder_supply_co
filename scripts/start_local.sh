@@ -91,8 +91,8 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Load env
-export $(grep -v '^#' .env | grep -v '^\s*$' | xargs 2>/dev/null) || true
+# Load env (set -a handles values with spaces/special chars like ApiKey headers)
+set -a; source .env; set +a 2>/dev/null || true
 
 if [ -z "$STANDALONE_ELASTICSEARCH_URL" ] || [ -z "$STANDALONE_ELASTICSEARCH_APIKEY" ] || [ -z "$STANDALONE_KIBANA_URL" ]; then
     echo -e "${RED}ERROR: Required STANDALONE_* variables not set in .env${NC}"

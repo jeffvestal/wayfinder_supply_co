@@ -78,7 +78,7 @@ msbuild-traces:
 	python3 scripts/generate_incident_traces.py
 
 msbuild-index-traces:
-	python3 scripts/index_traces.py --files generated_traces/baseline_traces.jsonl generated_traces/incident_traces.jsonl
+	echo "yes" | python3 scripts/index_traces.py --files generated_traces/baseline_traces.jsonl generated_traces/incident_traces.jsonl --production
 
 msbuild-validate-traces:
 	python3 scripts/validate_traces.py

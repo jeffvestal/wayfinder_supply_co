@@ -129,8 +129,8 @@ def main() -> int:
         results.append(_check("baseline p99 < 500ms", False, f"HTTP {r.status_code}"))
 
     # 5. incident window has slow spans
+    # Note: Serverless ES rejects `size` in _count body — use query-only body
     q = {
-        "size": 0,
         "query": {
             "bool": {
                 "must": [
@@ -145,13 +145,13 @@ def main() -> int:
     results.append(_check("incident window has spans >3000ms", n > 0, f"n={n}"))
 
     # 6. db.statement populated
-    q = {"size": 0, "query": {"exists": {"field": "db.statement"}}}
+    q = {"query": {"exists": {"field": "db.statement"}}}
     r = requests.post(f"{url}/{index}/_count", headers=h, json=q)
     n = r.json().get("count", 0) if r.status_code == 200 else 0
     results.append(_check("db.statement populated", n > 0, f"n={n}"))
 
     # 7. http.route present on every doc
-    q = {"size": 0, "query": {"bool": {"must_not": [{"exists": {"field": "http.route"}}]}}}
+    q = {"query": {"bool": {"must_not": [{"exists": {"field": "http.route"}}]}}}
     r = requests.post(f"{url}/{index}/_count", headers=h, json=q)
     missing = r.json().get("count", 0) if r.status_code == 200 else -1
     results.append(_check("http.route on every doc", missing == 0, f"missing={missing}"))
