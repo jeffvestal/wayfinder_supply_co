@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
+import { VisionPreview } from './VisionPreview'
 import { resizeImage, MAX_FILE_SIZE_MB } from '../lib/imageUtils'
 
 interface TripPlannerProps {
@@ -1356,6 +1357,24 @@ The **Trip Planner** feature requires the \`trip-planner-agent\` to be created.
                         <h5 className="text-xs font-bold text-white truncate mb-0.5">{product.title}</h5>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-primary font-bold">${product.price}</span>
+                          {/* Visualize button - shown when Imagen is configured and a scene image exists */}
+                          {(settingsStatus?.imagen === 'configured_ui' || settingsStatus?.imagen === 'configured_env') && messages.some(m => m.image_url) && (
+                            <VisionPreview
+                              sceneImageBase64={
+                                messages.find(m => m.image_url)?.image_url?.split(',')[1] || ''
+                              }
+                              productName={product.title}
+                              productDescription={product.description || ''}
+                              productImageUrl={product.image_url || ''}
+                              sceneDescription={
+                                // Prefer the Jina VLM terrain analysis for rich scene context
+                                Object.values(messageInsights).find(i => i.visionAnalysis)?.visionAnalysis
+                                || tripContext.destination
+                                || 'outdoor scene'
+                              }
+                              imagenReady={settingsStatus?.imagen === 'configured_ui' || settingsStatus?.imagen === 'configured_env'}
+                            />
+                          )}
                         </div>
                         {product.reason && (
                           <div className="text-[10px] text-gray-500 line-clamp-1 italic">

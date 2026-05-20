@@ -1,0 +1,10 @@
+name: Test PR Trigger
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "PR trigger works! PR=${{ github.event.pull_request.number }}"

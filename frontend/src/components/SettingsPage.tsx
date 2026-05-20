@@ -10,6 +10,7 @@ import {
   RefreshCw,
   ExternalLink,
   Camera,
+  Sparkles,
   Globe,
   ChevronDown,
   Info,
@@ -187,6 +188,12 @@ export function SettingsPage({ settingsStatus, onStatusChange }: SettingsPagePro
               <span className="text-[10px] text-zinc-500 mt-1 font-mono">{settingsStatus.vertex_project_id}</span>
             )}
           </div>
+          <div className="flex flex-col items-center p-4 rounded-lg bg-white/5">
+            <Sparkles className="w-8 h-8 text-amber-400 mb-2" />
+            <span className="text-sm font-medium mb-1">Imagen 3</span>
+            <span className="text-xs text-zinc-400 mb-2">Preview Generation</span>
+            <StatusBadge status={settingsStatus.imagen} />
+          </div>
         </div>
       </div>
 
@@ -201,7 +208,7 @@ export function SettingsPage({ settingsStatus, onStatusChange }: SettingsPagePro
                 <strong className="text-zinc-300">Jina key only</strong> &mdash; enables image upload + terrain-aware recommendations in Trip Planner
               </li>
               <li>
-                <strong className="text-zinc-300">Jina + Vertex AI</strong> &mdash; adds real-time condition grounding
+                <strong className="text-zinc-300">Jina + Vertex AI</strong> &mdash; adds real-time condition grounding + product-in-scene preview images
               </li>
               <li>
                 <strong className="text-zinc-300">No keys</strong> &mdash; app works exactly as before (no vision UI shown)
@@ -270,10 +277,10 @@ export function SettingsPage({ settingsStatus, onStatusChange }: SettingsPagePro
           <div>
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Globe className="w-5 h-5 text-purple-400" />
-              Vertex AI
+              Vertex AI / Imagen 3
             </h2>
             <p className="text-sm text-zinc-400 mt-1">
-              Gemini grounding (requires GCP project)
+              Gemini grounding + image generation (requires GCP project)
             </p>
           </div>
           <StatusBadge status={settingsStatus.vertex_ai} />
@@ -332,6 +339,7 @@ export function SettingsPage({ settingsStatus, onStatusChange }: SettingsPagePro
                       <p className="font-medium text-zinc-300 mb-1">1. Enable these APIs in your GCP project:</p>
                       <ul className="list-disc list-inside space-y-0.5 ml-1">
                         <li><code className="bg-zinc-800 px-1 rounded">Vertex AI API</code> (aiplatform.googleapis.com)</li>
+                        <li><code className="bg-zinc-800 px-1 rounded">Cloud AI Platform API</code> (for Imagen)</li>
                       </ul>
                     </div>
                     <div>

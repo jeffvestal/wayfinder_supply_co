@@ -54,11 +54,10 @@ def check_elasticsearch(es_url: str, es_apikey: str) -> Tuple[bool, List[str]]:
             request_timeout=10
         )
         
-        # Check cluster reachability (serverless doesn't support _cluster/health)
-        try:
-            es.cluster.health()
-        except Exception:
-            es.info()  # falls back to /_/ which works on serverless
+        # Check cluster health
+        health = es.cluster.health()
+        if health["status"] not in ["green", "yellow"]:
+            issues.append(f"Elasticsearch cluster status: {health['status']}")
         
         # Check indices
         required_indices = ["product-catalog", "user-clickstream"]

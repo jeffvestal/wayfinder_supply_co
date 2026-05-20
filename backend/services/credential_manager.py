@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, Tuple
 
 logger = logging.getLogger("wayfinder.credentials")
 
-# OAuth scopes required for Vertex AI (Gemini, Grounding)
+# OAuth scopes required for Vertex AI (Gemini, Imagen, Grounding)
 VERTEX_AI_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
 # Mapping of service keys to their environment variable names
@@ -29,10 +29,11 @@ SERVICE_ENV_VARS = {
 }
 
 # Which keys each service requires
-# Vertex AI: either pasted JSON (auto-extracts project_id) or project_id + ADC
+# Vertex/Imagen: either pasted JSON (auto-extracts project_id) or project_id + ADC
 SERVICE_REQUIREMENTS = {
     "jina_vlm": ["JINA_API_KEY"],
     "vertex_ai": [],  # checked via _is_vertex_configured()
+    "imagen": [],     # checked via _is_vertex_configured()
 }
 
 
@@ -139,14 +140,14 @@ class CredentialManager:
 
     def _is_service_configured(self, service: str) -> bool:
         """Check if all required keys for a service are available."""
-        if service == "vertex_ai":
+        if service in ("vertex_ai", "imagen"):
             return self._is_vertex_configured()
         required_keys = SERVICE_REQUIREMENTS.get(service, [])
         return all(self.get(key) for key in required_keys)
 
     def service_status(self, service: str) -> str:
         """Get configuration status for a service."""
-        if service == "vertex_ai":
+        if service in ("vertex_ai", "imagen"):
             return self._vertex_status()
         required_keys = SERVICE_REQUIREMENTS.get(service, [])
         if not required_keys:
@@ -262,6 +263,10 @@ class CredentialManager:
     def is_vision_ready(self) -> bool:
         """Check if minimum vision features are available (Jina VLM)."""
         return self._is_service_configured("jina_vlm")
+
+    def is_imagen_ready(self) -> bool:
+        """Check if image generation is available (Vertex AI)."""
+        return self._is_service_configured("imagen")
 
     def is_grounding_ready(self) -> bool:
         """Check if Vertex AI grounding is available."""

@@ -29,6 +29,7 @@ class SettingsStatusResponse(BaseModel):
     """Response showing configuration status per service."""
     jina_vlm: str
     vertex_ai: str
+    imagen: str
     vertex_project_id: Optional[str] = None  # Extracted/configured project ID
 
 

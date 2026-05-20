@@ -85,6 +85,7 @@ function App() {
   const [settingsStatus, setSettingsStatus] = useState<SettingsStatus>({
     jina_vlm: 'not_configured',
     vertex_ai: 'not_configured',
+    imagen: 'not_configured',
   })
 
   // Load personas and settings status on mount; pre-warm Jina VLM if configured
