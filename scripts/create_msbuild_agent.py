@@ -85,13 +85,16 @@ def _create_esql_tool(tool_id: str, description: str, query: str, params: dict) 
     return None
 
 
-def _create_agent(name: str, instructions: str, tool_ids: list[str]) -> Optional[str]:
+def _create_agent(name: str, instructions: str, tool_ids: list[str], skill_ids: Optional[list[str]] = None) -> Optional[str]:
     _delete(f"/api/agent_builder/agents/{AGENT_ID}")
+    config: dict = {"instructions": instructions, "tools": [{"tool_ids": tool_ids}]}
+    if skill_ids:
+        config["skill_ids"] = skill_ids
     body = {
         "id": AGENT_ID,
         "name": name,
         "description": "MS Build 2026 PR-review agent. Reviews PRs against OTel traces and historical postmortems; posts a PR comment with evidence when a known pattern matches.",
-        "configuration": {"instructions": instructions, "tools": [{"tool_ids": tool_ids}]},
+        "configuration": config,
     }
     r = requests.post(f"{KIBANA_URL}/api/agent_builder/agents", headers=HEADERS, json=body, timeout=30)
     if r.status_code in (200, 201):
@@ -193,15 +196,25 @@ def main() -> int:
         print(f"\n✗ only {len(tool_ids)}/3 tools created — fix errors above before creating the agent")
         return 1
 
-    agent_id = _create_agent("MS Build PR Review Agent", INSTRUCTIONS, tool_ids)
+    # Re-attach skill if it already exists in Kibana
+    skill_ids: list[str] = []
+    r = requests.get(f"{KIBANA_URL}/api/agent_builder/skills/skill-pr-race-condition-analysis", headers=HEADERS, timeout=30)
+    if r.status_code == 200:
+        skill_ids = ["skill-pr-race-condition-analysis"]
+        print(f"  ↳ skill found, will attach: skill-pr-race-condition-analysis")
+    else:
+        print(f"  ↳ skill not found — run create_msbuild_skill.py to add it")
+
+    agent_id = _create_agent("MS Build PR Review Agent", INSTRUCTIONS, tool_ids, skill_ids or None)
     if not agent_id:
         return 2
 
     print()
     print(f"Next steps:")
     print(f"  1. export MSBUILD_AGENT_ID={agent_id}")
-    print(f"  2. In Kibana, attach a GitHub MCP connector and Azure OpenAI connector to this agent.")
-    print(f"  3. python3 scripts/deploy_msbuild_workflow.py  (uses MSBUILD_AGENT_ID from env)")
+    print(f"  2. python3 scripts/create_msbuild_skill.py  (if skill not already attached)")
+    print(f"  3. In Kibana, attach a GitHub MCP connector and Azure OpenAI connector to this agent.")
+    print(f"  4. python3 scripts/deploy_msbuild_workflow.py  (uses MSBUILD_AGENT_ID from env)")
     return 0
 
 
