@@ -182,7 +182,7 @@ def main() -> int:
         tool_id="tool-esql-search-incidents",
         description="Full-text search of ingested GitHub Issues for incident/postmortem patterns. Query with pattern terms, not symptom keywords.",
         query=(
-            f'FROM {args.issues_index} '
+            f'FROM {args.issues_index} METADATA _score '
             f'| WHERE MATCH(body, ?query_terms) '
             f'| SORT _score DESC '
             f'| LIMIT 5'
