@@ -55,6 +55,20 @@ make dev         # Start all services (dev mode)
 make validate    # Validate setup
 ```
 
+## Active Demo Work — MS Build 2026
+
+**Branch:** `feature/msft-build-2026`
+
+**What it is:** Click-through Navattic demo for MS Build 2026 showcasing Elastic Agent Builder doing automated PR security review (detects TOCTOU race condition, cites OTel trace evidence, posts GitHub bot comment).
+
+**Key files:**
+- `demo_scripts/field/navattic-shot-sheet.md` — **the shot sheet** — 8 scenes, ~30 Navattic steps, complete hotspot copy. This is the primary recording reference.
+- `demo_scripts/field/msbuild_recording_guide.md` — full narrative/talk track behind the shot sheet
+- `control.sh` — single demo control script: `setup`, `stage`, `reset`
+- `scripts/msbuild_harness.py` — concurrency harness for Scene 7
+
+**Flow summary:** PR opens → GitHub Action → Elastic Workflow → Agent Builder (ES|QL tools + Skills) → bot comment with TOCTOU diagnosis → VS Code Copilot fix via MCP → harness confirms atomic behavior.
+
 ## Demo Scripts (for live delivery)
 
 `demo_scripts/field/` — pick by time and audience:
