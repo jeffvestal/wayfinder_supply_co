@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blog Header — Give your AI reviewer a memory</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+
+@font-face { font-family: 'Mier B'; font-weight: 700; font-style: normal;
+  src: url('/Users/jeffvestal/.claude/skills/elastic-design/fonts/MierB-Bold.ttf') format('truetype'); }
+@font-face { font-family: 'Mier B'; font-weight: 800; font-style: normal;
+  src: url('/Users/jeffvestal/.claude/skills/elastic-design/fonts/MierB-ExtraBold.ttf') format('truetype'); }
+@font-face { font-family: 'Mier B'; font-weight: 400; font-style: normal;
+  src: url('/Users/jeffvestal/.claude/skills/elastic-design/fonts/MierB-Regular.ttf') format('truetype'); }
+
+:root {
+  --elastic-blue:   #0B64DD;
+  --light-teal:     #48EFCF;
+  --developer-blue: #101C3F;
+  --midnight:       #153385;
+  --ink:            #343741;
+  --dark-ink:       #1C1E23;
+  --light-grey:     #F5F7FA;
+  --medium-grey:    #DCE2EA;
+  --white:          #FFFFFF;
+  --font-headline:  'Mier B', 'Inter', Arial, sans-serif;
+  --font-body:      'Inter', Arial, sans-serif;
+  --font-code:      'Space Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #e8edf2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: var(--font-body);
+  padding: 32px;
+}
+
+/* The banner itself — 1200×480 */
+.banner {
+  width: 1200px;
+  height: 480px;
+  background: var(--white);
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* ── LEFT: text column ── */
+.left {
+  width: 420px;
+  flex-shrink: 0;
+  padding: 52px 48px 52px 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  z-index: 2;
+}
+
+.teal-rule {
+  width: 48px;
+  height: 3px;
+  background: var(--light-teal);
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--elastic-blue);
+  margin-bottom: 16px;
+}
+
+.headline {
+  font-family: var(--font-headline);
+  font-weight: 800;
+  font-size: 36px;
+  line-height: 1.14;
+  color: var(--dark-ink);
+  margin-bottom: 20px;
+}
+
+.headline em {
+  font-style: normal;
+  color: var(--elastic-blue);
+}
+
+.subhead {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+  margin-bottom: 32px;
+  max-width: 320px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 36px;
+}
+
+.tag {
+  font-family: var(--font-code);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--developer-blue);
+  background: var(--light-grey);
+  border: 1.5px solid var(--medium-grey);
+  border-radius: 999px;
+  padding: 4px 10px;
+  letter-spacing: 0.01em;
+}
+
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-row img {
+  height: 22px;
+  opacity: 1;
+}
+
+/* ── DIVIDER ── */
+.divider {
+  width: 1.5px;
+  background: var(--medium-grey);
+  margin: 40px 0;
+  flex-shrink: 0;
+}
+
+/* ── RIGHT: diagram column ── */
+.right {
+  flex: 1;
+  padding: 40px 48px 40px 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+}
+
+/* Flow row */
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Cards */
+.card {
+  background: var(--white);
+  border: 1.5px solid var(--developer-blue);
+  border-radius: 12px;
+  padding: 14px 16px;
+  position: relative;
+}
+
+.card-teal-rule {
+  position: absolute;
+  top: -1.5px;
+  left: 16px;
+  width: 40px;
+  height: 3px;
+  background: var(--light-teal);
+  border-radius: 2px;
+}
+
+.card-label {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--elastic-blue);
+  margin-bottom: 8px;
+}
+
+.card-code {
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--developer-blue);
+}
+
+.card-code .dim { color: #7a8599; }
+.card-code .hi  { color: var(--elastic-blue); font-weight: 700; }
+.card-code .warn { color: #e55940; font-weight: 700; }
+.card-code .ok   { color: #009e73; font-weight: 700; }
+
+/* Arrow */
+.arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.arrow-line {
+  width: 28px;
+  height: 1.5px;
+  background: var(--developer-blue);
+}
+
+.arrow-head {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--developer-blue);
+  margin-top: -9px;
+  margin-left: 21px;
+}
+
+/* Skill capsule */
+.skill-capsule {
+  background: var(--light-grey);
+  border: 1.5px solid var(--developer-blue);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--developer-blue);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Bot comment card */
+.bot-card {
+  background: var(--white);
+  border: 1.5px solid var(--developer-blue);
+  border-radius: 12px;
+  padding: 14px 16px;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.bot-card .card-teal-rule { background: #e55940; }
+
+.bot-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.bot-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--elastic-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bot-avatar svg { width: 14px; height: 14px; }
+
+.bot-name {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--dark-ink);
+}
+
+.bot-sub {
+  font-size: 10px;
+  color: #7a8599;
+  font-family: var(--font-body);
+}
+
+.flag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff3f1;
+  border: 1.5px solid #e55940;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  color: #e55940;
+  margin-bottom: 8px;
+}
+
+.bot-line {
+  font-family: var(--font-code);
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--developer-blue);
+}
+
+.bot-line .dim { color: #7a8599; }
+.bot-line .val { color: var(--elastic-blue); }
+
+/* Vertical connector between flow rows */
+.v-connector {
+  display: flex;
+  align-items: center;
+  padding: 6px 0 6px 24px;
+}
+
+.v-line {
+  width: 1.5px;
+  height: 18px;
+  background: var(--medium-grey);
+}
+
+/* Second row label */
+.flow-label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  color: #7a8599;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-left: 8px;
+}
+
+/* Thin blue bottom accent bar */
+.bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--elastic-blue);
+}
+</style>
+</head>
+<body>
+
+<div class="banner">
+
+  <!-- ── LEFT: text ── -->
+  <div class="left">
+    <div>
+      <div class="teal-rule"></div>
+      <div class="eyebrow">Elastic Agent Builder · OTel · ES|QL</div>
+      <h1 class="headline">Give your AI reviewer<br>a <em>memory</em></h1>
+      <p class="subhead">Using past incidents and OTel traces to catch bugs at PR time — before they reach production again.</p>
+      <div class="tags">
+        <span class="tag">otel</span>
+        <span class="tag">agent-builder</span>
+        <span class="tag">pr-review</span>
+        <span class="tag">toctou</span>
+      </div>
+    </div>
+    <div class="logo-row">
+      <img src="/Users/jeffvestal/.claude/skills/elastic-design/logos/elastic-horizontal-color.svg" alt="Elastic">
+    </div>
+  </div>
+
+  <!-- ── DIVIDER ── -->
+  <div class="divider"></div>
+
+  <!-- ── RIGHT: diagram ── -->
+  <div class="right">
+
+    <!-- Row 1: OTel trace + skill → agent -->
+    <div class="flow">
+
+      <!-- OTel trace card -->
+      <div class="card" style="width:190px; flex-shrink:0;">
+        <div class="card-teal-rule"></div>
+        <div class="card-label">OTel Span</div>
+        <div class="card-code">
+          <span class="dim">route</span>  <span class="hi">/checkout/reserve</span><br>
+          <span class="dim">duration</span>  <span class="warn">6.2 s</span><br>
+          <span class="dim">concurrency</span>  <span class="warn">2 spans</span><br>
+          <span class="dim">stock_read</span>  <span class="warn">1 · 1</span>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="arrow">
+        <div style="display:flex;align-items:center;">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+      </div>
+
+      <!-- Skill capsule -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;">
+        <div class="skill-capsule">Skill: TOCTOU</div>
+        <div style="font-family:var(--font-body);font-size:9px;color:#7a8599;letter-spacing:.04em;text-align:center;">pattern encoded<br>from RCA</div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="arrow">
+        <div style="display:flex;align-items:center;">
+          <div class="arrow-line"></div>
+          <div class="arrow-head"></div>
+        </div>
+      </div>
+
+      <!-- Agent node -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;">
+        <div style="width:48px;height:48px;border-radius:12px;background:var(--elastic-blue);display:flex;align-items:center;justify-content:center;">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8" r="3.5" stroke="white" stroke-width="1.8"/>
+            <path d="M5 20c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="12" cy="8" r="1" fill="white"/>
+          </svg>
+        </div>
+        <div style="font-family:var(--font-body);font-weight:700;font-size:9px;color:var(--developer-blue);letter-spacing:.04em;text-transform:uppercase;text-align:center;">Agent<br>Builder</div>
+      </div>
+
+    </div>
+
+    <!-- Vertical connector -->
+    <div style="padding:8px 0 8px 0;display:flex;align-items:center;gap:8px;margin-left:454px;">
+      <div style="width:1.5px;height:22px;background:var(--medium-grey);"></div>
+      <span style="font-family:var(--font-body);font-size:9px;color:#7a8599;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">reviews PR diff</span>
+    </div>
+
+    <!-- Row 2: postmortem + → bot comment -->
+    <div class="flow" style="align-items:flex-start;">
+
+      <!-- Postmortem card -->
+      <div class="card" style="width:190px;flex-shrink:0;">
+        <div class="card-teal-rule"></div>
+        <div class="card-label">Postmortem</div>
+        <div class="card-code">
+          <span class="dim">issue</span>  <span class="hi">#47</span><br>
+          <span class="dim">pattern</span>  <span class="warn">non-atomic</span><br>
+          <span class="dim">  </span>  <span class="warn">read-write</span><br>
+          <span class="dim">date</span>  <span class="dim">6 wks ago</span>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="arrow" style="margin-top:28px;">
+        <div style="display:flex;align-items:center;">
+          <div class="arrow-line" style="width:12px;"></div>
+          <div class="arrow-head"></div>
+        </div>
+      </div>
+
+      <!-- Wide spacing to align under agent -->
+      <div style="width:120px;flex-shrink:0;"></div>
+
+      <!-- Arrow out from agent -->
+      <div class="arrow" style="margin-top:28px;">
+        <div style="display:flex;align-items:center;">
+          <div class="arrow-line" style="width:12px;"></div>
+          <div class="arrow-head"></div>
+        </div>
+      </div>
+
+      <!-- Bot comment card -->
+      <div class="bot-card">
+        <div class="card-teal-rule" style="background:#e55940;"></div>
+        <div class="bot-header">
+          <div class="bot-avatar">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="4" y="8" width="16" height="10" rx="3" stroke="white" stroke-width="1.8"/>
+              <path d="M9 8V6a3 3 0 016 0v2" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+              <circle cx="9.5" cy="13" r="1" fill="white"/>
+              <circle cx="14.5" cy="13" r="1" fill="white"/>
+            </svg>
+          </div>
+          <div>
+            <div class="bot-name">elastic-pr-review[bot]</div>
+            <div class="bot-sub">just now · PR #312</div>
+          </div>
+        </div>
+        <div class="flag-badge">
+          <span>⚠</span> TOCTOU / non-atomic read-write
+        </div>
+        <div class="bot-line">
+          <span class="dim">trace</span>  <span class="val">a3f82b1c</span>  <span class="dim">6.2s</span><br>
+          <span class="dim">ref</span>  <span class="val">Issue #47</span>  <span class="dim">· 6 wks ago</span><br>
+          <span class="dim">pattern</span>  <span class="val">atomic guard removed</span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- bottom accent bar -->
+  <div class="bottom-bar"></div>
+</div>
+
+</body>
+</html>
