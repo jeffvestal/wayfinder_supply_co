@@ -2,14 +2,13 @@
   "servers": {
     "elastic": {
       "type": "http",
-      "url": "https://${input:kibanaUrl}/api/agent_builder/mcp",
+      "url": "https://wayfinder-supply-co-aa4128.kb.us-central1.gcp.elastic.cloud/api/agent_builder/mcp",
       "headers": {
         "Authorization": "ApiKey ${input:elasticApiKey}"
       }
     }
   },
   "inputs": [
-    { "id": "kibanaUrl", "description": "Kibana URL (no trailing slash)", "type": "promptString" },
     { "id": "elasticApiKey", "description": "Elastic API Key", "type": "promptString", "password": true }
   ]
 }
